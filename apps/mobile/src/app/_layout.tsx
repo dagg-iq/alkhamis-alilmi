@@ -2,14 +2,13 @@ import { ThemeProvider, DarkTheme, DefaultTheme, Stack, router, useSegments } fr
 import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import * as Notifications from 'expo-notifications';
 import { useEffect } from 'react';
 import { I18nManager, Platform, ScrollView, Text, View } from 'react-native';
 import type { ErrorBoundaryProps } from 'expo-router';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from '@/lib/auth';
-import { registerPush } from '@/lib/push';
+import { onNotificationTap, registerPush } from '@/lib/push';
 import { isConfigured } from '@/lib/supabase';
 import { AppThemeProvider, fontAssets, useTheme } from '@/lib/theme';
 import { NotConfigured } from '@/components/not-configured';
@@ -99,15 +98,12 @@ function Navigator() {
 
   // فتح الشاشة المناسبة عند الضغط على إشعار
   useEffect(() => {
-    const sub = Notifications.addNotificationResponseReceivedListener((res) => {
-      const d = res.notification.request.content.data as Record<string, string> | undefined;
-      if (!d) return;
+    return onNotificationTap((d) => {
       if (d.conversation_id) router.push(`/chat/${d.conversation_id}`);
       else if (d.post_id) router.push(`/news/${d.post_id}`);
       else if (d.task_id) router.push('/planner');
       else router.push('/notifications');
     });
-    return () => sub.remove();
   }, []);
 
   if (!ready) return <View style={{ flex: 1, backgroundColor: c.bg }} />;
