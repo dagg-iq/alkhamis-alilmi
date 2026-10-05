@@ -1,8 +1,10 @@
 import { createClient } from '@supabase/supabase-js';
 
-const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-const key = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
-export const isConfigured = Boolean(url && key && !url.includes('example'));
+// القيم العامة لمشروع سعي (آمنة: المفتاح anon محمي بـ RLS). يمكن تغييرها عبر متغيرات البيئة
+const envUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+const url = envUrl && !envUrl.includes('example') ? envUrl : 'https://yjxhprmtyuqnbgraocar.supabase.co';
+const key = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined) || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlqeGhwcm10eXVxbmJncmFvY2FyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTEyMjUwMzUsImV4cCI6MjEwNjgwMTAzNX0.uKov_hUtVxVSv7-8DNN9ycwRNHN4egtfMmrNTeU7vMk';
+export const isConfigured = Boolean(url && key);
 
 export const supabase = createClient(url || 'https://placeholder.supabase.co', key || 'placeholder', {
   auth: { flowType: 'pkce', persistSession: true, detectSessionInUrl: true },

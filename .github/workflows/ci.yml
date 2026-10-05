@@ -16,5 +16,5 @@ jobs:
       - run: npm run typecheck
       - run: npm run admin:build
         env:
-          VITE_SUPABASE_URL: https://example.supabase.co
-          VITE_SUPABASE_ANON_KEY: placeholder
+          VITE_SUPABASE_URL: ''
+          VITE_SUPABASE_ANON_KEY: ''
