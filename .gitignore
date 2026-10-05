@@ -1,0 +1,16 @@
+node_modules/
+dist/
+.expo/
+web-build/
+*.log
+.env
+.env.*
+!.env.example
+.DS_Store
+__MACOSX/
+android/
+ios/
+*.keystore
+*.jks
+supabase/.temp/
+supabase/.branches/

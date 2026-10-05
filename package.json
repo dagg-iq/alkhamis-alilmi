@@ -1,0 +1,15 @@
+{
+  "name": "saey",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "test": "npm run test -w @saey/shared",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "admin:dev": "npm run dev -w @saey/admin",
+    "admin:build": "npm run build -w @saey/admin",
+    "mobile:start": "npm run start -w @saey/mobile"
+  }
+}
