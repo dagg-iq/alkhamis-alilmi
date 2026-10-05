@@ -45,15 +45,22 @@ jobs:
         env:
           CI: 1
 
-      - name: Diagnose Expo autolinking
-        working-directory: apps/mobile/android
+      - name: Log node calls made by Gradle
         run: |
-          E=$(node -p "require('path').dirname(require.resolve('expo/package.json'))")
-          echo "expo dir: $E"
-          node --no-warnings --eval "require('expo/bin/autolinking')" expo-modules-autolinking mirror-kotlin-inline-modules \
-            --kotlin-files-mirror-directory "$E/android/src/main/java/inline/modules/" \
-            --inline-modules-list-directory "$E/android/build/inline/modules/" \
-            --watched-directories-serialized "[]" || echo "::warning::inline modules command failed"
+          REAL=$(which node)
+          mkdir -p $HOME/node-shim
+          cat > $HOME/node-shim/node <<SHIM
+          #!/usr/bin/env bash
+          echo "---- cwd=\$PWD args=\$*" >> /tmp/node-calls.log
+          "$REAL" "\$@" 2>>/tmp/node-calls.log
+          code=\$?
+          echo "---- exit=\$code" >> /tmp/node-calls.log
+          exit \$code
+          SHIM
+          sed -i 's/^          //' $HOME/node-shim/node
+          chmod +x $HOME/node-shim/node
+          echo "$HOME/node-shim" >> $GITHUB_PATH
+          cat $HOME/node-shim/node
 
       - name: Build release APK
         working-directory: apps/mobile/android
@@ -67,6 +74,8 @@ jobs:
         run: |
           echo "===== node / error lines ====="
           grep -n -i -E "node|error|exception|caused by|what went wrong|at .*gradle" gradle.log | grep -v -i "warning" | head -150 || true
+          echo "===== failing node calls ====="
+          grep -n -B30 "exit=[1-9]" /tmp/node-calls.log | tail -80 || true
           echo "===== problems report ====="
           f=apps/mobile/android/build/reports/problems/problems-report.html
           [ -f "$f" ] && sed -e 's/<[^>]*>/ /g' "$f" | tr -s ' \n' | grep -i -E "node|exec|fail|error" | head -60 || true
