@@ -4,7 +4,8 @@ import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import * as Notifications from 'expo-notifications';
 import { useEffect } from 'react';
-import { I18nManager, Platform, View } from 'react-native';
+import { I18nManager, Platform, ScrollView, Text, View } from 'react-native';
+import type { ErrorBoundaryProps } from 'expo-router';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from '@/lib/auth';
@@ -24,10 +25,27 @@ if (Platform.OS !== 'web') {
 }
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
+// شبكة أمان: لا تبقى شاشة البداية أكثر من ١٠ ثوانٍ مهما حدث
+setTimeout(() => SplashScreen.hideAsync().catch(() => {}), 10000);
+
+/** بدل التجمد: نعرض الخطأ بوضوح مع زر إعادة المحاولة */
+export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
+  useEffect(() => {
+    SplashScreen.hideAsync().catch(() => {});
+  }, []);
+  return (
+    <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: 28, gap: 14, backgroundColor: '#F5F5F2' }}>
+      <Text style={{ fontSize: 24, fontWeight: '700', color: '#111111', textAlign: 'center' }}>حدث خطأ غير متوقع</Text>
+      <Text selectable style={{ fontSize: 13, color: '#5C5C5C', textAlign: 'left', writingDirection: 'ltr' }}>{error.message}</Text>
+      <Text onPress={retry} style={{ fontSize: 17, fontWeight: '700', color: '#2346F5', textAlign: 'center', padding: 12 }}>إعادة المحاولة</Text>
+    </ScrollView>
+  );
+}
 
 export default function RootLayout() {
-  const [fontsLoaded] = useFonts(fontAssets);
-  if (!fontsLoaded) return null;
+  const [fontsLoaded, fontError] = useFonts(fontAssets);
+  // إذا فشل تحميل الخط نكمل بخط النظام بدل التجمد
+  if (!fontsLoaded && !fontError) return null;
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
@@ -53,11 +71,12 @@ function Navigator() {
   // بوابة الدخول: إلى أين يذهب المستخدم حسب حالته
   useEffect(() => {
     if (!ready) return;
-    SplashScreen.hideAsync().catch(() => {});
+    // نخفي شاشة البداية بعد أن تأخذ بوابة الدخول قرارها (حتى لا تومض الرئيسية)
+    const hide = setTimeout(() => SplashScreen.hideAsync().catch(() => {}), 250);
     const segs = segments as string[];
     const group = segs[0];
     const page = segs[1];
-    if (group === 'auth-callback') return;
+    if (group === 'auth-callback') return () => clearTimeout(hide);
     if (!session) {
       if (group !== '(auth)' || page !== 'welcome') router.replace('/welcome');
     } else if (!profile) {
@@ -69,6 +88,7 @@ function Navigator() {
     } else if (group === '(auth)') {
       router.replace('/');
     }
+    return () => clearTimeout(hide);
   }, [ready, session, profile, segments]);
 
   // تسجيل الإشعارات بعد الموافقة

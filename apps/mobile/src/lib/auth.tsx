@@ -46,16 +46,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setProfile(null);
       return;
     }
-    const { data } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
-    setProfile((data as Profile | null) ?? null);
+    try {
+      const { data } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
+      setProfile((data as Profile | null) ?? null);
+    } catch {
+      setProfile(null);
+    }
   }, []);
 
   useEffect(() => {
-    supabase.auth.getSession().then(async ({ data }) => {
-      setSession(data.session);
-      await loadProfile(data.session?.user.id);
-      setReady(true);
-    });
+    // لا نعلق أبداً على شاشة البداية: مهلة ٨ ثوانٍ كحد أقصى
+    const timeout = setTimeout(() => setReady(true), 8000);
+    (async () => {
+      try {
+        const { data } = await supabase.auth.getSession();
+        setSession(data.session);
+        await loadProfile(data.session?.user.id);
+      } catch {
+        // بدون إنترنت أو خطأ: نكمل كضيف ونعرض شاشة الدخول
+      } finally {
+        clearTimeout(timeout);
+        setReady(true);
+      }
+    })();
     const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => {
       setSession(s);
       // لا نستدعي supabase داخل المستمع مباشرة (توصية supabase-js)
@@ -111,9 +124,13 @@ export function useAuth(): AuthValue {
   return v;
 }
 
-/** المستخدم الحالي (مضمون داخل الشاشات المحمية) */
+const GUEST: Profile = {
+  id: '00000000-0000-0000-0000-000000000000', full_name: '', avatar_url: null, section_id: null, role: 'student',
+  status: 'pending', is_verified: false, bio: null, onboarded: false, created_at: new Date(0).toISOString(), last_seen_at: null,
+};
+
+/** المستخدم الحالي. قبل تحويل بوابة الدخول قد تُعرض الشاشة لحظة بلا مستخدم، فنعيد ضيفاً بدل الانهيار. */
 export function useMe(): Profile {
   const { profile } = useAuth();
-  if (!profile) throw new Error('no profile');
-  return profile;
+  return profile ?? GUEST;
 }
