@@ -98,11 +98,11 @@
 2. من القائمة **R2 Object Storage** ← فعّله.
    > ⚠️ قد يطلب Cloudflare إضافة وسيلة دفع لتفعيل R2 حتى مع الخطة المجانية. لن تُخصم أي مبالغ ما دمت تحت ١٠GB. إذا لم تستطع إضافة بطاقة، أخبر المساعد لنستخدم بديلاً.
 3. **Create bucket**: الاسم `saey`، الموقع Automatic.
-4. داخل الـ bucket ← **Settings ← CORS Policy** ← Edit، والصق (غيّر رابط Netlify):
+4. داخل الـ bucket ← **Settings ← CORS Policy** ← Edit، والصق (آمن لأن الرفع يحتاج رابطاً موقّعاً من الخادم):
    ```json
    [
      {
-       "AllowedOrigins": ["https://saey-admin.netlify.app", "http://localhost:5173"],
+       "AllowedOrigins": ["*"],
        "AllowedMethods": ["GET", "PUT"],
        "AllowedHeaders": ["Content-Type"],
        "MaxAgeSeconds": 3600
@@ -152,7 +152,7 @@ npx supabase functions deploy
    - `VITE_SUPABASE_URL` = Project URL
    - `VITE_SUPABASE_ANON_KEY` = anon key
 4. **Deploy**. ✅ افتح الرابط وسجّل الدخول بحسابك (الأدمن).
-5. أضف رابط Netlify في: Supabase Site URL + Redirect URLs (خطوة ٢-ب) + CORS في R2 (خطوة ٥).
+5. أضف رابط Netlify في: Supabase Site URL + Redirect URLs (خطوة ٢-ب).
 6. لاحقاً: **Domain management** لربط دومينك.
 
 للتجربة محلياً:
@@ -225,6 +225,6 @@ npm run mobile:start
 |---|---|
 | بعد الدخول بـ Google لا يرجع للتطبيق | تأكد من `saey://auth-callback` في Redirect URLs |
 | «إعداد غير مكتمل» | ملف `.env` ناقص أو لم تُعِد تشغيل التطبيق/البناء |
-| فشل رفع الملزمة في لوحة التحكم | إعداد CORS في R2 (خطوة ٥-٤) لا يتضمن رابط الموقع |
+| فشل رفع الملزمة في لوحة التحكم | إعداد CORS في R2 (خطوة ٥-٤) غير محفوظ |
 | «المساعد مشغول» كثيراً | انتهى الحد المجاني لـ Gemini اليوم — خفّض الحد اليومي من الإعدادات |
 | الإشعارات لا تصل | خطوة ٩ + الـ Webhooks في خطوة ٦ |
