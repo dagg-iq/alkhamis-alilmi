@@ -50,3 +50,8 @@
 - صاحب المشروع أنهى Supabase وGoogle، وأجّل R2 والخطوات بعدها (يريد تجربة التطبيق أولاً، وقد نغيّر طريقة تخزين الملفات بدل R2 لأنه يطلب بطاقة دفع).
 - قيم Supabase العامة (URL + anon) صارت افتراضية في التطبيق ولوحة التحكم — لا حاجة لملف .env للتجربة.
 - **التالي**: تجربة التطبيق عبر Expo Go، ثم قرار التخزين (R2 أو Supabase Storage).
+
+## 2026-10-05 — أول APK ✅
+- بناء APK عبر GitHub Actions (`.github/workflows/build-apk.yml`) نجح بعد إصلاح: إلحاق `org.gradle.jvmargs` بـ gradle.properties بلا سطر جديد كان يفسد `expo.inlineModules.watchedDirectories`.
+- كل تعديل على `apps/mobile` يبني APK جديداً تلقائياً وينشره في Releases (`apk-<رقم>`).
+- **التالي**: صاحب المشروع يجرب التطبيق على هاتفه ويرسل الملاحظات.
