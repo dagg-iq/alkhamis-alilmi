@@ -45,27 +45,11 @@ jobs:
         env:
           CI: 1
 
-      - name: Log node calls made by Gradle
-        run: |
-          REAL=$(which node)
-          mkdir -p $HOME/node-shim
-          cat > $HOME/node-shim/node <<SHIM
-          #!/usr/bin/env bash
-          echo "---- cwd=\$PWD args=\$*" >> /tmp/node-calls.log
-          "$REAL" "\$@" 2>>/tmp/node-calls.log
-          code=\$?
-          echo "---- exit=\$code" >> /tmp/node-calls.log
-          exit \$code
-          SHIM
-          sed -i 's/^          //' $HOME/node-shim/node
-          chmod +x $HOME/node-shim/node
-          echo "$HOME/node-shim" >> $GITHUB_PATH
-          cat $HOME/node-shim/node
-
       - name: Build release APK
         working-directory: apps/mobile/android
         run: |
-          echo "org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g" >> gradle.properties
+          # سطر جديد أولاً: آخر سطر في الملف بلا نهاية سطر، والإلحاق المباشر كان يفسد قيمة watchedDirectories
+          printf '\norg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g\n' >> gradle.properties
           ./gradlew assembleRelease --no-daemon --stacktrace -PreactNativeArchitectures=arm64-v8a,armeabi-v7a 2>&1 | tee ../../../gradle.log
           exit ${PIPESTATUS[0]}
 
@@ -74,8 +58,6 @@ jobs:
         run: |
           echo "===== node / error lines ====="
           grep -n -i -E "node|error|exception|caused by|what went wrong|at .*gradle" gradle.log | grep -v -i "warning" | head -150 || true
-          echo "===== failing node calls ====="
-          grep -n -B30 "exit=[1-9]" /tmp/node-calls.log | tail -80 || true
           echo "===== problems report ====="
           f=apps/mobile/android/build/reports/problems/problems-report.html
           [ -f "$f" ] && sed -e 's/<[^>]*>/ /g' "$f" | tr -s ' \n' | grep -i -E "node|exec|fail|error" | head -60 || true
