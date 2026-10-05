@@ -28,3 +28,19 @@ EXPO_PUBLIC_SUPABASE_ANON_KEY=<anon public أعلاه>
 VITE_SUPABASE_URL=https://yjxhprmtyuqnbgraocar.supabase.co
 VITE_SUPABASE_ANON_KEY=<anon public أعلاه>
 ```
+
+## حساب الأدمن (صاحب المشروع)
+| | |
+|---|---|
+| الاسم | محمد حازم احمد |
+| البريد (Google) | mohhhhamed1977@gmail.com |
+| الشعبة | أ |
+
+أمر جعله أدمن (يُنفَّذ في Supabase ← SQL Editor بعد أول تسجيل دخول، أو بعد إعادة seed.sql):
+```sql
+update public.profiles
+set role = 'admin', status = 'approved', is_verified = true, onboarded = true,
+    full_name = 'محمد حازم احمد',
+    section_id = (select id from public.sections where name = 'أ')
+where id = (select id from auth.users where email = 'mohhhhamed1977@gmail.com');
+```
