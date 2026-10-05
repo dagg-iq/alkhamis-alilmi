@@ -1,0 +1,58 @@
+// يستقبل Database Webhooks (إدراج في notifications أو messages) ويرسل إشعارات Expo
+import { json } from '../_shared/cors.ts';
+import { admin } from '../_shared/supabase.ts';
+
+interface PushMessage { to: string; title: string; body: string; data: Record<string, unknown>; sound: 'default'; channelId: string }
+
+async function sendPush(userIds: string[], title: string, body: string, data: Record<string, unknown>, channelId = 'default') {
+  if (!userIds.length) return;
+  const { data: tokens } = await admin.from('push_tokens').select('user_id, token').in('user_id', userIds);
+  const messages: PushMessage[] = (tokens ?? []).map((t) => ({ to: t.token, title, body, data, sound: 'default', channelId }));
+  for (let i = 0; i < messages.length; i += 100) {
+    const batch = messages.slice(i, i + 100);
+    const res = await fetch('https://exp.host/--/api/v2/push/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(batch),
+    });
+    const out = await res.json().catch(() => null);
+    // حذف الأجهزة التي لم تعد مسجلة
+    const dead = (out?.data ?? [])
+      .map((r: { status: string; details?: { error?: string } }, j: number) =>
+        r.status === 'error' && r.details?.error === 'DeviceNotRegistered' ? batch[j].to : null)
+      .filter(Boolean);
+    if (dead.length) await admin.from('push_tokens').delete().in('token', dead);
+  }
+}
+
+Deno.serve(async (req) => {
+  const secret = Deno.env.get('PUSH_WEBHOOK_SECRET');
+  if (!secret || req.headers.get('x-webhook-secret') !== secret) return json({ error: 'unauthorized' }, 401);
+
+  const payload = await req.json();
+  if (payload.type !== 'INSERT') return json({ ok: true });
+  const r = payload.record;
+
+  if (payload.table === 'notifications') {
+    await sendPush([r.user_id], r.title, r.body ?? '', { type: r.type, ...r.payload });
+  }
+
+  if (payload.table === 'messages') {
+    const [{ data: conv }, { data: sender }, { data: members }] = await Promise.all([
+      admin.from('conversations').select('id, type, title').eq('id', r.conversation_id).single(),
+      admin.from('profiles').select('full_name').eq('id', r.sender_id).single(),
+      admin.from('conversation_members').select('user_id, muted').eq('conversation_id', r.conversation_id),
+    ]);
+    const mentioned = new Set<string>(r.mentions ?? []); // هؤلاء يصلهم إشعار «أشار إليك» بدلاً من هذا
+    const to = (members ?? [])
+      .filter((m) => m.user_id !== r.sender_id && !m.muted && !mentioned.has(m.user_id))
+      .map((m) => m.user_id);
+    const preview = r.body?.trim() || (r.attachment?.type === 'image' ? '📷 صورة' : `📎 ${r.attachment?.title ?? 'مرفق'}`);
+    const name = sender?.full_name ?? 'رسالة جديدة';
+    const title = conv?.type === 'direct' ? name : (conv?.title ?? 'سعي');
+    const body = conv?.type === 'direct' ? preview : `${name}: ${preview}`;
+    await sendPush(to, title, body.slice(0, 180), { type: 'message', conversation_id: r.conversation_id }, 'chat');
+  }
+
+  return json({ ok: true });
+});

@@ -1,0 +1,5 @@
+# إعدادات Supabase CLI — الدوال التي لا تحتاج تحقق JWT من Supabase نفسه
+project_id = "saey"
+
+[functions.push]
+verify_jwt = false
