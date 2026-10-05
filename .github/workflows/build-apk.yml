@@ -45,6 +45,16 @@ jobs:
         env:
           CI: 1
 
+      - name: Diagnose Expo autolinking
+        working-directory: apps/mobile/android
+        run: |
+          E=$(node -p "require('path').dirname(require.resolve('expo/package.json'))")
+          echo "expo dir: $E"
+          node --no-warnings --eval "require('expo/bin/autolinking')" expo-modules-autolinking mirror-kotlin-inline-modules \
+            --kotlin-files-mirror-directory "$E/android/src/main/java/inline/modules/" \
+            --inline-modules-list-directory "$E/android/build/inline/modules/" \
+            --watched-directories-serialized "[]" || echo "::warning::inline modules command failed"
+
       - name: Build release APK
         working-directory: apps/mobile/android
         run: |
