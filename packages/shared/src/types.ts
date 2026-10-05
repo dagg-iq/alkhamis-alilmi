@@ -52,6 +52,9 @@ export interface DocumentRow {
   pages: number | null;
   sort: number;
   is_published: boolean;
+  ingested_pages: number;
+  ingest_status: 'none' | 'running' | 'done' | 'error';
+  ingest_error: string | null;
 }
 export interface QuestionSet {
   id: string;

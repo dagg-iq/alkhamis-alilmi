@@ -37,6 +37,11 @@ begin
   if old.status not in ('pending', 'rejected') then
     new.section_id := old.section_id;
   end if;
+  -- إرسال طلب الانضمام مسموح فقط والتسجيل مفتوح
+  if new.onboarded and not old.onboarded
+     and coalesce((public.setting('registration') ->> 'open')::boolean, true) = false then
+    raise exception 'التسجيل مغلق حالياً، راجع الأدمن.';
+  end if;
   -- الطالب المرفوض يستطيع إعادة الطلب بإكمال بياناته من جديد
   if old.status = 'rejected' and new.onboarded and not old.onboarded then
     new.status := 'pending';

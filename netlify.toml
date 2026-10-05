@@ -1,0 +1,20 @@
+# لوحة التحكم (apps/admin) — Netlify يبني من جذر المستودع
+[build]
+  command = "npm run admin:build"
+  publish = "apps/admin/dist"
+
+[build.environment]
+  NODE_VERSION = "22"
+
+# كل المسارات تفتح التطبيق (Single Page App)
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
