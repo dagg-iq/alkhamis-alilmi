@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { Text, View } from 'react-native';
-import { WebView } from 'react-native-webview';
 import { fonts, useTheme } from '@/lib/theme';
+import { HtmlView } from './html-view';
 import { T } from './ui';
 
 /**
@@ -95,25 +95,9 @@ post();setTimeout(post,300);setTimeout(post,1200);
 
 function MathWebView({ text, size, color }: { text: string; size: number; color?: string }) {
   const { c } = useTheme();
-  const [height, setHeight] = useState(60);
   const html = useMemo(
     () => markdownHtml(text, { color: color ?? c.ink, bg: 'transparent', accent: c.accent, size }),
     [text, color, c.ink, c.accent, size],
   );
-  return (
-    <View style={{ height }}>
-      <WebView
-        originWhitelist={['*']}
-        source={{ html }}
-        style={{ backgroundColor: 'transparent' }}
-        scrollEnabled={false}
-        onMessage={(e) => {
-          const h = Number(e.nativeEvent.data);
-          if (h > 0) setHeight(h + 4);
-        }}
-        setSupportMultipleWindows={false}
-        javaScriptEnabled
-      />
-    </View>
-  );
+  return <HtmlView html={html} />;
 }

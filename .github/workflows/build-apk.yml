@@ -1,0 +1,74 @@
+# يبني ملف APK لتطبيق سعي وينشره في صفحة Releases
+name: Build APK
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, claude/repository-name-arabic-iegosv]
+    paths:
+      - 'apps/mobile/**'
+      - 'packages/shared/**'
+      - 'package-lock.json'
+      - '.github/workflows/build-apk.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Android project
+        working-directory: apps/mobile
+        run: npx expo prebuild --platform android --no-install
+        env:
+          CI: 1
+
+      - name: Build release APK
+        working-directory: apps/mobile/android
+        run: |
+          echo "org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g" >> gradle.properties
+          ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=arm64-v8a,armeabi-v7a
+
+      - name: Rename APK
+        run: |
+          mkdir -p out
+          cp apps/mobile/android/app/build/outputs/apk/release/app-release.apk out/saey.apk
+          ls -lh out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: saey-apk
+          path: out/saey.apk
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: apk-${{ github.run_number }}
+          name: سعي — نسخة ${{ github.run_number }}
+          body: |
+            ملف APK لتطبيق سعي (أندرويد). حمّل saey.apk وثبّته على الهاتف.
+            الفرع: ${{ github.ref_name }} — الكود: ${{ github.sha }}
+          prerelease: true
+          files: out/saey.apk

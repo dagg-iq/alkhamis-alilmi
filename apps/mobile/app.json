@@ -24,7 +24,7 @@
       "softwareKeyboardLayoutMode": "resize"
     },
     "web": {
-      "output": "static",
+      "output": "single",
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [

@@ -2,8 +2,8 @@ import { arDigits, type Lecture } from '@saey/shared';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, useWindowDimensions, View } from 'react-native';
-import YoutubePlayer from 'react-native-youtube-iframe';
 import { Icon } from '@/components/icon';
+import { VideoPlayer } from '@/components/video-player';
 import { Button, Card, ErrorBox, Header, Loading, Row, Screen, T } from '@/components/ui';
 import { useMe } from '@/lib/auth';
 import { must, supabase } from '@/lib/supabase';
@@ -51,14 +51,11 @@ export default function LectureScreen() {
     <Screen>
       <Header />
       <View style={{ borderRadius: 20, overflow: 'hidden', backgroundColor: '#000', height: (playerWidth * 9) / 16 }}>
-        <YoutubePlayer
-          height={(playerWidth * 9) / 16}
-          width={playerWidth}
+        <VideoPlayer
           videoId={lecture.youtube_id}
-          onChangeState={(state: string) => {
-            if (state === 'ended' && !isWatched) markWatched(true);
-          }}
-          initialPlayerParams={{ rel: false, modestbranding: true }}
+          width={playerWidth}
+          height={(playerWidth * 9) / 16}
+          onEnded={() => !isWatched && markWatched(true)}
         />
       </View>
       <View style={{ gap: 4 }}>

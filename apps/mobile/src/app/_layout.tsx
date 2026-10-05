@@ -4,7 +4,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import * as Notifications from 'expo-notifications';
 import { useEffect } from 'react';
-import { I18nManager, View } from 'react-native';
+import { I18nManager, Platform, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from '@/lib/auth';
@@ -14,9 +14,14 @@ import { AppThemeProvider, fontAssets, useTheme } from '@/lib/theme';
 import { NotConfigured } from '@/components/not-configured';
 
 // التطبيق عربي بالكامل: من اليمين لليسار
-I18nManager.allowRTL(true);
-I18nManager.forceRTL(true);
-I18nManager.swapLeftAndRightInRTL(true);
+if (Platform.OS !== 'web') {
+  I18nManager.allowRTL(true);
+  I18nManager.forceRTL(true);
+  I18nManager.swapLeftAndRightInRTL(true);
+} else if (typeof document !== 'undefined') {
+  document.documentElement.dir = 'rtl';
+  document.documentElement.lang = 'ar';
+}
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
