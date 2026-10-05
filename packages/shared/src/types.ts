@@ -22,6 +22,7 @@ export interface Profile {
   status: ProfileStatus;
   is_verified: boolean;
   bio: string | null;
+  onboarded: boolean;
   created_at: string;
   last_seen_at: string | null;
 }

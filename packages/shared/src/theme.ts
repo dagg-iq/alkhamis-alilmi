@@ -60,5 +60,7 @@ export const verdictColors = {
   },
 } as const;
 
+export type VerdictPalette = Record<'exempt' | 'near' | 'safe' | 'risk' | 'empty', { bg: string; ink: string }>;
+
 export const radius = { sm: 12, md: 16, lg: 22, xl: 28, pill: 999 } as const;
 export const space = { xs: 4, sm: 8, md: 12, lg: 16, xl: 20, xxl: 28 } as const;

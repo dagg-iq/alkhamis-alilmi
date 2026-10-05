@@ -34,7 +34,7 @@ begin
   new.status := old.status;
   new.is_verified := old.is_verified;
   new.created_at := old.created_at;
-  if old.status <> 'pending' then
+  if old.status not in ('pending', 'rejected') then
     new.section_id := old.section_id;
   end if;
   -- الطالب المرفوض يستطيع إعادة الطلب بإكمال بياناته من جديد
