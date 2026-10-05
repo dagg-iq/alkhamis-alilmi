@@ -68,7 +68,11 @@ function localFileFor(key: string): File {
 }
 
 export function isDownloaded(key: string): boolean {
-  return localFileFor(key).exists;
+  try {
+    return localFileFor(key).exists;
+  } catch {
+    return false; // نظام الملفات غير متاح (مثلاً في المتصفح)
+  }
 }
 
 export async function downloadMaterial(key: string): Promise<File> {

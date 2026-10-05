@@ -82,12 +82,15 @@ ${opts.title ? `<div class="title">${escapeHtml(opts.title)}</div>` : ''}
 <div id="c"></div>
 <script>
 var src=${JSON.stringify(text).replace(/</g, '\\u003c')};
+// بدون إنترنت (لم تُحمّل المكتبات): نعرض النص كما هو بدل صفحة فارغة
+if(typeof marked==='undefined'){var el=document.getElementById('c');el.style.whiteSpace='pre-wrap';el.textContent=src;}else{
 // نحمي المعادلات من معالج Markdown
 var maths=[];src=src.replace(/\\$\\$[\\s\\S]+?\\$\\$|\\$[^$\\n]+?\\$/g,function(m){maths.push(m);return '@@M'+(maths.length-1)+'@@';});
 var html=marked.parse(src,{breaks:true});
 html=html.replace(/@@M(\\d+)@@/g,function(_,i){return maths[+i].replace(/&/g,'&amp;').replace(/</g,'&lt;');});
 document.getElementById('c').innerHTML=html;
-renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false},{left:'\\\\(',right:'\\\\)',display:false},{left:'\\\\[',right:'\\\\]',display:true}],throwOnError:false});
+if(typeof renderMathInElement!=='undefined')renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false},{left:'\\\\(',right:'\\\\)',display:false},{left:'\\\\[',right:'\\\\]',display:true}],throwOnError:false});
+}
 function post(){window.ReactNativeWebView&&window.ReactNativeWebView.postMessage(String(document.documentElement.scrollHeight));}
 post();setTimeout(post,300);setTimeout(post,1200);
 </script></body></html>`;

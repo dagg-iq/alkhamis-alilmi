@@ -1,4 +1,4 @@
-import { formatTime, type Attachment, type Message, type Profile } from '@saey/shared';
+import { arDigits, formatTime, type Attachment, type Message, type Profile } from '@saey/shared';
 import * as Clipboard from 'expo-clipboard';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
@@ -236,7 +236,7 @@ export default function ChatScreen() {
               </View>}
             <View style={{ flex: 1 }}>
               <NameLine name={title} verified={conv?.type === 'direct' && !!conv.peer_verified} size={16} />
-              <T dim size={12}>{isGroup ? `${Object.keys(members).length} عضو` : 'محادثة خاصة'}</T>
+              <T dim size={12}>{isGroup ? `${arDigits(Object.keys(members).length)} عضو` : 'محادثة خاصة'}</T>
             </View>
           </Pressable>
         </Row>
@@ -426,7 +426,7 @@ function Bubble({ m, mine, sender, showName, reply, replySender, imageUrl, react
               <Pressable key={emoji} onPress={() => onReact(emoji)}
                 style={{ flexDirection: 'row', alignItems: 'center', gap: 2, paddingHorizontal: 6, paddingVertical: 1, borderRadius: 999, backgroundColor: mineR ? c.soft : c.card, borderWidth: 1, borderColor: mineR ? c.accent : c.line }}>
                 <T size={12} style={{ lineHeight: 18 }}>{emoji}</T>
-                {n > 1 ? <T size={11} weight="bold">{n}</T> : null}
+                {n > 1 ? <T size={11} weight="bold">{arDigits(n)}</T> : null}
               </Pressable>
             );
           })}

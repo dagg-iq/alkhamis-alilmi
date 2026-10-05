@@ -1,4 +1,4 @@
-import { initials, radius } from '@saey/shared';
+import { arDigits, initials, radius } from '@saey/shared';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import type { ReactNode } from 'react';
@@ -155,7 +155,7 @@ export function IconButton({ name, label, onPress, color, filled, size = 44, bad
           position: 'absolute', top: -2, right: -2, minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 4,
           backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: c.bg,
         }}>
-          <T size={10} weight="bold" color="#FFFFFF" style={{ lineHeight: 13 }}>{badge > 99 ? '99+' : String(badge)}</T>
+          <T size={10} weight="bold" color="#FFFFFF" style={{ lineHeight: 13 }}>{badge > 99 ? '+٩٩' : arDigits(badge)}</T>
         </View>
       ) : null}
     </Pressable>

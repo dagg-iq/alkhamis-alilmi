@@ -55,3 +55,9 @@
 - بناء APK عبر GitHub Actions (`.github/workflows/build-apk.yml`) نجح بعد إصلاح: إلحاق `org.gradle.jvmargs` بـ gradle.properties بلا سطر جديد كان يفسد `expo.inlineModules.watchedDirectories`.
 - كل تعديل على `apps/mobile` يبني APK جديداً تلقائياً وينشره في Releases (`apk-<رقم>`).
 - **التالي**: صاحب المشروع يجرب التطبيق على هاتفه ويرسل الملاحظات.
+
+## 2026-10-05 — تجربة Expo Go + إصلاحات
+- Expo Go: استيراد expo-notifications يوقف التطبيق (SDK 53+) ← صار يُحمّل عند الحاجة ويتجاهل في Expo Go.
+- تعليق شاشة البداية: useMe لم يعد يرمي خطأ قبل تحويل بوابة الدخول + مهلات أمان + ErrorBoundary يعرض الخطأ.
+- تسجيل الدخول في Expo Go حوّل إلى localhost: رابط exp:// غير مطابق في Supabase ← شاشة الترحيب (وضع التطوير) تعرض الرابط الدقيق لإضافته.
+- اختبار دخان لكل الشاشات: `apps/mobile/e2e/smoke.js` (ويب + Supabase وهمي) — ٢٦/٢٧ بلا أخطاء (المتبقي داخل iframe يوتيوب على الويب فقط).
