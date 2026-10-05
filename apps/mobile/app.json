@@ -1,23 +1,27 @@
 {
   "expo": {
-    "name": "mobile",
-    "slug": "mobile",
+    "name": "سعي",
+    "slug": "saey",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "mobile",
+    "scheme": "saey",
     "userInterfaceStyle": "automatic",
+    "backgroundColor": "#F5F5F2",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "bundleIdentifier": "com.saey.app",
+      "supportsTablet": false
     },
     "android": {
+      "package": "com.saey.app",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#111111",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "softwareKeyboardLayoutMode": "resize"
     },
     "web": {
       "output": "static",
@@ -28,18 +32,46 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#208AEF",
+          "backgroundColor": "#F5F5F2",
           "image": "./assets/images/splash-icon.png",
-          "imageWidth": 76
+          "imageWidth": 120,
+          "dark": {
+            "backgroundColor": "#0E0E0F",
+            "image": "./assets/images/splash-icon-dark.png"
+          }
+        }
+      ],
+      [
+        "expo-localization",
+        {
+          "supportsRTL": true,
+          "forcesRTL": true
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#2346F5"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "يحتاج سعي الوصول لصورك لإرسالها في الدردشة أو لتغيير صورتك الشخصية.",
+          "cameraPermission": "يحتاج سعي الكاميرا لتصوير أسئلة الامتحانات والصور في الدردشة."
         }
       ],
       "expo-web-browser",
       "expo-sharing",
-      "expo-localization"
+      "expo-font"
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "supportsRTL": true,
+      "forcesRTL": true
     }
   }
 }
