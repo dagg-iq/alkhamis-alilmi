@@ -3,7 +3,7 @@ import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
-import { I18nManager, Platform, ScrollView, Text, View } from 'react-native';
+import { I18nManager, LogBox, Platform, ScrollView, Text, View } from 'react-native';
 import type { ErrorBoundaryProps } from 'expo-router';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -22,6 +22,9 @@ if (Platform.OS !== 'web') {
   document.documentElement.dir = 'rtl';
   document.documentElement.lang = 'ar';
 }
+
+// تحذيرات معروفة وغير مؤثرة
+LogBox.ignoreLogs(['WebCrypto API is not supported']);
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 // شبكة أمان: لا تبقى شاشة البداية أكثر من ١٠ ثوانٍ مهما حدث
