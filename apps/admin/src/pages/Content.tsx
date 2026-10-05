@@ -207,7 +207,14 @@ function Sections() {
   });
   const add = () => run(async () => {
     if (!name.trim()) throw new Error('اكتب اسم الشعبة');
-    await check(supabase.from('sections').insert({ school_id: q.data!.schoolId, name: name.trim(), sort: (q.data?.sections.length ?? 0) + 1 }));
+    let schoolId = q.data?.schoolId;
+    if (!schoolId) {
+      // لم يُشغَّل seed.sql بعد: ننشئ المدرسة تلقائياً
+      const { data, error } = await supabase.from('schools').insert({ name: 'إعدادية الشهاب للبنين', grade_label: 'الخامس العلمي' }).select('id').single();
+      if (error) throw new Error(error.message);
+      schoolId = data.id as string;
+    }
+    await check(supabase.from('sections').insert({ school_id: schoolId, name: name.trim(), sort: (q.data?.sections.length ?? 0) + 1 }));
     setName('');
     await q.reload();
   }, 'أُضيفت الشعبة');
