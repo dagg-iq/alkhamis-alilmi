@@ -1,6 +1,6 @@
 # تصميم قاعدة البيانات — Supabase (Postgres)
 
-الحالة: 🟡 مسودة أولى تنتظر مراجعة صاحب المشروع
+الحالة: ✅ معتمد ومنفّذ — الملفات في `supabase/migrations/` (المرجع الحقيقي هو SQL)
 
 ## المبادئ
 1. **كل جدول محمي بـ RLS** — الطالب لا يرى ولا يعدّل إلا المسموح له، حتى لو عبث بالتطبيق.
@@ -57,7 +57,8 @@ erDiagram
 |---|---|---|
 | id | uuid PK → auth.users | |
 | full_name | text | الاسم الثلاثي (إلزامي، ٣ كلمات على الأقل) |
-| avatar_key | text | مسار الصورة |
+| avatar_url | text | رابط الصورة (Supabase Storage: avatars) |
+| onboarded | bool | أكمل بيانات التسجيل |
 | section_id | uuid → sections | |
 | role | enum `student` `moderator` `admin` | يغيّره الأدمن فقط |
 | status | enum `pending` `approved` `rejected` `banned` | يغيّره الأدمن فقط |
