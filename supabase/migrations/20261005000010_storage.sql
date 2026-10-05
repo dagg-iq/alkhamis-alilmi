@@ -1,15 +1,18 @@
 -- =============================================================================
--- سعي — Supabase Storage: الصور الشخصية فقط (باقي الملفات في Cloudflare R2)
--- المسار: avatars/<user_id>/<file>.jpg
+-- سعي — ١٠: تخزين الصور الشخصية
+-- آمن لإعادة التشغيل أكثر من مرة
 -- =============================================================================
 
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values ('avatars', 'avatars', true, 524288, array['image/jpeg', 'image/png', 'image/webp'])
 on conflict (id) do nothing;
 
+drop policy if exists "avatar upload own folder" on storage.objects;
 create policy "avatar upload own folder" on storage.objects for insert to authenticated
   with check (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
+drop policy if exists "avatar update own folder" on storage.objects;
 create policy "avatar update own folder" on storage.objects for update to authenticated
   using (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
+drop policy if exists "avatar delete own folder" on storage.objects;
 create policy "avatar delete own folder" on storage.objects for delete to authenticated
   using (bucket_id = 'avatars' and ((storage.foldername(name))[1] = auth.uid()::text or public.is_admin()));

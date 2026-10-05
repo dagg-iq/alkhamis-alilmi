@@ -29,12 +29,28 @@
    - Database password: كلمة سر قوية **واحفظها**.
    - Region: **Central EU (Frankfurt)** — الأقرب للعراق.
    - Plan: Free.
-3. بعد الإنشاء: **SQL Editor** ← **New query**، وانسخ والصق محتوى كل ملف واضغط **Run**، **بهذا الترتيب**:
-   1. `supabase/migrations/20261005000001_core.sql`
-   2. `supabase/migrations/20261005000002_logic.sql`
-   3. `supabase/migrations/20261005000003_rls.sql`
-   4. `supabase/migrations/20261005000004_storage.sql`
-   5. `supabase/seed.sql` (المدرسة، الشعب أ–هـ، المواد الثمانية، الإعدادات)
+3. بعد الإنشاء: **SQL Editor**. نفّذ ١١ ملفاً **بالترتيب**، لكل ملف:
+   - افتح الملف على GitHub ← اضغط زر **Raw** (يعرض النص الخام فقط).
+   - اضغط **Ctrl+A** ثم **Ctrl+C** (حتى يُنسخ الملف كاملاً).
+   - في Supabase: **New query** (صفحة فارغة) ← **Ctrl+V** ← تأكد أن آخر سطر في الملف ظاهر ← **Run**.
+   - يجب أن تظهر **Success**. ⚠️ لا تحدد جزءاً من النص قبل Run (Supabase ينفّذ المحدد فقط).
+
+   | # | الملف (في `supabase/migrations/`) |
+   |---|---|
+   | ١ | `20261005000001_types_users.sql` |
+   | ٢ | `20261005000002_content.sql` |
+   | ٣ | `20261005000003_student_data.sql` |
+   | ٤ | `20261005000004_chat_ai.sql` |
+   | ٥ | `20261005000005_logic_users.sql` |
+   | ٦ | `20261005000006_logic_events.sql` |
+   | ٧ | `20261005000007_rpc.sql` |
+   | ٨ | `20261005000008_rls_core.sql` |
+   | ٩ | `20261005000009_rls_activity.sql` |
+   | ١٠ | `20261005000010_storage.sql` |
+   | ١١ | `supabase/seed.sql` (المدرسة، الشعب، المواد، الإعدادات) |
+
+   > كل الملفات **آمنة لإعادة التشغيل**: إذا فشل ملف أو شككت أنه نُسخ ناقصاً، أعد تشغيله ولن يتكرر أو يتلف شيء.
+   > بديل أسهل بلا نسخ (إذا جهّزت الحاسوب في الخطوة ٦): `npx supabase db push` ينفّذ ١–١٠ تلقائياً، ثم شغّل `seed.sql` فقط.
 4. ✅ تحقق: **Table Editor** ← جدول `subjects` فيه ٨ مواد.
 5. احفظ من **Project Settings ← API**:
    - `Project URL` (مثل `https://abcd.supabase.co`)
