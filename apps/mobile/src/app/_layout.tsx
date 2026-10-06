@@ -2,7 +2,7 @@ import { ThemeProvider, DarkTheme, DefaultTheme, Stack, router, useSegments } fr
 import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { I18nManager, LogBox, Platform, ScrollView, Text, View } from 'react-native';
 import type { ErrorBoundaryProps } from 'expo-router';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -11,6 +11,7 @@ import { AuthProvider, useAuth } from '@/lib/auth';
 import { onNotificationTap, registerPush } from '@/lib/push';
 import { isConfigured } from '@/lib/supabase';
 import { AppThemeProvider, fontAssets, useTheme } from '@/lib/theme';
+import { Intro } from '@/components/intro';
 import { NotConfigured } from '@/components/not-configured';
 
 // التطبيق عربي بالكامل: من اليمين لليسار
@@ -66,6 +67,7 @@ export default function RootLayout() {
 }
 
 function Navigator() {
+  const [introDone, setIntroDone] = useState(false);
   const { ready, session, profile } = useAuth();
   const { c, dark } = useTheme();
   const segments = useSegments();
@@ -109,7 +111,6 @@ function Navigator() {
     });
   }, []);
 
-  if (!ready) return <View style={{ flex: 1, backgroundColor: c.bg }} />;
 
   const navTheme = {
     ...(dark ? DarkTheme : DefaultTheme),
@@ -119,12 +120,16 @@ function Navigator() {
   return (
     <ThemeProvider value={navTheme}>
       <StatusBar style={dark ? 'light' : 'dark'} />
+      {/* المقدمة تبقى في نفس الموضع من الشجرة حتى لا تُعاد عند جاهزية الدخول */}
+      {!ready ? <View style={{ flex: 1, backgroundColor: c.bg }} /> : (
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: c.bg }, animation: 'slide_from_left' }}>
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="(auth)" options={{ animation: 'fade' }} />
         <Stack.Screen name="grades/edit" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
         <Stack.Screen name="planner/new" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
       </Stack>
+      )}
+      {!introDone ? <Intro ready={ready} onDone={() => setIntroDone(true)} /> : null}
     </ThemeProvider>
   );
 }
