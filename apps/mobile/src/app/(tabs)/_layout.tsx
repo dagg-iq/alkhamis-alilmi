@@ -57,11 +57,11 @@ export default function TabsLayout() {
                       position: 'absolute', top: -4, left: -8, minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 4,
                       backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: c.card,
                     }}>
-                      <T size={10} weight="bold" color="#FFFFFF" style={{ lineHeight: 13 }}>{unread > 99 ? '+٩٩' : arDigits(unread)}</T>
+                      <T size={10} weight="bold" color={c.accentInk} style={{ lineHeight: 13 }}>{unread > 99 ? '+٩٩' : arDigits(unread)}</T>
                     </View>
                   ) : null}
                 </TabIcon>
-                <T size={12} weight={focused ? 'bold' : 'medium'} color={color} style={{ lineHeight: 16 }}>{tab.label}</T>
+                <T size={12} weight={focused ? 'bold' : 'medium'} color={color} style={{ lineHeight: 20 }}>{tab.label}</T>
               </Pressable>
             );
           })}

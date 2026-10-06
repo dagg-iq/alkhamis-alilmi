@@ -1,5 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { DEFAULT_RULES, generalExemption, isIndividuallyExempt, effortStatus, parseRules, type Post, type Task } from '@saey/shared';
+import {
+  DEFAULT_RULES, analyzeGrades, generalExemption, isIndividuallyExempt, effortStatus, parseRules,
+  type Goal, type Post, type Task,
+} from '@saey/shared';
+import { loadGoal } from '@/lib/goal';
 import { loadMyGrades, loadSubjects, shortSubject } from '@/lib/queries';
 import { loadSettings } from '@/lib/settings';
 import { supabase } from '@/lib/supabase';
@@ -23,6 +27,35 @@ export interface WidgetSnapshot {
   unreadMessages: number;
   unreadNotifs: number;
   post: Pick<Post, 'id' | 'title' | 'kind' | 'published_at'> | null;
+  /** هدف الطالب وخلاصة الدرجات بجملة واضحة (نفس صفحة الدرجات) */
+  goal: Goal;
+  headline: string;
+  perExam: number | null;
+  onTrack: number;
+  totalSubjects: number;
+  goalTarget: number;
+  /** مظهر الويدجتات: يتبع الهاتف أو ثابت */
+  theme: WidgetTheme;
+}
+
+export type WidgetTheme = 'system' | 'light' | 'dark';
+const THEME_KEY = 'saey.widgets.theme';
+
+export async function readWidgetTheme(): Promise<WidgetTheme> {
+  try {
+    const v = await AsyncStorage.getItem(THEME_KEY);
+    return v === 'light' || v === 'dark' ? v : 'system';
+  } catch {
+    return 'system';
+  }
+}
+
+export async function saveWidgetTheme(t: WidgetTheme) {
+  await AsyncStorage.setItem(THEME_KEY, t).catch(() => {});
+  const s = await readSnapshot();
+  const next = { ...s, theme: t };
+  await writeSnapshot(next);
+  return next;
 }
 
 const KEY = 'saey.widgets.v1';
@@ -45,6 +78,13 @@ export const EMPTY_SNAPSHOT: WidgetSnapshot = {
   unreadMessages: 0,
   unreadNotifs: 0,
   post: null,
+  goal: 'general',
+  headline: '',
+  perExam: null,
+  onTrack: 0,
+  totalSubjects: 0,
+  goalTarget: DEFAULT_RULES.generalAvg,
+  theme: 'system',
 };
 
 export async function readSnapshot(): Promise<WidgetSnapshot> {
@@ -67,13 +107,14 @@ export async function writeSnapshot(s: WidgetSnapshot) {
 /** يجلب أحدث البيانات من الخادم (يعمل داخل التطبيق وفي الخلفية للويدجت) */
 export async function fetchSnapshot(): Promise<WidgetSnapshot> {
   const { data: { session } } = await supabase.auth.getSession();
-  if (!session) return { ...EMPTY_SNAPSHOT, updatedAt: new Date().toISOString() };
+  if (!session) return { ...EMPTY_SNAPSHOT, theme: await readWidgetTheme(), updatedAt: new Date().toISOString() };
   const uid = session.user.id;
 
   const startOfToday = new Date();
   startOfToday.setHours(0, 0, 0, 0);
   const now = new Date();
 
+  const [goal, theme] = await Promise.all([loadGoal(), readWidgetTheme()]);
   const [profile, settings, subjects, grades, exams, tasks, done, posts, notifs, convs] = await Promise.all([
     supabase.from('profiles').select('full_name, status').eq('id', uid).maybeSingle(),
     loadSettings(true).catch(() => ({} as Record<string, unknown>)),
@@ -100,6 +141,8 @@ export async function fetchSnapshot(): Promise<WidgetSnapshot> {
   const doneIds = new Set(((done.data ?? []) as { task_id: string }[]).map((d) => d.task_id));
   const nameOf = (id: string | null) => subjects.find((s) => s.id === id)?.name ?? null;
   const p = profile.data as { full_name: string; status: string } | null;
+  const g = goal ?? 'general';
+  const sum = analyzeGrades(subjects, grades, g, rules, shortSubject);
 
   return {
     updatedAt: new Date().toISOString(),
@@ -119,5 +162,12 @@ export async function fetchSnapshot(): Promise<WidgetSnapshot> {
     unreadMessages: ((convs.data ?? []) as { unread: number; muted: boolean }[]).reduce((a, r) => a + (r.muted ? 0 : r.unread), 0),
     unreadNotifs: notifs.count ?? 0,
     post: ((posts.data ?? []) as WidgetSnapshot['post'][])[0] ?? null,
+    goal: g,
+    headline: sum.headline,
+    perExam: sum.state === 'possible' ? sum.perExam : null,
+    onTrack: sum.onTrack,
+    totalSubjects: sum.total,
+    goalTarget: g === 'pass' ? rules.pass : g === 'individual' ? rules.individualExempt : rules.generalAvg,
+    theme,
   };
 }

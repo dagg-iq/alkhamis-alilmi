@@ -2,12 +2,12 @@ import type { AiSource, Subject } from '@saey/shared';
 import { arDigits } from '@saey/shared';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, Platform, Pressable, ScrollView, TextInput, View } from 'react-native';
+import { ActivityIndicator, FlatList, Platform, Pressable, ScrollView, TextInput, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardView } from '@/components/motion';
 import { Icon, LogoMark } from '@/components/icon';
 import { RichText } from '@/components/rich-text';
-import { Chip, IconButton, Row, T } from '@/components/ui';
+import { Chip, IconButton, Row, T, MAX_WIDTH } from '@/components/ui';
 import { loadSubjects, shortSubject } from '@/lib/queries';
 import { callFunction, supabase } from '@/lib/supabase';
 import { fonts, useTheme } from '@/lib/theme';
@@ -16,8 +16,9 @@ interface Msg { id: string; role: 'user' | 'assistant'; content: string; sources
 
 export default function AiChat() {
   const params = useLocalSearchParams<{ id: string; subjectId?: string; prompt?: string }>();
-  const { c } = useTheme();
+  const { c, verdict } = useTheme();
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
   const [chatId, setChatId] = useState<string | null>(params.id === 'new' ? null : params.id);
   const [messages, setMessages] = useState<Msg[]>([]);
   const [text, setText] = useState(params.prompt ?? '');
@@ -78,7 +79,7 @@ export default function AiChat() {
         ref={listRef}
         data={messages}
         keyExtractor={(m) => m.id}
-        contentContainerStyle={{ padding: 16, gap: 14, flexGrow: 1 }}
+        contentContainerStyle={{ padding: 16, gap: 14, flexGrow: 1, width: '100%', maxWidth: MAX_WIDTH, alignSelf: 'center' }}
         onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
         ListEmptyComponent={
           <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10, paddingTop: 60 }}>
@@ -93,8 +94,8 @@ export default function AiChat() {
           </View>
         ) : (
           <View style={{ gap: 8 }}>
-            <View style={{ backgroundColor: item.error ? '#FBE6E4' : c.card, borderRadius: 20, borderWidth: 1, borderColor: c.line, padding: 14 }}>
-              {item.error ? <T color="#A82620">{item.content}</T> : <RichText text={item.content} size={16} />}
+            <View style={{ backgroundColor: item.error ? verdict.risk.bg : c.card, borderRadius: 20, borderWidth: item.error ? 0 : 1, borderColor: c.line, padding: 14 }}>
+              {item.error ? <T color={verdict.risk.ink}>{item.content}</T> : <RichText text={item.content} size={16} />}
             </View>
             {item.sources?.length ? (
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
@@ -116,7 +117,7 @@ export default function AiChat() {
         ) : null}
       />
 
-      <Row gap={8} style={{ backgroundColor: c.card, paddingHorizontal: 12, paddingTop: 10, paddingBottom: insets.bottom + 10, borderTopWidth: 1, borderTopColor: c.line, alignItems: 'flex-end' }}>
+      <Row gap={8} style={{ backgroundColor: c.card, paddingTop: 10, paddingBottom: insets.bottom + 10, borderTopWidth: 1, borderTopColor: c.line, alignItems: 'flex-end', paddingHorizontal: Math.max(12, (width - MAX_WIDTH) / 2) }}>
         <TextInput
           value={text}
           onChangeText={setText}
@@ -127,7 +128,7 @@ export default function AiChat() {
         />
         <Pressable onPress={ask} disabled={thinking || !text.trim()} accessibilityLabel="إرسال"
           style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: text.trim() && !thinking ? c.accent : c.line, alignItems: 'center', justifyContent: 'center' }}>
-          <Icon name="send" size={20} color="#FFFFFF" strokeWidth={2} />
+          <Icon name="send" size={20} color={text.trim() && !thinking ? c.accentInk : c.ink3} strokeWidth={2} />
         </Pressable>
       </Row>
     </KeyboardView>

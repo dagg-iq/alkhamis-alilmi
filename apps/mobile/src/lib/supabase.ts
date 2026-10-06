@@ -39,9 +39,11 @@ export async function callFunction<T>(name: string, body: Record<string, unknown
     let message = 'تعذّر الاتصال بالخادم. تأكد من الإنترنت.';
     const ctx = (error as { context?: Response }).context;
     if (ctx && typeof ctx.json === 'function') {
+      // الدالة غير مرفوعة على الخادم بعد
+      if (ctx.status === 404) message = 'هذه الميزة لم تُفعّل على الخادم بعد. أخبر الأدمن.';
       try {
         const payload = await ctx.json();
-        if (payload?.error) message = payload.error;
+        if (typeof payload?.error === 'string' && ctx.status !== 404) message = payload.error;
       } catch {
         // نُبقي الرسالة العامة
       }

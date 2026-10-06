@@ -24,7 +24,11 @@ export default function PostScreen() {
 
   const remove = () => Alert.alert('حذف الخبر', 'هل أنت متأكد؟', [
     { text: 'إلغاء', style: 'cancel' },
-    { text: 'حذف', style: 'destructive', onPress: async () => { await supabase.from('posts').delete().eq('id', post.id); router.back(); } },
+    { text: 'حذف', style: 'destructive', onPress: async () => {
+      const { error } = await supabase.from('posts').delete().eq('id', post.id);
+      if (error) Alert.alert('تعذّر الحذف', error.message);
+      else router.back();
+    } },
   ]);
 
   return (

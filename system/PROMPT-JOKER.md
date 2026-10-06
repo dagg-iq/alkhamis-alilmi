@@ -57,20 +57,27 @@ cd supabase/functions && deno check */index.ts  # دوال الخادم
 **أين وصل صاحب المشروع (راجع LOG.md للأحدث):**
 - ✅ Supabase (migrations مُطبقة) + تسجيل الدخول بـ Google + APK يعمل على هاتفه.
 - ⏳ seed.sql + جعل نفسه أدمن (SQL جاهز في `09-project-config.md`).
-- ⏳ لم يُنفذ بعد: مفتاح Gemini، رفع دوال الخادم + الأسرار + Webhooks، التخزين (R2 يطلب بطاقة ← ربما Supabase Storage)،
-  Netlify للوحة التحكم، Firebase + حساب Expo (projectId) لإشعارات الهاتف، أسرار keepalive.
+- ⏳ لم يُنفذ بعد: مفتاح Gemini، أسرار GitHub + تشغيل «Deploy Supabase» (يرفع الدوال ويربط الإشعارات بلا حاسوب)،
+  Firebase (سرّا GOOGLE_SERVICES_JSON و FCM_SERVICE_ACCOUNT — بلا حساب Expo)، التخزين (R2 يطلب بطاقة ← ربما Supabase Storage)،
+  Netlify للوحة التحكم، أسرار keepalive.
 - يجرب على ويندوز (PowerShell) + Expo Go + ملف APK على هاتف أندرويد.
 
 **دروس تعلمناها (لا تكررها):**
 - مترجم React (`reactCompiler` في app.json) يكسر الويدجتات ← كل ملفات `src/widgets/` تبدأ بـ `'use no memo'`.
-- خط العناوين (ثمانية Display) له نقاط وذيول عميقة: لا تضع `lineHeight` أقل من ١٫٥ × الحجم وإلا تُقص نقاط الياء في أندرويد.
+- خطوط ثمانية: الياء الأخيرة تنزل ٠٫٥٥ من الحجم تحت السطر والخط يعلن ٠٫٢٥ ← أندرويد يقص النقاط. `T` يعالجها
+  (paddingBottom + marginBottom سالب)؛ أي `<Text>` خام أو `TextWidget` يحتاج نفس المعالجة. وذيل الياء يتجاوز عرض الكلمة يساراً:
+  لا تضع كلمة داخل حاوية `overflow: 'hidden'` بلا هامش أفقي.
 - التطبيق بوضع ملء الشاشة (edge-to-edge): استخدم `KeyboardView` من `components/motion.tsx` لا `KeyboardAvoidingView`.
 - الشبكات: استخدم `justifyContent: 'space-between'` بدل `gap` مع عرض نسبي (الهواتف أضيق من ٣٩٠).
-- الحركة يجب أن تكون سريعة وخفيفة (هو انتقد البطء): دخول ≤ ٢٢٠ms، المقدمة ~١٫٣ ثانية.
+- الحركة: لا تحرّك محتوى الشاشة عند فتحها (الانتقال يكفي)، لا نوابض متأرجحة، ≤ ٢٢٠ms. المقدمة ~٢٫٢ ثانية جميلة وسلسة
+  (هو انتقد البطء ثم انتقد السرعة الزائدة في المقدمة). الرسائل تظهر فوراً قبل رد الخادم.
 - expo-notifications لا تعمل في Expo Go ← تُحمّل عند الحاجة فقط. الويدجتات لا تعمل في Expo Go.
 - Expo Go على ويندوز: `--tunnel` قد يفشل (ngrok) ← الأسهل `npx expo start --lan` على نفس الواي فاي.
 - `npx expo install` لا يعمل في بيئة السحابة (expo.dev محجوب) ← `npm install -w apps/mobile <pkg>@~<SDK>.x`.
-- اختبر الشاشات بـ `apps/mobile/e2e/smoke.js` (ويب + Supabase وهمي، `W=360` لعرض هاتف ضيق، `ROUTES=` لشاشات محددة).
+- اختبر الشاشات بـ `apps/mobile/e2e/smoke.js` (ويب + Supabase وهمي، `W=360` لعرض هاتف ضيق، `H=` للطول، `ROUTES=` لشاشات محددة،
+  `GOAL=`/`THEME=`). لوحة التحكم: `apps/admin/e2e/smoke.cjs` (يكشف تجاوز العرض على الهاتف، `MENU=1` يصوّر القائمة).
+- Deno غير مثبت في السحابة ← `npm i deno` في مجلد مؤقت ثم `node_modules/.bin/deno check`. pgvector: `apt-get install postgresql-16-pgvector`.
+- الأعداد بالعربية: `countOf(n, 'مادة', 'مادتان', 'مواد', 'مادة واحدة')` من shared — لا تكتب «١ فصول».
 
 **أسلوب التعامل معه:**
 - نفّذ **كل** نقطة يطلبها حرفياً ولا تتجاوز أي واحدة؛ إذا لم تستطع شيئاً قل ذلك بوضوح ولماذا.

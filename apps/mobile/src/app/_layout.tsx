@@ -130,11 +130,11 @@ function Navigator() {
       {Platform.OS === 'android' ? <NavigationBar hidden /> : null}
       {/* المقدمة تبقى في نفس الموضع من الشجرة حتى لا تُعاد عند جاهزية الدخول */}
       {!ready ? <View style={{ flex: 1, backgroundColor: c.bg }} /> : (
-      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: c.bg }, animation: 'slide_from_left' }}>
+      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: c.bg }, animation: 'ios_from_left' }}>
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="(auth)" options={{ animation: 'fade' }} />
-        <Stack.Screen name="grades/edit" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
-        <Stack.Screen name="planner/new" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+        <Stack.Screen name="grades/edit" options={{ animation: 'fade_from_bottom' }} />
+        <Stack.Screen name="planner/new" options={{ animation: 'fade_from_bottom' }} />
       </Stack>
       )}
       {ready ? <MessageBanner myId={approvedId} /> : null}

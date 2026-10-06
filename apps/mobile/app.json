@@ -10,7 +10,7 @@
     "backgroundColor": "#F5F5F2",
     "ios": {
       "bundleIdentifier": "com.saey.app",
-      "supportsTablet": false
+      "supportsTablet": true
     },
     "android": {
       "package": "com.saey.app",

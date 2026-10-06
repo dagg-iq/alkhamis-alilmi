@@ -135,7 +135,7 @@ function GradesModal({ student, onClose }: { student: Profile; onClose: () => vo
             <span className="pill accent">المعدل {formatScore(general?.average)}</span>
             <span className={`pill ${general?.exempt ? 'ok' : 'warn'}`}>الإعفاء العام: {general?.exempt ? 'على الطريق' : 'غير متحقق'}</span>
           </div>
-          <div className="table-wrap">
+          <div className="table-wrap wide">
             <table>
               <thead><tr><th>المادة</th>{PERIODS.map((p) => <th key={p}>{PERIOD_LABELS[p]}</th>)}<th>السعي</th></tr></thead>
               <tbody>

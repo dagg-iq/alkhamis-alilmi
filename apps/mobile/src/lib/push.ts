@@ -42,26 +42,48 @@ export async function setupChannels() {
   await N.setNotificationChannelAsync('reminders', { name: 'التذكيرات', importance: N.AndroidImportance.HIGH });
 }
 
-/** يطلب الإذن ويسجل رمز الجهاز في قاعدة البيانات */
-export async function registerPush(userId: string): Promise<boolean> {
+export type PushResult = 'ok' | 'denied' | 'unsupported' | 'not-configured' | 'error';
+
+/**
+ * يطلب الإذن ويسجل رمز الجهاز في قاعدة البيانات.
+ * بلا حساب Expo: نستخدم رمز Firebase المباشر (يحتاج google-services.json داخل ملف APK).
+ */
+export async function registerPush(userId: string): Promise<PushResult> {
   const N = notifications();
-  if (!N) return false;
+  if (!N || !Device.isDevice) return 'unsupported';
   try {
-    if (!Device.isDevice) return false;
     await setupChannels();
     let { status } = await N.getPermissionsAsync();
     if (status !== 'granted') status = (await N.requestPermissionsAsync()).status;
-    if (status !== 'granted') return false;
+    if (status !== 'granted') return 'denied';
     const projectId = Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
-    if (!projectId) return false;
-    const token = (await N.getExpoPushTokenAsync({ projectId })).data;
-    await supabase.from('push_tokens').upsert({
-      user_id: userId, token, platform: Platform.OS, updated_at: new Date().toISOString(),
+    let token: string;
+    let platform: string;
+    if (projectId) {
+      token = (await N.getExpoPushTokenAsync({ projectId })).data;
+      platform = Platform.OS;
+    } else {
+      try {
+        token = String((await N.getDevicePushTokenAsync()).data);
+        platform = 'fcm';
+      } catch {
+        // لم يُضف ملف Firebase للتطبيق بعد
+        return 'not-configured';
+      }
+    }
+    const { error } = await supabase.from('push_tokens').upsert({
+      user_id: userId, token, platform, updated_at: new Date().toISOString(),
     });
-    return true;
+    return error ? 'error' : 'ok';
   } catch {
-    return false;
+    return 'error';
   }
+}
+
+/** هل هذا الجهاز مسجل لاستقبال الإشعارات؟ */
+export async function pushRegistered(userId: string): Promise<boolean> {
+  const { count } = await supabase.from('push_tokens').select('token', { count: 'exact', head: true }).eq('user_id', userId);
+  return (count ?? 0) > 0;
 }
 
 export async function unregisterPush(userId: string) {
@@ -95,7 +117,10 @@ export function onNotificationTap(cb: (data: Record<string, string>) => void): (
   const N = notifications();
   if (!N) return () => {};
   const sub = N.addNotificationResponseReceivedListener((res) => {
-    const d = res.notification.request.content.data as Record<string, string> | undefined;
+    // إشعارات Firebase المباشرة تحمل البيانات في الرسالة البعيدة
+    const req = res.notification.request;
+    const remote = (req.trigger as { remoteMessage?: { data?: Record<string, string> } } | null)?.remoteMessage?.data;
+    const d = (req.content.data && Object.keys(req.content.data).length ? req.content.data : remote) as Record<string, string> | undefined;
     if (d) cb(d);
   });
   return () => sub.remove();

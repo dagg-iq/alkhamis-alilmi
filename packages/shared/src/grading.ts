@@ -87,14 +87,17 @@ export function annualEffort(s: SubjectScores): number | null {
 function weights(s: SubjectScores): Record<EffortPeriod, number> {
   const third = 1 / 3;
   const w: Record<EffortPeriod, number> = { month1: 1 / 6, month2: 1 / 6, midyear: third, month3: 1 / 6, month4: 1 / 6 };
-  const s1Closed = has(s.midyear) || has(s.month3) || has(s.month4);
-  if (s1Closed) {
-    const known = (['month1', 'month2'] as const).filter((p) => has(s[p]));
+  // الفصل الذي انتهى بشهر واحد فقط: ذلك الشهر يأخذ وزن الفصل كاملاً
+  const closeSemester = (a: EffortPeriod, b: EffortPeriod) => {
+    const known = [a, b].filter((p) => has(s[p]));
     if (known.length === 1) {
       w[known[0]] = third;
-      w[known[0] === 'month1' ? 'month2' : 'month1'] = 0;
+      w[known[0] === a ? b : a] = 0;
     }
-  }
+  };
+  if (has(s.midyear) || has(s.month3) || has(s.month4)) closeSemester('month1', 'month2');
+  // الفصل الثاني ينتهي بالامتحان النهائي
+  if (has(s.final)) closeSemester('month3', 'month4');
   return w;
 }
 
@@ -164,7 +167,9 @@ export function neededFor(s: SubjectScores, target: number, rules: GradingRules 
 }
 
 export function applyRounding(value: number, rules: GradingRules = DEFAULT_RULES): number {
-  return rules.round === 'half_up' ? Math.floor(value + 0.5) : value;
+  // نزيل أخطاء الكسور العشرية أولاً (٨٤٫٥ قد تُحسب ٨٤٫٤٩٩٩٩٩٩) حتى لا يضيع جبر الكسر على الطالب
+  const v = Math.round(value * 1e6) / 1e6;
+  return rules.round === 'half_up' ? Math.floor(v + 0.5) : v;
 }
 
 export function isIndividuallyExempt(annual: number | null, rules: GradingRules = DEFAULT_RULES): boolean {
@@ -227,4 +232,123 @@ export function subjectVerdict(s: SubjectScores, rules: GradingRules = DEFAULT_R
   if (need.state === 'achieved') return 'exempt';
   if (need.state === 'possible') return 'near';
   return applyRounding(v, rules) >= rules.pass ? 'safe' : 'risk';
+}
+
+// ---------------------------------------------------------------- الهدف والخطة
+
+/** هدف الطالب لهذه السنة (يختاره عند أول دخول للدرجات ويغيّره متى شاء) */
+export type Goal = 'pass' | 'individual' | 'general';
+
+export const GOALS: { key: Goal; title: string; short: string; body: string }[] = [
+  { key: 'general', title: 'الإعفاء العام', short: 'الإعفاء العام', body: 'أُعفى من كل الامتحانات النهائية: معدل عالٍ ولا مادة ضعيفة.' },
+  { key: 'individual', title: 'الإعفاء من مواد', short: 'إعفاء المواد', body: 'أُعفى من المواد التي أقدر عليها، وأدخل النهائي في الباقي.' },
+  { key: 'pass', title: 'النجاح', short: 'النجاح', body: 'أضمن النجاح في كل المواد بأريحية.' },
+];
+
+/** الدرجة التي يجب أن يصلها سعي كل مادة حسب الهدف */
+export function goalTarget(goal: Goal, rules: GradingRules = DEFAULT_RULES): number {
+  return goal === 'pass' ? rules.pass : goal === 'individual' ? rules.individualExempt : rules.generalMin;
+}
+
+/** الوزن المعروف والمتبقي لمادة (مجموع الأوزان دائماً ١) */
+function parts(s: SubjectScores) {
+  const w = weights(s);
+  let known = 0;
+  let wRemaining = 0;
+  for (const p of EFFORT_PERIODS) {
+    if (w[p] === 0) continue;
+    const v = s[p];
+    if (has(v)) known += v * w[p];
+    else wRemaining += w[p];
+  }
+  return { known, wRemaining };
+}
+
+/** «ماذا لو»: السعي المتوقع إذا أخذ الطالب الدرجة نفسها في كل امتحان متبقٍ */
+export function projectedEffort(s: SubjectScores, assumed: number): number {
+  const { known, wRemaining } = parts(s);
+  return known + wRemaining * Math.max(0, Math.min(100, assumed));
+}
+
+export interface GeneralPlan {
+  /** حالة الإعفاء العام ككل */
+  state: NeedState;
+  /** الدرجة نفسها في كل امتحان متبقٍ بكل المواد ليصل المعدل إلى الحد المطلوب */
+  perExam: number | null;
+  /** ما تحتاجه كل مادة: الأعلى بين «درجة المعدل» و«حد أقل مادة» */
+  bySubject: Record<string, Need>;
+  /** المواد التي تمنع الإعفاء العام (لا يمكنها الوصول لحد أقل مادة) */
+  blockers: string[];
+}
+
+/**
+ * خطة الإعفاء العام: كل المواد تدخل في المعدل (المادة بلا درجات = كل امتحاناتها متبقية).
+ * المعدل = متوسط سعي المواد ≥ generalAvg، وكل مادة ≥ generalMin.
+ */
+export function generalPlan(subjects: Record<string, SubjectScores>, rules: GradingRules = DEFAULT_RULES): GeneralPlan {
+  const ids = Object.keys(subjects);
+  const bySubject: Record<string, Need> = {};
+  const blockers: string[] = [];
+  if (!ids.length) return { state: 'impossible', perExam: null, bySubject, blockers };
+
+  let sumKnown = 0;
+  let sumRemaining = 0;
+  for (const id of ids) {
+    const p = parts(subjects[id]);
+    sumKnown += p.known;
+    sumRemaining += p.wRemaining;
+  }
+  const effAvg = rules.round === 'half_up' ? rules.generalAvg - 0.5 : rules.generalAvg;
+
+  let avgState: NeedState;
+  let perExam: number | null;
+  if (sumRemaining === 0) {
+    perExam = null;
+    avgState = applyRounding(sumKnown / ids.length, rules) >= rules.generalAvg ? 'achieved' : 'missed';
+  } else {
+    const x = Math.round(((ids.length * effAvg - sumKnown) / sumRemaining) * 1e6) / 1e6;
+    if (x <= 0) {
+      perExam = 0;
+      avgState = 'achieved';
+    } else {
+      perExam = Math.ceil(x * 2) / 2;
+      avgState = perExam > 100 ? 'impossible' : 'possible';
+    }
+  }
+
+  for (const id of ids) {
+    const minNeed = neededFor(subjects[id], rules.generalMin, rules);
+    if (minNeed.state === 'impossible' || minNeed.state === 'missed') blockers.push(id);
+    if (minNeed.state !== 'possible' && minNeed.state !== 'achieved') {
+      bySubject[id] = minNeed;
+    } else if (perExam === null || minNeed.remaining.length === 0) {
+      bySubject[id] = minNeed;
+    } else {
+      const per = Math.max(perExam, minNeed.perExam ?? 0);
+      bySubject[id] = {
+        state: per <= 0 ? 'achieved' : per > 100 ? 'impossible' : 'possible',
+        perExam: per,
+        remaining: minNeed.remaining,
+      };
+    }
+  }
+
+  let state: NeedState = avgState;
+  if (blockers.length) state = ids.some((id) => bySubject[id].state === 'missed') ? 'missed' : 'impossible';
+  else if (avgState === 'achieved' && Object.values(bySubject).some((n) => n.state === 'possible')) state = 'possible';
+  return { state, perExam, bySubject, blockers };
+}
+
+/** خطة المادة حسب الهدف (للأهداف الفردية: النجاح أو إعفاء المادة) */
+export function subjectNeed(s: SubjectScores, goal: Goal, rules: GradingRules = DEFAULT_RULES): Need {
+  return neededFor(s, goalTarget(goal, rules), rules);
+}
+
+/**
+ * تقريبي: كم يحتاج الطالب في الامتحان النهائي لينجح في مادة لم يُعفَ منها،
+ * حسب الضابطة الشائعة: الدرجة النهائية = (السعي + النهائي) ÷ ٢ ≥ درجة النجاح.
+ */
+export function finalExamNeeded(annual: number, rules: GradingRules = DEFAULT_RULES): number {
+  const eff = rules.round === 'half_up' ? rules.pass - 0.5 : rules.pass;
+  return Math.max(0, Math.ceil((2 * eff - annual) * 2) / 2);
 }

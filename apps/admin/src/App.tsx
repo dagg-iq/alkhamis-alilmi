@@ -1,4 +1,5 @@
-import { NavLink, Navigate, Route, Routes } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { Logo } from './components/ui';
 import { useAuth } from './lib/auth';
 import { useLoad } from './lib/hooks';
@@ -32,6 +33,10 @@ const NAV = [
 
 export default function App() {
   const { ready, session, isStaff, isAdmin, profile } = useAuth();
+  const [menu, setMenu] = useState(false);
+  const location = useLocation();
+  // على الهاتف: القائمة تُغلق بعد اختيار صفحة
+  useEffect(() => setMenu(false), [location.pathname]);
   const pending = useLoad(async () => {
     if (!isStaff) return 0;
     const { count } = await supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('status', 'pending').eq('onboarded', true);
@@ -54,7 +59,15 @@ export default function App() {
 
   return (
     <div className="shell">
-      <nav className="side" aria-label="القائمة">
+      <header className="topbar">
+        <div className="row" style={{ gap: 8 }}><Logo size={28} /><b>سعي</b></div>
+        <span className="small dim topbar-title">{NAV.find((n) => (n.end ? location.pathname === n.to : location.pathname.startsWith(n.to)))?.label}</span>
+        <button className="btn sm" onClick={() => setMenu(true)} aria-expanded={menu} aria-label="فتح القائمة">
+          القائمة{pending.data ? <span className="count">{pending.data}</span> : null}
+        </button>
+      </header>
+      {menu ? <div className="scrim" onClick={() => setMenu(false)} role="presentation" /> : null}
+      <nav className={`side${menu ? ' open' : ''}`} aria-label="القائمة">
         <div className="brand"><Logo size={34} /><b>سعي</b><span className="pill accent">لوحة التحكم</span></div>
         {NAV.filter((n) => !n.admin || isAdmin).map((n) => (
           <NavLink key={n.to} to={n.to} end={n.end}>

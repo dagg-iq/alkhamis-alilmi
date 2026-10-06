@@ -1,3 +1,4 @@
+import { GoalPicker } from '@/components/grades';
 import { SectionMark } from '@/components/group-mark';
 import { PressScale, tap } from '@/components/motion';
 import { isTripleName, type Section } from '@saey/shared';
@@ -9,6 +10,8 @@ import { Avatar, Button, Chip, Field, Loading, Screen, T } from '@/components/ui
 import { useAuth } from '@/lib/auth';
 import { compressImage } from '@/lib/files';
 import { must, supabase } from '@/lib/supabase';
+import { setGoal, useGoal } from '@/lib/goal';
+import { useGradingRules } from '@/lib/settings';
 import { useLoad } from '@/lib/use-load';
 import { useTheme } from '@/lib/theme';
 
@@ -20,6 +23,8 @@ export default function Onboarding() {
   const [localAvatar, setLocalAvatar] = useState<string | null>(null);
   const [section, setSection] = useState<string | null>(profile?.section_id ?? null);
   const [busy, setBusy] = useState(false);
+  const goal = useGoal();
+  const rules = useGradingRules();
   const sections = useLoad(() => must(supabase.from('sections').select('*').order('sort')) as Promise<Section[]>);
 
   const pick = async () => {
@@ -86,6 +91,12 @@ export default function Onboarding() {
             })}
           </View>
         )}
+      </View>
+
+      <View style={{ gap: 10 }}>
+        <T weight="bold" size={14}>هدفك هذه السنة</T>
+        <T dim size={13}>سعي يحسب لك كل شيء على أساسه (تقدر تغيّره لاحقاً من صفحة الدرجات).</T>
+        <GoalPicker value={goal} onPick={setGoal} rules={rules} />
       </View>
 
       <View style={{ gap: 10, marginTop: 12 }}>

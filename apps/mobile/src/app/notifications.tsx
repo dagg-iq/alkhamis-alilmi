@@ -22,9 +22,10 @@ export default function Notifications() {
   }, []));
 
   const open = (n: Notif) => {
-    if (n.payload.conversation_id) router.push(`/chat/${n.payload.conversation_id}`);
-    else if (n.payload.post_id) router.push(`/news/${n.payload.post_id}`);
-    else if (n.payload.task_id) router.push('/planner');
+    const p = n.payload ?? {};
+    if (p.conversation_id) router.push(`/chat/${p.conversation_id}`);
+    else if (p.post_id) router.push(`/news/${p.post_id}`);
+    else if (p.task_id) router.push('/planner');
   };
 
   return (

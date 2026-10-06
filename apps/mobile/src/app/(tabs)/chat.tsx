@@ -3,7 +3,7 @@ import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect } from 'react';
 import { Pressable, View } from 'react-native';
 import { Icon } from '@/components/icon';
-import { ConversationMark } from '@/components/group-mark';
+import { AssistantMark, ConversationMark } from '@/components/group-mark';
 import { Avatar, Empty, ErrorBox, Header, IconButton, Loading, NameLine, Row, Screen, T } from '@/components/ui';
 import { useSettings } from '@/lib/settings';
 import { must, supabase } from '@/lib/supabase';
@@ -38,6 +38,22 @@ export default function ChatList() {
     <Screen onRefresh={q.refresh} refreshing={q.refreshing}>
       <Header back={false} title="الدردشة"
         right={dmEnabled || isStaff ? <IconButton name="edit" label="رسالة جديدة" onPress={() => router.push('/chat/new')} /> : undefined} />
+      {/* مساعد سعي دائماً في الأعلى: أسرع طريق لسؤال عن الدروس */}
+      <Pressable onPress={() => router.push('/ai')} accessibilityRole="button" accessibilityLabel="مساعد سعي"
+        style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, borderRadius: 22, backgroundColor: c.soft, opacity: pressed ? 0.7 : 1 })}>
+        <AssistantMark size={52} />
+        <View style={{ flex: 1, gap: 2 }}>
+          <Row gap={6}>
+            <T weight="bold" size={16} color={c.softInk}>مساعد سعي</T>
+            <View style={{ paddingHorizontal: 8, borderRadius: 999, backgroundColor: c.accent }}>
+              <T size={11} weight="bold" color={c.accentInk}>ذكاء اصطناعي</T>
+            </View>
+          </Row>
+          <T size={14} color={c.softInk} lines={1}>اسأل عن أي درس — يجيب من ملازمكم</T>
+        </View>
+        <Icon name="forward" size={18} color={c.softInk} />
+      </Pressable>
+
       {q.loading ? <Loading /> : q.error ? <ErrorBox message={q.error} onRetry={q.reload} /> : !q.data?.length ? (
         <Empty icon="chat" title="لا توجد محادثات بعد" />
       ) : (
@@ -66,7 +82,7 @@ export default function ChatList() {
                     </T>
                     {conv.unread > 0 ? (
                       <View style={{ minWidth: 22, height: 22, borderRadius: 11, paddingHorizontal: 6, backgroundColor: conv.muted ? c.ink3 : c.accent, alignItems: 'center', justifyContent: 'center' }}>
-                        <T size={12} weight="bold" color="#FFFFFF" style={{ lineHeight: 16 }}>{arDigits(conv.unread)}</T>
+                        <T size={12} weight="bold" color={conv.muted ? c.bg : c.accentInk} style={{ lineHeight: 16 }}>{arDigits(conv.unread)}</T>
                       </View>
                     ) : null}
                   </Row>

@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Pressable, useWindowDimensions, View } from 'react-native';
 import { Icon } from '@/components/icon';
 import { VideoPlayer } from '@/components/video-player';
-import { Button, Card, ErrorBox, Header, Loading, Row, Screen, T } from '@/components/ui';
+import { Button, Card, ErrorBox, Header, Loading, MAX_WIDTH, Row, Screen, T } from '@/components/ui';
 import { useMe } from '@/lib/auth';
 import { must, supabase } from '@/lib/supabase';
 import { useTheme } from '@/lib/theme';
@@ -45,7 +45,7 @@ export default function LectureScreen() {
   const idx = siblings.findIndex((s) => s.id === lecture.id);
   const next = siblings[idx + 1];
   const isWatched = watched.has(lecture.id);
-  const playerWidth = width - 40;
+  const playerWidth = Math.min(width, MAX_WIDTH) - 40;
 
   return (
     <Screen>

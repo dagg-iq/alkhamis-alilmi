@@ -4,7 +4,7 @@
 اتبع الترتيب. كل خطوة فيها ✅ تحققت منها بنفسك.
 
 > 🔐 **قاعدة ذهبية**: المفاتيح السرية (service_role، Gemini، R2) **لا تُكتب أبداً** في الكود أو في GitHub أو في التطبيق.
-> مكانها فقط: أسرار Supabase (`supabase secrets set`). المفتاح الوحيد المسموح في التطبيق ولوحة التحكم هو `anon key` (عام بطبيعته ومحمي بـ RLS).
+> مكانها فقط: أسرار GitHub (Settings ← Secrets) التي تنقلها تلقائياً لأسرار Supabase. المفتاح الوحيد المسموح في التطبيق ولوحة التحكم هو `anon key` (عام بطبيعته ومحمي بـ RLS).
 
 ## قائمة سريعة
 | # | الخطوة | الوقت | مطلوب لـ |
@@ -14,10 +14,10 @@
 | ٣ | جعل نفسك أدمن | ٢ د | لوحة التحكم |
 | ٤ | مفتاح Gemini | ٣ د | المساعد الذكي، تصوير الأسئلة، الاختبارات |
 | ٥ | Cloudflare R2 | ١٠ د | الملازم، الصور في الدردشة، تصوير الأسئلة |
-| ٦ | رفع دوال الخادم + الأسرار | ١٠ د | كل ما سبق |
+| ٦ | أسرار GitHub + رفع الدوال (من المتصفح) | ٥ د | كل ما سبق |
 | ٧ | لوحة التحكم على Netlify | ١٠ د | إدارة التطبيق |
 | ٨ | بناء ملف APK | ٢٠ د | الطلاب |
-| ٩ | الإشعارات (Firebase) | ١٥ د | الإشعارات الفورية (اختياري في البداية) |
+| ٩ | الإشعارات (Firebase) | ١٠ د | الإشعارات والتطبيق مغلق |
 | ١٠ | إبقاء Supabase نشطاً | ٣ د | منع توقف المشروع المجاني |
 
 ---
@@ -115,35 +115,34 @@
    - انسخ **Access Key ID** و **Secret Access Key**.
 6. انسخ **Account ID** (يظهر في صفحة R2 على اليمين).
 
-## ٦. رفع دوال الخادم وإضافة الأسرار
-تحتاج حاسوباً عليه **Node.js 22** و **Git**.
-```bash
-git clone https://github.com/dagg-iq/alkhamis-alilmi.git
-cd alkhamis-alilmi
-git checkout claude/repository-name-arabic-iegosv   # أو main بعد الدمج
-npm install
+## ٦. رفع دوال الخادم وإضافة الأسرار — من موقع GitHub فقط (بلا حاسوب ولا طرفية)
+ملف `.github/workflows/deploy-supabase.yml` يرفع كل الدوال، ويضع أسرارها، ويربط الإشعارات بقاعدة البيانات تلقائياً.
+كل ما عليك: تضيف الأسرار في GitHub مرة واحدة.
 
-npx supabase login
-npx supabase link --project-ref <Project ref>
+**أ) مفتاح الوصول من Supabase**
+1. https://supabase.com/dashboard/account/tokens ← **Generate new token** ← الاسم `github` ← انسخه (يظهر مرة واحدة).
 
-# الأسرار (سطر واحد)
-npx supabase secrets set GEMINI_API_KEY=... R2_ACCOUNT_ID=... R2_ACCESS_KEY_ID=... R2_SECRET_ACCESS_KEY=... R2_BUCKET=saey PUSH_WEBHOOK_SECRET=اكتب-كلمة-عشوائية-طويلة
+**ب) أضف الأسرار في GitHub**
+المستودع ← **Settings ← Secrets and variables ← Actions ← New repository secret** — أضف كل واحد باسمه الدقيق:
 
-# رفع كل الدوال
-npx supabase functions deploy
-```
+| الاسم | القيمة | مطلوب لـ |
+|---|---|---|
+| `SUPABASE_ACCESS_TOKEN` | المفتاح من (أ) | **ضروري** لكل شيء |
+| `PUSH_WEBHOOK_SECRET` | أي كلمة عشوائية طويلة تخترعها (حروف وأرقام إنكليزية، ٣٠ حرفاً مثلاً) | الإشعارات |
+| `GEMINI_API_KEY` | من الخطوة ٤ | المساعد، تصوير الأسئلة، الاختبارات |
+| `FCM_SERVICE_ACCOUNT` | محتوى ملف JSON من Firebase (الخطوة ٩-٤) — افتحه بالمفكرة وانسخ كل النص | الإشعارات |
+| `R2_ACCOUNT_ID` `R2_ACCESS_KEY_ID` `R2_SECRET_ACCESS_KEY` `R2_BUCKET` | من الخطوة ٥ | الملازم والصور |
+
+تقدر تضيف الأسرار على مراحل: كل سر غير موجود يُتخطى بلا أخطاء.
+
+**ج) شغّل الرفع**
+المستودع ← **Actions ← Deploy Supabase ← Run workflow** (اختر الفرع `claude/repository-name-arabic-iegosv`) ← **Run workflow**.
+بعد دقيقتين تقريباً تظهر علامة ✅ خضراء. (يعمل تلقائياً أيضاً كلما تغيّر كود الدوال.)
+
 ✅ تحقق: في Supabase ← **Edge Functions** تظهر ٧ دوال: `files` `ai-chat` `ocr` `ingest` `quiz` `push` `youtube-meta`.
 
-> بديل للخطوة ١-٣ عبر الطرفية: `npx supabase db push` ثم شغّل `seed.sql` من SQL Editor.
-
-### Webhooks للإشعارات
-في Supabase ← **Database ← Webhooks ← Create a new hook** — أنشئ اثنين:
-| الاسم | الجدول | الحدث | الرابط | Header |
-|---|---|---|---|---|
-| push-notifications | `notifications` | Insert | `https://<ref>.supabase.co/functions/v1/push` | `x-webhook-secret`: نفس `PUSH_WEBHOOK_SECRET` |
-| push-messages | `messages` | Insert | نفس الرابط | نفس الـ header |
-
-النوع: **HTTP Request**، الطريقة **POST**.
+> ⚠️ **لا تنشئ Database Webhooks يدوياً** من لوحة Supabase: الربط صار تلقائياً (migration رقم ١١)، والاثنان معاً يكرران كل إشعار.
+> إذا كنت أنشأتها سابقاً: Supabase ← Database ← Webhooks ← احذف `push-notifications` و `push-messages`.
 
 ## ٧. لوحة التحكم على Netlify
 1. ادخل https://app.netlify.com ← **Add new site ← Import from Git** ← GitHub ← اختر `alkhamis-alilmi`.
@@ -189,19 +188,22 @@ npm run mobile:start
    ```
 5. بعد ~١٥ دقيقة يعطيك رابط تحميل **APK** — شاركه مع الطلاب (يحتاجون السماح بـ «تثبيت من مصادر غير معروفة»).
 
-## ٩. الإشعارات الفورية (Firebase) — اختياري في البداية
-التطبيق يعمل بدونها، لكن الأخبار والرسائل لن تصل كإشعار والتطبيق مغلق.
-1. https://console.firebase.google.com ← **Add project** (`saey`).
-2. **Add app ← Android**: Package name = `com.saey.app` ← حمّل `google-services.json`.
-3. ضع الملف في `apps/mobile/google-services.json`، وأضف في `apps/mobile/app.json` داخل `"android"`:
-   `"googleServicesFile": "./google-services.json"`
-4. Firebase ← **Project settings ← Service accounts ← Generate new private key** (ملف JSON).
-5. ```bash
-   cd apps/mobile
-   npx eas-cli credentials
-   ```
-   اختر Android ← preview ← **Google Service Account** ← **FCM V1** ← ارفع ملف JSON من الخطوة ٤.
-6. أعد بناء APK (خطوة ٨-٤).
+## ٩. الإشعارات الفورية (Firebase) — بلا حساب Expo
+التطبيق يتصل بـ Firebase مباشرة. بدون هذه الخطوة لا تصل الإشعارات والتطبيق مغلق
+(داخل التطبيق تظهر بطاقة الرسالة الجديدة دائماً).
+1. https://console.firebase.google.com ← **Create a project** ← الاسم `saey` ← (Google Analytics: غير ضروري) ← Create.
+2. في صفحة المشروع اضغط أيقونة **Android** (Add app):
+   - Android package name: `com.saey.app` (بالضبط)
+   - **Register app** ← حمّل الملف `google-services.json`.
+3. افتح `google-services.json` بالمفكرة، انسخ كل النص، وأضفه سراً في GitHub باسم **`GOOGLE_SERVICES_JSON`**
+   (نفس مكان أسرار الخطوة ٦-ب). بناء APK القادم سيضمّه تلقائياً.
+4. Firebase ← ⚙️ **Project settings ← Service accounts ← Generate new private key** ← يُحمّل ملف JSON ثانٍ.
+   افتحه بالمفكرة، انسخ كل النص، وأضفه سراً في GitHub باسم **`FCM_SERVICE_ACCOUNT`**.
+5. تأكد أن السر `PUSH_WEBHOOK_SECRET` موجود (الخطوة ٦-ب)، ثم شغّل **Actions ← Deploy Supabase ← Run workflow**.
+6. شغّل بناء APK جديد: **Actions ← Build APK ← Run workflow**، وثبّت النسخة الجديدة.
+7. في التطبيق: **الإعدادات ← الإشعارات** شغّلها (إن كانت مطفأة) واسمح بالإشعارات.
+
+✅ تحقق: أرسل رسالة من حساب آخر وهاتفك مقفل ← يصل إشعار «سعي».
 
 ## ١٠. إبقاء Supabase نشطاً
 المشروع المجاني يتوقف بعد ٧ أيام بلا نشاط (مثلاً في العطلة). يوجد ملف GitHub Action جاهز يزوره كل ٣ أيام:
@@ -227,4 +229,4 @@ npm run mobile:start
 | «إعداد غير مكتمل» | ملف `.env` ناقص أو لم تُعِد تشغيل التطبيق/البناء |
 | فشل رفع الملزمة في لوحة التحكم | إعداد CORS في R2 (خطوة ٥-٤) غير محفوظ |
 | «المساعد مشغول» كثيراً | انتهى الحد المجاني لـ Gemini اليوم — خفّض الحد اليومي من الإعدادات |
-| الإشعارات لا تصل | خطوة ٩ + الـ Webhooks في خطوة ٦ |
+| الإشعارات لا تصل | خطوة ٩ كاملة، ثم Actions ← Deploy Supabase يجب أن يكون ✅، ثم ثبّت APK بُني بعد إضافة GOOGLE_SERVICES_JSON |

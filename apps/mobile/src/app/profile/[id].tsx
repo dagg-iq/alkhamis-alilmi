@@ -52,8 +52,9 @@ export default function ProfileScreen() {
 
   const saveBio = async () => {
     setBusy(true);
-    await supabase.from('profiles').update({ bio: bio.trim() || null }).eq('id', me.id);
+    const { error } = await supabase.from('profiles').update({ bio: bio.trim() || null }).eq('id', me.id);
     setBusy(false);
+    if (error) return Alert.alert('تعذّر الحفظ', error.message);
     setEditing(false);
     q.reload();
   };
@@ -74,7 +75,7 @@ export default function ProfileScreen() {
         {isMe ? <T size={13} weight="bold" color={c.accent}>{busy ? 'جارٍ الرفع…' : 'اضغط على الصورة لتغييرها'}</T> : null}
         <NameLine name={p.full_name} verified={p.is_verified} size={24} />
         <Row gap={8}>
-          {p.role !== 'student' ? <Chip small label={ROLE_LABELS[p.role]} bg={c.accent} color="#FFFFFF" /> : null}
+          {p.role !== 'student' ? <Chip small label={ROLE_LABELS[p.role]} bg={c.accent} color={c.accentInk} /> : null}
           {p.sections ? <Row gap={6}><SectionMark name={p.sections.name} size={26} /><T size={13} weight="bold">شعبة {p.sections.name}</T></Row> : null}
         </Row>
       </View>

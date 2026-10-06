@@ -1,7 +1,8 @@
 import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { useEffect } from 'react';
 import { AppState, Platform } from 'react-native';
-import { EMPTY_SNAPSHOT, fetchSnapshot, writeSnapshot, type WidgetSnapshot } from './data';
+import { onGoalChange } from '@/lib/goal';
+import { EMPTY_SNAPSHOT, fetchSnapshot, readWidgetTheme, saveWidgetTheme, writeSnapshot, type WidgetSnapshot, type WidgetTheme } from './data';
 
 /** الويدجتات تعمل في ملف APK على أندرويد فقط (لا في Expo Go ولا الويب) */
 export const widgetsSupported =
@@ -58,7 +59,7 @@ export async function syncWidgets() {
 /** عند تسجيل الخروج: نمسح بيانات الطالب من الويدجتات */
 export async function clearWidgets() {
   if (!widgetsSupported) return;
-  const s = { ...EMPTY_SNAPSHOT, updatedAt: new Date().toISOString() };
+  const s = { ...EMPTY_SNAPSHOT, theme: await readWidgetTheme(), updatedAt: new Date().toISOString() };
   await writeSnapshot(s);
   await redrawWidgets(s);
 }
@@ -72,7 +73,9 @@ export function useWidgetSync(userId: string | null) {
       if (st === 'background') syncWidgets();
     });
     const every = setInterval(syncWidgets, 10 * 60 * 1000);
+    const offGoal = onGoalChange(() => { syncWidgets(); });
     return () => {
+      offGoal();
       sub.remove();
       clearInterval(every);
     };
@@ -90,4 +93,10 @@ export async function pinWidget(name: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+/** يغيّر مظهر الويدجتات (فاتح/غامق/حسب الهاتف) ويعيد رسمها فوراً */
+export async function setWidgetTheme(t: WidgetTheme) {
+  const s = await saveWidgetTheme(t);
+  await redrawWidgets(s);
 }

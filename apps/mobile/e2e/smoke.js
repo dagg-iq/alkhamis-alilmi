@@ -9,7 +9,7 @@ const jwt = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: UID, role: 'authe
 const session = { access_token: jwt, refresh_token: 'r', expires_in: 36000, expires_at: now + 36000, token_type: 'bearer',
   user: { id: UID, aud: 'authenticated', role: 'authenticated', email: 't@x.com', app_metadata: {}, user_metadata: {}, created_at: new Date().toISOString() } };
 const profile = { id: UID, full_name: 'علي حسين كاظم', avatar_url: null, section_id: 'sec1', role: 'admin', status: 'approved', is_verified: true, bio: 'هدفي الإعفاء', onboarded: true, created_at: new Date().toISOString(), last_seen_at: null, sections: { name: 'أ' } };
-const subjects = ['الفيزياء', 'الكيمياء', 'اللغة العربية'].map((n, i) => ({ id: `s${i}`, name: n, slug: `x${i}`, icon: null, sort: i }));
+const subjects = ['الفيزياء', 'الكيمياء', 'اللغة العربية', 'الرياضيات', 'الأحياء', 'اللغة الإنكليزية', 'التربية الإسلامية', 'الحاسوب'].map((n, i) => ({ id: `s${i}`, name: n, slug: `x${i}`, icon: null, sort: i }));
 const t = new Date(Date.now() + 3 * 86400000).toISOString();
 const data = {
   profiles: [profile],
@@ -20,7 +20,9 @@ const data = {
   lectures: [{ id: 'l1', chapter_id: 'c1', teacher_id: 't1', title: 'المحاضرة ١', youtube_id: 'dQw4w9WgXcQ', duration_sec: null, sort: 1, is_published: true, teachers: { name: 'أحمد' }, chapters: { number: 1, title: 'المتسعات', books: { subject_id: 's0' } } }],
   documents: [{ id: 'd1', subject_id: 's0', chapter_id: null, teacher_id: 't1', kind: 'malzama', title: 'ملزمة الفيزياء', file_key: 'materials/x.pdf', size_bytes: 1000000, pages: 40, sort: 1, is_published: true, ingested_pages: 0, ingest_status: 'none', ingest_error: null, subjects: { name: 'الفيزياء' } }],
   question_sets: [{ id: 'q1', subject_id: 's0', kind: 'expected', period: 'month1', section_id: null, title: 'أسئلة الشهر الأول', source: 'ملزمة', content_md: '# س١\nاحسب $E=mc^2$\n- فرع أ\n- فرع ب', pdf_key: null, scan_keys: [], status: 'published', created_by: UID, created_at: new Date().toISOString(), subjects: { name: 'الفيزياء' } }],
-  grades: [{ id: 'g1', user_id: UID, subject_id: 's0', period: 'month1', score: 93, note: null }, { id: 'g2', user_id: UID, subject_id: 's0', period: 'midyear', score: 88, note: null }, { id: 'g3', user_id: UID, subject_id: 's1', period: 'month1', score: 70, note: null }],
+  grades: [{ id: 'g1', user_id: UID, subject_id: 's0', period: 'month1', score: 93, note: null }, { id: 'g2', user_id: UID, subject_id: 's0', period: 'midyear', score: 88, note: null }, { id: 'g3', user_id: UID, subject_id: 's1', period: 'month1', score: 70, note: null },
+    { id: 'g4', user_id: UID, subject_id: 's3', period: 'month1', score: 98, note: null }, { id: 'g5', user_id: UID, subject_id: 's3', period: 'month2', score: 95, note: null },
+    { id: 'g6', user_id: UID, subject_id: 's4', period: 'month1', score: 85, note: null }, { id: 'g7', user_id: UID, subject_id: 's5', period: 'month1', score: 45, note: null }],
   tasks: [{ id: 'tk1', scope: 'personal', owner_id: UID, section_id: null, subject_id: 's0', type: 'exam', title: 'امتحان الفيزياء', notes: null, due_at: t, remind_at: null, created_at: t }, { id: 'tk2', scope: 'school', owner_id: 'x', section_id: null, subject_id: null, type: 'homework', title: 'واجب', notes: null, due_at: new Date().toISOString(), remind_at: null, created_at: t }],
   task_status: [], progress: [{ item_type: 'lecture', item_id: 'l1', state: 'watched' }],
   posts: [{ id: 'p1', author_id: UID, kind: 'holiday', title: 'عطلة غداً', body: 'غداً عطلة رسمية', cover_key: null, section_id: null, is_pinned: true, published_at: new Date().toISOString(), profiles: { full_name: 'الأدمن' } }],
@@ -42,8 +44,12 @@ const rpc = {
 
 (async () => {
   const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH });
-  const ctx = await browser.newContext({ viewport: { width: Number(process.env.W || 390), height: 800 } });
-  await ctx.addInitScript(([s]) => localStorage.setItem('sb-yjxhprmtyuqnbgraocar-auth-token', s), [JSON.stringify(session)]);
+  const ctx = await browser.newContext({ viewport: { width: Number(process.env.W || 390), height: Number(process.env.H || 800) } });
+  await ctx.addInitScript(([s, goal, theme]) => {
+    localStorage.setItem('sb-yjxhprmtyuqnbgraocar-auth-token', s);
+    if (goal) localStorage.setItem('saey.goal', goal);
+    if (theme) localStorage.setItem('saey.theme', theme);
+  }, [JSON.stringify(session), process.env.GOAL || 'general', process.env.THEME || '']);
   await ctx.route('**/*.supabase.co/**', async (route) => {
     const req = route.request();
     const url = new URL(req.url());
@@ -67,7 +73,7 @@ const rpc = {
     page.on('pageerror', (e) => errs.push('PAGEERROR ' + e.message));
     page.on('console', (m) => { if (m.type() === 'error' && !/WebSocket|realtime|Failed to load resource|youtube|net::/.test(m.text())) errs.push('CONSOLE ' + m.text().slice(0, 200)); });
     await page.goto((process.env.BASE || 'http://localhost:4175') + r, { waitUntil: 'networkidle' }).catch((e) => errs.push('NAV ' + e.message));
-    await page.waitForTimeout(3500); // بعد انتهاء المقدمة
+    await page.waitForTimeout(Number(process.env.WAIT || 4000)); // بعد انتهاء المقدمة
     const text = (await page.evaluate(() => document.body.innerText)).replace(/\s+/g, ' ').slice(0, 90);
     const name = r.replace(/[\/]/g, '_') || 'home';
     await page.screenshot({ path: `shots/${name}.png` });

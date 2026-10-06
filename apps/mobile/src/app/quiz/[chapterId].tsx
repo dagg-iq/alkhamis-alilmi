@@ -99,7 +99,7 @@ export default function Quiz() {
             <Pressable key={k} onPress={() => choose(k)} accessibilityRole="button"
               style={{ borderRadius: 18, borderWidth: 1.5, borderColor: col ? col.ink : c.line, backgroundColor: col ? col.bg : c.card, padding: 14, flexDirection: 'row', gap: 12, alignItems: 'center' }}>
               <View style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: col ? col.ink : c.soft, alignItems: 'center', justifyContent: 'center' }}>
-                <T weight="bold" size={14} color={col ? '#FFFFFF' : c.accent}>{['أ', 'ب', 'ج', 'د'][k]}</T>
+                <T weight="bold" size={14} color={col ? col.bg : c.accent}>{['أ', 'ب', 'ج', 'د'][k]}</T>
               </View>
               <View style={{ flex: 1 }}><RichText text={ch} size={15} /></View>
             </Pressable>

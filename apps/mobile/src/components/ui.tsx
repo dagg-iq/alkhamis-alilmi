@@ -6,13 +6,28 @@ import {
   ActivityIndicator, Pressable, RefreshControl, ScrollView, Text, TextInput, View,
   type PressableProps, type StyleProp, type TextInputProps, type TextStyle, type ViewStyle,
 } from 'react-native';
-import Animated, { Easing, ZoomIn, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, { Easing, FadeIn, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { fonts, useTheme } from '@/lib/theme';
 import { Icon, type IconName, VerifiedBadge } from './icon';
-import { KeyboardView, PressScale, Skeleton, Stagger, tap } from './motion';
+import { KeyboardView, PressScale, Skeleton, tap } from './motion';
 
 // ---------------------------------------------------------------- النص
+/**
+ * الحروف العربية في خطوط ثمانية تنزل تحت السطر أكثر مما يعلنه الخط (يعلن ٠٫٢٥ من الحجم):
+ * الياء الأخيرة كما في «سعي» تنزل ٠٫٥٥ في خط العناوين و٠٫٥ في خط النص (قيس بـ fontTools).
+ * أندرويد يقص كل ما يخرج عن صندوق النص، فنعطي النص مساحة سفلية إضافية (padding) ونسحب
+ * ما بعده بنفس المقدار (margin سالب): التخطيط لا يتغير، والنقاط تُرسم كاملة.
+ */
+export function lineHeightFor(size: number, kind: 'display' | 'serif' | 'sans' = 'sans') {
+  return Math.ceil(size * (kind === 'display' ? 1.5 : kind === 'serif' ? 1.9 : 1.6));
+}
+export function descentPad(size: number, kind: 'display' | 'serif' | 'sans' = 'sans') {
+  // المساحة المتوفرة تحت السطر = ٠٫٢٥ + (مسافة السطر − ١٫٢٥) ÷ ٢ ؛ المطلوب ٠٫٦
+  const room = 0.25 + ((kind === 'display' ? 1.5 : kind === 'serif' ? 1.9 : 1.6) - 1.25) / 2;
+  return Math.max(0, Math.ceil(size * (0.6 - room)));
+}
+
 type Weight = 'regular' | 'medium' | 'bold' | 'black';
 
 export function T({
@@ -33,6 +48,8 @@ export function T({
   selectable?: boolean;
 }) {
   const { c } = useTheme();
+  const kind = display ? 'display' : serif ? 'serif' : 'sans';
+  const pad = descentPad(size, kind);
   const family = display
     ? weight === 'bold' ? fonts.displayBold : fonts.display
     : serif
@@ -42,12 +59,16 @@ export function T({
     <Text
       numberOfLines={lines}
       selectable={selectable}
+      // تكبير خط الهاتف مسموح لكن بحد، حتى لا يخرج النص من الأزرار والبطاقات
+      maxFontSizeMultiplier={1.3}
       style={[
         {
           fontFamily: family,
           fontSize: size,
-          // خط العناوين له نقاط وذيول عميقة (ي، ج): مسافة سطر كافية حتى لا تُقص في أندرويد
-          lineHeight: Math.round(size * (display ? 1.5 : serif ? 1.9 : 1.6)),
+          // مساحة الياء والجيم تحت السطر (انظر descentPad)
+          lineHeight: lineHeightFor(size, kind),
+          paddingBottom: pad,
+          marginBottom: -pad,
           color: color ?? (dim ? c.ink2 : c.ink),
           writingDirection: 'rtl',
           ...(center ? { textAlign: 'center' as const } : null),
@@ -60,6 +81,9 @@ export function T({
 }
 
 // ---------------------------------------------------------------- الشاشة
+/** أقصى عرض للمحتوى (الأجهزة اللوحية) */
+export const MAX_WIDTH = 720;
+
 export function Screen({
   children, scroll = true, padded = true, onRefresh, refreshing, footer, style, edges = ['top'],
 }: {
@@ -78,7 +102,8 @@ export function Screen({
     paddingTop: edges.includes('top') ? insets.top + 8 : 0,
     paddingBottom: edges.includes('bottom') ? insets.bottom + 16 : 24,
   };
-  const inner = padded ? { paddingHorizontal: 20 } : null;
+  // الآيباد والأجهزة اللوحية: المحتوى في عمود مريح للقراءة بدل أن يمتد على كامل العرض
+  const inner = [padded ? { paddingHorizontal: 20 } : null, { width: '100%' as const, maxWidth: MAX_WIDTH, alignSelf: 'center' as const }];
   if (!scroll) {
     return (
       <KeyboardView style={[{ flex: 1, backgroundColor: c.bg }, pad, style]} bottomInset={insets.bottom}>
@@ -93,7 +118,7 @@ export function Screen({
         contentContainerStyle={[pad, inner, { gap: 16 }, style]}
         keyboardShouldPersistTaps="handled"
         refreshControl={onRefresh ? <RefreshCtl refreshing={!!refreshing} onRefresh={onRefresh} /> : undefined}>
-        <Stagger>{children}</Stagger>
+        {children}
       </ScrollView>
       {footer}
       {/* شريط خفيف تحت ساعة الهاتف حتى لا يتداخل المحتوى مع شريط الحالة عند التمرير */}
@@ -116,6 +141,18 @@ export function Header({ title, subtitle, right, back = true, big }: {
   back?: boolean;
   big?: boolean;
 }) {
+  // الصفحات الرئيسية (بلا رجوع): العنوان والأزرار في سطر واحد بدل زر وحيد فوق العنوان
+  if (!back && title) {
+    return (
+      <View style={{ gap: 2 }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', minHeight: 48, gap: 12 }}>
+          <T display size={big ? 42 : 30} style={{ flexShrink: 1 }} lines={1}>{title}</T>
+          {right ? <View style={{ flexDirection: 'row', gap: 8 }}>{right}</View> : null}
+        </View>
+        {subtitle ? <T dim size={14}>{subtitle}</T> : null}
+      </View>
+    );
+  }
   return (
     <View style={{ gap: 12 }}>
       {(back || right) && (
@@ -154,13 +191,13 @@ export function IconButton({ name, label, onPress, color, filled, size = 44, bad
         backgroundColor: filled ? c.accent : c.card,
         borderWidth: filled ? 0 : 1, borderColor: c.line,
       }}>
-      <Icon name={name} size={Math.round(size * 0.48)} color={filled ? '#FFFFFF' : color ?? c.ink} />
+      <Icon name={name} size={Math.round(size * 0.48)} color={filled ? c.accentInk : color ?? c.ink} />
       {badge ? (
         <View style={{
           position: 'absolute', top: -2, right: -2, minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 4,
           backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: c.bg,
         }}>
-          <T size={10} weight="bold" color="#FFFFFF" style={{ lineHeight: 13 }}>{badge > 99 ? '+٩٩' : arDigits(badge)}</T>
+          <T size={10} weight="bold" color={c.accentInk} style={{ lineHeight: 13 }}>{badge > 99 ? '+٩٩' : arDigits(badge)}</T>
         </View>
       ) : null}
     </PressScale>
@@ -354,6 +391,7 @@ export function Field({ label, hint, ...props }: TextInputProps & { label?: stri
       {label ? <T weight="bold" size={14}>{label}</T> : null}
       <TextInput
         placeholderTextColor={c.ink3}
+        maxFontSizeMultiplier={1.3}
         {...props}
         style={[{
           minHeight: 52,
@@ -384,7 +422,7 @@ export function Avatar({ name, url, size = 44, verified }: { name: string; url?:
         <Image source={{ uri: url }} style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: c.soft }} contentFit="cover" />
       ) : (
         <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center' }}>
-          <T weight="bold" size={size * 0.42} color="#FFFFFF" style={{ lineHeight: size * 0.6 }}>{initials(name)}</T>
+          <T weight="bold" size={Math.round(size * 0.4)} color="#FFFFFF">{initials(name)}</T>
         </View>
       )}
       {verified ? (
@@ -462,7 +500,7 @@ export function ErrorBox({ message, onRetry }: { message: string; onRetry?: () =
 export function Fab({ title, icon = 'plus', onPress }: { title: string; icon?: IconName; onPress: () => void } & Partial<PressableProps>) {
   const insets = useSafeAreaInsets();
   return (
-    <Animated.View entering={ZoomIn.springify().damping(14).delay(250)} style={{ position: 'absolute', left: 20, bottom: insets.bottom + 20 }}>
+    <Animated.View entering={FadeIn.duration(160)} style={{ position: 'absolute', left: 20, bottom: insets.bottom + 20 }}>
       <Button title={title} icon={icon} onPress={onPress} />
     </Animated.View>
   );

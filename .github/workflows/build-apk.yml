@@ -40,6 +40,17 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Firebase config (notifications)
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          if [ -n "$GOOGLE_SERVICES_JSON" ]; then
+            printf '%s' "$GOOGLE_SERVICES_JSON" > apps/mobile/google-services.json
+            node -e "JSON.parse(require('fs').readFileSync('apps/mobile/google-services.json','utf8')); console.log('✓ google-services.json')"
+          else
+            echo "::warning::السر GOOGLE_SERVICES_JSON غير موجود — النسخة ستُبنى بلا إشعارات فورية."
+          fi
+
       - name: Generate Android project
         working-directory: apps/mobile
         run: npx expo prebuild --platform android --no-install

@@ -1,8 +1,8 @@
 import * as Haptics from 'expo-haptics';
-import { Children, isValidElement, useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Platform, Pressable, View, type PressableProps, type StyleProp, type ViewStyle } from 'react-native';
 import Animated, {
-  Easing, FadeInDown, ReduceMotion, useAnimatedKeyboard, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withSpring, withTiming,
+  Easing, FadeIn, ReduceMotion, useAnimatedKeyboard, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withSpring, withTiming,
 } from 'react-native-reanimated';
 import { useTheme } from '@/lib/theme';
 
@@ -16,7 +16,8 @@ export function tap(kind: 'light' | 'medium' | 'select' | 'success' = 'light') {
   else Haptics.impactAsync(kind === 'medium' ? Haptics.ImpactFeedbackStyle.Medium : Haptics.ImpactFeedbackStyle.Light).catch(() => {});
 }
 
-const PRESS = { damping: 18, stiffness: 420, mass: 0.6 };
+// نابض قصير جداً: يستجيب فوراً ولا يتأرجح
+const PRESS = { damping: 26, stiffness: 900, mass: 0.4 };
 
 /** زر ينكمش بنعومة عند اللمس ويرتد بنابض */
 export function PressScale({
@@ -36,34 +37,31 @@ export function PressScale({
   );
 }
 
-/** دخول متتابع للعناصر: كل عنصر يصعد ويظهر بعد الذي قبله */
+/**
+ * ظهور خفيف لعنصر واحد (شاشة الترحيب وما يشبهها فقط).
+ * لا نحرّك محتوى الشاشات عند فتحها: حركة انتقال الشاشة نفسها تكفي، والحركتان معاً تبدوان بطيئتين.
+ */
 export function enter(i: number) {
-  return FadeInDown.delay(Math.min(i, 4) * 25)
-    .duration(220)
+  return FadeIn.delay(Math.min(i, 4) * 40)
+    .duration(180)
     .easing(Easing.out(Easing.quad))
-    .withInitialValues({ transform: [{ translateY: 6 }] })
     .reduceMotion(ReduceMotion.System);
 }
 
-export function Stagger({ children }: { children: ReactNode }) {
-  return (
-    <>
-      {Children.toArray(children).map((child, i) => (
-        <Animated.View key={isValidElement(child) && child.key != null ? child.key : i} entering={enter(i)}>
-          {child}
-        </Animated.View>
-      ))}
-    </>
-  );
-}
+/** ظهور سريع للمحتوى عندما يصل بعد التحميل */
+export const appear = FadeIn.duration(140).reduceMotion(ReduceMotion.System);
 
 /** رقم يعدّ تصاعدياً حتى قيمته (لمعدل الإعفاء وغيره) */
-export function useCountUp(target: number | null | undefined, duration = 600) {
+export function useCountUp(target: number | null | undefined, duration = 450) {
   const [v, setV] = useState(target ?? 0);
+  const shown = useRef<number | null>(null);
   useEffect(() => {
     if (target == null || !Number.isFinite(target)) return;
+    // يعدّ مرة واحدة فقط؛ عند العودة للشاشة أو تحديث البيانات يتغير الرقم مباشرة
+    const from = shown.current ?? 0;
+    shown.current = target;
+    if (from === target) { setV(target); return; }
     let raf = 0;
-    const from = 0;
     const t0 = Date.now();
     const step = () => {
       const p = Math.min(1, (Date.now() - t0) / duration);

@@ -1,16 +1,19 @@
 import Constants from 'expo-constants';
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { GOALS, type Goal } from '@saey/shared';
+import { useEffect, useState } from 'react';
 import { Alert, Switch, View } from 'react-native';
 import type { IconName } from '@/components/icon';
 import { Card, Divider, Header, ListItem, Row, Screen, Segmented, T } from '@/components/ui';
 import { useAuth, useMe } from '@/lib/auth';
-import { registerPush, unregisterPush } from '@/lib/push';
+import { pushRegistered, registerPush, unregisterPush } from '@/lib/push';
 import { useTheme, type ThemeMode } from '@/lib/theme';
-import { pinWidget, widgetsSupported } from '@/widgets/sync';
+import { setGoal, useGoal } from '@/lib/goal';
+import { readWidgetTheme, type WidgetTheme } from '@/widgets/data';
+import { pinWidget, setWidgetTheme, widgetsSupported } from '@/widgets/sync';
 
 const WIDGETS: { name: string; title: string; body: string; icon: IconName }[] = [
-  { name: 'Exemption', title: 'طريق الإعفاء', body: 'معدلك وكم بقي للإعفاء', icon: 'chart' },
+  { name: 'Exemption', title: 'هدفي', body: 'معدلك وكم تحتاج في كل امتحان', icon: 'target' },
   { name: 'NextExam', title: 'الامتحان القادم', body: 'عدّ تنازلي لأقرب امتحان', icon: 'calendar' },
   { name: 'Tasks', title: 'مهامي', body: 'الواجبات والتحضيرات القادمة', icon: 'check' },
   { name: 'Overview', title: 'لمحة سعي', body: 'المعدل والامتحان والرسائل في سطر', icon: 'home' },
@@ -28,14 +31,25 @@ export default function Settings() {
   const me = useMe();
   const { signOut } = useAuth();
   const [push, setPush] = useState(true);
+  const goal = useGoal();
+  const [wTheme, setWTheme] = useState<WidgetTheme>('system');
+  useEffect(() => {
+    readWidgetTheme().then(setWTheme);
+    pushRegistered(me.id).then(setPush).catch(() => {});
+  }, [me.id]);
 
   const togglePush = async (v: boolean) => {
     setPush(v);
     if (v) {
-      const ok = await registerPush(me.id);
-      if (!ok) {
+      const r = await registerPush(me.id);
+      if (r !== 'ok') {
         setPush(false);
-        Alert.alert('الإشعارات', 'اسمح لسعي بإرسال الإشعارات من إعدادات الهاتف.');
+        Alert.alert('الإشعارات', {
+          denied: 'اسمح لسعي بإرسال الإشعارات من إعدادات الهاتف ← التطبيقات ← سعي ← الإشعارات.',
+          'not-configured': 'الإشعارات الفورية لم تُفعّل في هذه النسخة بعد (تحتاج ربط Firebase من الأدمن). ستعمل تلقائياً في النسخة القادمة بعد ربطها.',
+          unsupported: 'الإشعارات تعمل في ملف APK على الهاتف فقط (ليس في Expo Go).',
+          error: 'تعذّر تسجيل الجهاز. تحقق من الإنترنت وحاول مرة أخرى.',
+        }[r]);
       }
     } else await unregisterPush(me.id);
   };
@@ -46,6 +60,11 @@ export default function Settings() {
       <View style={{ gap: 8 }}>
         <T weight="bold" size={14}>المظهر</T>
         <Segmented<ThemeMode> options={[{ key: 'light', label: 'فاتح' }, { key: 'dark', label: 'غامق' }, { key: 'system', label: 'تلقائي' }]} value={mode} onChange={setMode} />
+      </View>
+      <View style={{ gap: 8 }}>
+        <T weight="bold" size={14}>هدفي هذه السنة</T>
+        <Segmented<Goal> options={[...GOALS].reverse().map((g) => ({ key: g.key, label: g.short }))} value={goal ?? 'general'} onChange={setGoal} />
+        <T dim size={12}>صفحة الدرجات والويدجت يحسبان كم تحتاج حسب هدفك.</T>
       </View>
       <Card style={{ paddingVertical: 4 }}>
         <Row style={{ justifyContent: 'space-between', paddingVertical: 12 }}>
@@ -59,6 +78,8 @@ export default function Settings() {
       {widgetsSupported ? (
         <View style={{ gap: 8 }}>
           <T weight="bold" size={14}>ويدجتات الشاشة الرئيسية</T>
+          <Segmented<WidgetTheme> options={[{ key: 'light', label: 'فاتحة' }, { key: 'dark', label: 'داكنة' }, { key: 'system', label: 'حسب الهاتف' }]}
+            value={wTheme} onChange={(t) => { setWTheme(t); setWidgetTheme(t); }} />
           <Card style={{ paddingVertical: 2 }}>
             {WIDGETS.map((w, i) => (
               <View key={w.name}>

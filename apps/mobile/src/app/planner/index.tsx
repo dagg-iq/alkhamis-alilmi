@@ -4,7 +4,7 @@ import { useCallback, useState } from 'react';
 import { Alert, Pressable, View } from 'react-native';
 import { Icon } from '@/components/icon';
 import { Card, Empty, ErrorBox, Fab, Header, Loading, Row, Screen, Segmented, T } from '@/components/ui';
-import { useMe } from '@/lib/auth';
+import { useAuth, useMe } from '@/lib/auth';
 import { loadSubjects, shortSubject } from '@/lib/queries';
 import { must, supabase } from '@/lib/supabase';
 import { useTheme } from '@/lib/theme';
@@ -15,6 +15,7 @@ type View_ = 'upcoming' | 'all' | 'done';
 export default function Planner() {
   const { c } = useTheme();
   const me = useMe();
+  const { isStaff } = useAuth();
   const [view, setView] = useState<View_>('upcoming');
   const q = useLoad(async () => {
     const [tasks, status, subjects] = await Promise.all([
@@ -37,7 +38,11 @@ export default function Planner() {
 
   const remove = (t: Task) => Alert.alert('حذف المهمة', t.title, [
     { text: 'إلغاء', style: 'cancel' },
-    { text: 'حذف', style: 'destructive', onPress: async () => { await supabase.from('tasks').delete().eq('id', t.id); q.reload(); } },
+    { text: 'حذف', style: 'destructive', onPress: async () => {
+      const { error } = await supabase.from('tasks').delete().eq('id', t.id);
+      if (error) Alert.alert('تعذّر الحذف', error.message);
+      q.reload();
+    } },
   ]);
 
   const subjectName = (id: string | null) => shortSubject(q.data?.subjects.find((s) => s.id === id)?.name ?? '');
@@ -61,11 +66,11 @@ export default function Planner() {
         const late = due && due.getTime() < Date.now() && !done;
         const isExam = t.type === 'exam';
         return (
-          <Pressable key={t.id} onLongPress={t.owner_id === me.id || t.scope !== 'personal' ? () => remove(t) : undefined} delayLongPress={350}>
+          <Pressable key={t.id} onLongPress={t.owner_id === me.id || isStaff ? () => remove(t) : undefined} delayLongPress={350}>
           <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12, borderColor: isExam ? c.accent : c.line }}>
             <Pressable onPress={() => toggle(t)} hitSlop={10} accessibilityRole="checkbox" accessibilityState={{ checked: done }}
               style={{ width: 28, height: 28, borderRadius: 14, borderWidth: done ? 0 : 1.5, borderColor: c.ink3, backgroundColor: done ? c.accent : 'transparent', alignItems: 'center', justifyContent: 'center' }}>
-              {done ? <Icon name="check" size={16} color="#FFFFFF" strokeWidth={3} /> : null}
+              {done ? <Icon name="check" size={16} color={c.accentInk} strokeWidth={3} /> : null}
             </Pressable>
             <View style={{ flex: 1, gap: 2 }}>
               <T weight="bold" size={16} style={done ? { textDecorationLine: 'line-through', opacity: 0.5 } : undefined}>{t.title}</T>

@@ -1,19 +1,19 @@
-import { arDigits, formatTime, ROLE_LABELS, type Attachment, type Message, type Profile } from '@saey/shared';
+import { arDigits, countOf, formatTime, ROLE_LABELS, type Attachment, type Message, type Profile } from '@saey/shared';
 import * as Clipboard from 'expo-clipboard';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator, Alert, FlatList, Platform, Pressable, ScrollView, TextInput, View,
+  ActivityIndicator, Alert, FlatList, Platform, Pressable, ScrollView, TextInput, View, useWindowDimensions,
 } from 'react-native';
-import Animated, { FadeInDown, LinearTransition } from 'react-native-reanimated';
+import Animated, { FadeIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardView } from '@/components/motion';
 import { Icon } from '@/components/icon';
 import { ConversationMark } from '@/components/group-mark';
 import { Sheet, SheetItem } from '@/components/sheet';
-import { Avatar, Field, IconButton, NameLine, Row, T } from '@/components/ui';
+import { Avatar, Field, IconButton, NameLine, Row, T, MAX_WIDTH } from '@/components/ui';
 import { useAuth, useMe } from '@/lib/auth';
 import { ATTACHMENT_LABELS, REACTIONS, conversationTitle, openAttachment, type ConversationRow } from '@/lib/chat';
 import { compressImage, signedUrls, uploadFile } from '@/lib/files';
@@ -28,6 +28,7 @@ export default function ChatScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { c } = useTheme();
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
   const me = useMe();
   const { isStaff } = useAuth();
 
@@ -47,7 +48,12 @@ export default function ChatScreen() {
   const [attachOpen, setAttachOpen] = useState(false);
   const [curriculumOpen, setCurriculumOpen] = useState(false);
   const [sending, setSending] = useState(false);
+  const [pending, setPending] = useState<Set<string>>(() => new Set());
+  const pendingRef = useRef(pending);
+  pendingRef.current = pending;
   const inputRef = useRef<TextInput>(null);
+  // الرسالة المؤقتة والمحفوظة تحملان نفس المفتاح حتى لا تومض الفقاعة عند الاستبدال
+  const keyOf = useRef<Record<string, string>>({});
 
   const markRead = useCallback(() => {
     supabase.rpc('mark_read', { p_conversation: id }).then(() => {});
@@ -103,6 +109,8 @@ export default function ChatScreen() {
     const channel = supabase.channel(`conv:${id}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `conversation_id=eq.${id}` }, (p) => {
         const m = p.new as Message;
+        // رسالتي التي أرسلها الآن: يضيفها رد الخادم (حتى لا تتكرر مؤقتاً)
+        if (m.sender_id === me.id && pendingRef.current.size > 0) return;
         setMessages((prev) => (prev.some((x) => x.id === m.id) ? prev : [m, ...prev]));
         loadImages([m]);
         markRead();
@@ -159,34 +167,50 @@ export default function ChatScreen() {
   const send = async (attachment?: Attachment) => {
     const body = text.trim();
     if (!body && !attachment) return;
-    setSending(true);
-    try {
-      if (editing) {
-        const { error } = await supabase.from('messages').update({ body }).eq('id', editing.id);
-        if (error) throw new Error(error.message);
-        setEditing(null);
-      } else {
-        const mentionIds = mentions.filter((p) => body.includes(`@${p.full_name.split(' ').slice(0, 2).join('_')}`)).map((p) => p.id);
-        const { data, error } = await supabase.from('messages').insert({
-          conversation_id: id,
-          sender_id: me.id,
-          body: body || null,
-          attachment: attachment ?? null,
-          reply_to_id: replyTo?.id ?? null,
-          mentions: mentionIds,
-        }).select('*').single();
-        if (error) throw new Error(error.message);
-        setMessages((prev) => (prev.some((x) => x.id === data.id) ? prev : [data as Message, ...prev]));
-        if (attachment) loadImages([data as Message]);
-      }
-      setText('');
-      setMentions([]);
-      setReplyTo(null);
-    } catch (e) {
-      Alert.alert('لم تُرسل الرسالة', e instanceof Error ? e.message : '');
-    } finally {
+    if (editing) {
+      setSending(true);
+      const { error } = await supabase.from('messages').update({ body }).eq('id', editing.id);
       setSending(false);
+      if (error) return Alert.alert('لم تُعدّل الرسالة', error.message);
+      setMessages((prev) => prev.map((x) => (x.id === editing.id ? { ...x, body, edited_at: new Date().toISOString() } : x)));
+      setEditing(null);
+      setText('');
+      return;
     }
+    // الرسالة تظهر فوراً (قبل رد الخادم) ثم تُستبدل بالنسخة المحفوظة
+    const mentionIds = mentions.filter((p) => body.includes(`@${p.full_name.split(' ').slice(0, 2).join('_')}`)).map((p) => p.id);
+    const tempId = `tmp-${Date.now()}`;
+    const temp = {
+      id: tempId, conversation_id: id, sender_id: me.id, body: body || null, attachment: attachment ?? null,
+      reply_to_id: replyTo?.id ?? null, mentions: mentionIds, created_at: new Date().toISOString(), edited_at: null, deleted_at: null,
+    } as unknown as Message;
+    setMessages((prev) => [temp, ...prev]);
+    setPending((p) => new Set(p).add(tempId));
+    const savedText = text;
+    setText('');
+    setMentions([]);
+    setReplyTo(null);
+    const { data, error } = await supabase.from('messages').insert({
+      conversation_id: id,
+      sender_id: me.id,
+      body: body || null,
+      attachment: attachment ?? null,
+      reply_to_id: temp.reply_to_id,
+      mentions: mentionIds,
+    }).select('*').single();
+    setPending((p) => { const n = new Set(p); n.delete(tempId); return n; });
+    if (error || !data) {
+      setMessages((prev) => prev.filter((x) => x.id !== tempId));
+      setText((t) => t || savedText);
+      Alert.alert('لم تُرسل الرسالة', error?.message ?? 'تحقق من الإنترنت وحاول مرة أخرى');
+      return;
+    }
+    keyOf.current[data.id] = tempId;
+    setMessages((prev) => {
+      const rest = prev.filter((x) => x.id !== tempId);
+      return rest.some((x) => x.id === data.id) ? rest : [data as Message, ...rest];
+    });
+    if (attachment) loadImages([data as Message]);
   };
 
   const sendImage = async (fromCamera: boolean) => {
@@ -242,7 +266,7 @@ export default function ChatScreen() {
               : <ConversationMark type={conv?.type ?? 'group'} title={title} size={38} />}
             <View style={{ flex: 1 }}>
               <NameLine name={title} verified={conv?.type === 'direct' && !!conv.peer_verified} size={16} />
-              <T dim size={12}>{isGroup ? `${arDigits(Object.keys(members).length)} عضو` : 'محادثة خاصة'}</T>
+              <T dim size={12}>{isGroup ? countOf(Object.keys(members).length, 'عضو', 'عضوان', 'أعضاء', 'عضو واحد') : 'محادثة خاصة'}</T>
             </View>
           </Pressable>
         </Row>
@@ -252,8 +276,8 @@ export default function ChatScreen() {
         <FlatList
           inverted
           data={messages}
-          keyExtractor={(m) => m.id}
-          contentContainerStyle={{ padding: 12, gap: 4 }}
+          keyExtractor={(m) => keyOf.current[m.id] ?? m.id}
+          contentContainerStyle={{ padding: 12, gap: 4, width: '100%', maxWidth: MAX_WIDTH, alignSelf: 'center' }}
           onEndReached={loadOlder}
           onEndReachedThreshold={0.3}
           renderItem={({ item, index }) => {
@@ -277,7 +301,8 @@ export default function ChatScreen() {
                   imageUrl={item.attachment?.type === 'image' ? images[item.attachment.key] : undefined}
                   reactions={reactions.filter((r) => r.message_id === item.id)}
                   myId={me.id}
-                  onLongPress={() => !item.deleted_at && setActionFor(item)}
+                  pending={pending.has(item.id)}
+                  onLongPress={() => !item.deleted_at && !pending.has(item.id) && setActionFor(item)}
                   onReact={(e) => react(item, e)}
                 />
               </View>
@@ -314,7 +339,7 @@ export default function ChatScreen() {
 
       {/* مربع الكتابة */}
       {canPost ? (
-        <Row gap={8} style={{ backgroundColor: c.card, paddingHorizontal: 12, paddingTop: 10, paddingBottom: insets.bottom + 10, borderTopWidth: replyTo || editing ? 0 : 1, borderTopColor: c.line, alignItems: 'flex-end' }}>
+        <Row gap={8} style={{ backgroundColor: c.card, paddingTop: 10, paddingBottom: insets.bottom + 10, borderTopWidth: replyTo || editing ? 0 : 1, borderTopColor: c.line, alignItems: 'flex-end', paddingHorizontal: Math.max(12, (width - MAX_WIDTH) / 2) }}>
           {!editing ? <IconButton name="paperclip" label="إرفاق" size={44} onPress={() => setAttachOpen(true)} /> : null}
           <TextInput
             ref={inputRef}
@@ -330,7 +355,7 @@ export default function ChatScreen() {
           />
           <Pressable onPress={() => send()} disabled={sending || !text.trim()} accessibilityLabel="إرسال"
             style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: text.trim() ? c.accent : c.line, alignItems: 'center', justifyContent: 'center' }}>
-            {sending ? <ActivityIndicator color="#FFFFFF" /> : <Icon name={editing ? 'check' : 'send'} size={20} color="#FFFFFF" strokeWidth={2} />}
+            {sending ? <ActivityIndicator color={c.accentInk} /> : <Icon name={editing ? 'check' : 'send'} size={20} color={text.trim() ? c.accentInk : c.ink3} strokeWidth={2} />}
           </Pressable>
         </Row>
       ) : (
@@ -351,6 +376,7 @@ export default function ChatScreen() {
               ))}
             </Row>
             <SheetItem icon="reply" label="رد" onPress={() => { setReplyTo(actionFor); setActionFor(null); inputRef.current?.focus(); }} />
+ {actionFor.body ? <SheetItem icon="sparkles" label="اسأل مساعد سعي عنها" onPress={() => { const b = actionFor.body ?? ''; setActionFor(null); router.push({ pathname: '/ai', params: { prompt: b } }); }} /> : null}
             {actionFor.body ? <SheetItem icon="copy" label="نسخ النص" onPress={() => { Clipboard.setStringAsync(actionFor.body ?? ''); setActionFor(null); }} /> : null}
             {actionFor.sender_id === me.id && actionFor.body ? (
               <SheetItem icon="edit" label="تعديل" onPress={() => { setEditing(actionFor); setText(actionFor.body ?? ''); setActionFor(null); inputRef.current?.focus(); }} />
@@ -365,6 +391,10 @@ export default function ChatScreen() {
         <SheetItem icon="camera" label="الكاميرا" onPress={() => sendImage(true)} />
         <SheetItem icon="image" label="صورة من المعرض" onPress={() => sendImage(false)} />
         <SheetItem icon="book" label="من المنهج (محاضرة، ملزمة، أسئلة)" onPress={() => { setAttachOpen(false); setCurriculumOpen(true); }} />
+        <SheetItem icon="sparkles" label={text.trim() ? 'اسأل مساعد سعي عمّا كتبته' : 'اسأل مساعد سعي'} onPress={() => {
+          setAttachOpen(false);
+          router.push({ pathname: '/ai', params: text.trim() ? { prompt: text.trim() } : {} });
+        }} />
       </Sheet>
       <MembersSheet visible={membersOpen} onClose={() => setMembersOpen(false)} members={Object.values(members)}
         title={title} type={conv?.type === 'direct' ? 'group' : conv?.type ?? 'group'} />
@@ -392,7 +422,7 @@ function MembersSheet({ visible, onClose, members, title, type }: {
       <View style={{ alignItems: 'center', gap: 8, paddingBottom: 8 }}>
         <ConversationMark type={type} title={title} size={72} />
         <T display size={24} center>{title}</T>
-        <T dim size={13}>{arDigits(members.length)} عضو</T>
+        <T dim size={13}>{countOf(members.length, 'عضو', 'عضوان', 'أعضاء', 'عضو واحد')}</T>
       </View>
       <ScrollView style={{ maxHeight: 420 }}>
         {groups.map((g) => (
@@ -415,9 +445,9 @@ function MembersSheet({ visible, onClose, members, title, type }: {
   );
 }
 
-function Bubble({ m, mine, sender, showName, reply, replySender, imageUrl, reactions, myId, onLongPress, onReact }: {
+function Bubble({ m, mine, sender, showName, reply, replySender, imageUrl, reactions, myId, pending, onLongPress, onReact }: {
   m: Message; mine: boolean; sender?: Member; showName: boolean; reply?: Message; replySender?: string;
-  imageUrl?: string; reactions: Reaction[]; myId: string; onLongPress: () => void; onReact: (e: string) => void;
+  imageUrl?: string; reactions: Reaction[]; myId: string; pending?: boolean; onLongPress: () => void; onReact: (e: string) => void;
 }) {
   const { c } = useTheme();
   const bg = mine ? c.bubbleMine : c.bubbleOther;
@@ -430,8 +460,7 @@ function Bubble({ m, mine, sender, showName, reply, replySender, imageUrl, react
 
   return (
     <Animated.View
-      entering={fresh ? FadeInDown.springify().damping(16).stiffness(180).withInitialValues({ transform: [{ translateY: 24 }] }) : undefined}
-      layout={LinearTransition.duration(200)}
+      entering={fresh ? FadeIn.duration(120) : undefined}
       style={{ alignSelf: mine ? 'flex-end' : 'flex-start', maxWidth: '82%', marginTop: showName ? 8 : 0 }}>
       {showName && sender ? (
         <View style={{ marginBottom: 2, paddingHorizontal: 6 }}>
@@ -467,8 +496,8 @@ function Bubble({ m, mine, sender, showName, reply, replySender, imageUrl, react
             {m.body ? <T size={15} color={fg} selectable>{renderMentions(m.body, mine ? '#FFFFFF' : c.accent)}</T> : null}
           </>
         )}
-        <T size={10} color={sub} style={{ alignSelf: 'flex-end', lineHeight: 14 }}>
-          {m.edited_at && !m.deleted_at ? 'معدّلة · ' : ''}{formatTime(new Date(m.created_at))}
+        <T size={10} color={sub} style={{ alignSelf: 'flex-end', lineHeight: 17 }}>
+          {m.edited_at && !m.deleted_at ? 'معدّلة · ' : ''}{formatTime(new Date(m.created_at))}{mine ? (pending ? ' · يُرسل' : '') : ''}
         </T>
       </Pressable>
       {grouped.length ? (

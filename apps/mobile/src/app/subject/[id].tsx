@@ -1,7 +1,8 @@
 import {
   arDigits, DOCUMENT_KIND_LABELS, PERIOD_LABELS, PERIODS,
-  type Book, type Chapter, type DocumentRow, type Lecture, type QuestionSet, type Subject, type Teacher,
+  type Book, type Chapter, type DocumentRow, type Lecture, type QuestionSet, type Subject, type Teacher, countOf,
 } from '@saey/shared';
+import { Image } from 'expo-image';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import { Alert, Pressable, View } from 'react-native';
@@ -107,7 +108,7 @@ export default function SubjectScreen() {
       <Header
         title={d.subject.name}
         big
-        subtitle={`${arDigits(d.chapters.length)} فصول · ${arDigits(totalLectures)} محاضرة · ${arDigits(d.docs.length)} ملزمة`}
+        subtitle={`${countOf(d.chapters.length, 'فصل', 'فصلان', 'فصول', 'فصل واحد')} · ${countOf(totalLectures, 'محاضرة', 'محاضرتان', 'محاضرات', 'محاضرة واحدة')} · ${countOf(d.docs.length, 'ملزمة', 'ملزمتان', 'ملازم', 'ملزمة واحدة')}`}
         right={<IconButton name="sparkle" label="اسأل المساعد" onPress={() => router.push({ pathname: '/ai', params: { subjectId: d.subject.id } })} />}
       />
       <ChipRow options={TABS} value={tab} onChange={setTab} />
@@ -128,7 +129,7 @@ export default function SubjectScreen() {
                   <Row>
                     <View style={{ flex: 1 }}>
                       <T weight="bold" size={17}>الفصل {arDigits(ch.number)}{ch.title ? ` — ${ch.title}` : ''}</T>
-                      <T dim size={13}>{arDigits(lecs.length)} محاضرات · شاهدت {arDigits(seen)}{st ? ` · ${st === 'reviewed' ? 'راجعته' : 'درسته'}` : ''}</T>
+                      <T dim size={13}>{countOf(lecs.length, 'محاضرة', 'محاضرتان', 'محاضرات', 'محاضرة واحدة')} · شاهدت {arDigits(seen)}{st ? ` · ${st === 'reviewed' ? 'راجعته' : 'درسته'}` : ''}</T>
                     </View>
                     <Icon name={isOpen ? 'up' : 'down'} size={20} color={c.ink} />
                   </Row>
@@ -138,8 +139,14 @@ export default function SubjectScreen() {
                   <View style={{ gap: 12 }}>
                     {lecs.map((l, i) => (
                       <Pressable key={l.id} onPress={() => router.push(`/lecture/${l.id}`)} style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                        <View style={{ width: 88, height: 52, borderRadius: 12, backgroundColor: c.heroBg, alignItems: 'center', justifyContent: 'center' }}>
-                          <Icon name="play" size={18} color="#FFFFFF" />
+                        <View style={{ width: 88, height: 52, borderRadius: 12, backgroundColor: c.heroBg, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                          {l.youtube_id ? (
+                            <Image source={{ uri: `https://i.ytimg.com/vi/${l.youtube_id}/mqdefault.jpg` }} contentFit="cover" transition={120}
+                              style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} />
+                          ) : null}
+                          <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center' }}>
+                            <Icon name="play" size={14} color="#FFFFFF" />
+                          </View>
                         </View>
                         <View style={{ flex: 1 }}>
                           <T weight="bold" lines={2}>{l.title || `المحاضرة ${arDigits(i + 1)}`}</T>
@@ -147,7 +154,7 @@ export default function SubjectScreen() {
                         </View>
                         {watched.has(l.id) ? (
                           <View style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center' }}>
-                            <Icon name="check" size={14} color="#FFFFFF" strokeWidth={3} />
+                            <Icon name="check" size={14} color={c.accentInk} strokeWidth={3} />
                           </View>
                         ) : <View style={{ width: 26, height: 26, borderRadius: 13, borderWidth: 1.5, borderColor: c.ink3 }} />}
                       </Pressable>
@@ -226,7 +233,7 @@ function SmallAction({ label, onPress, active, icon }: { label: string; onPress:
       style={{ height: 36, paddingHorizontal: 14, borderRadius: 18, flexDirection: 'row', alignItems: 'center', gap: 6,
         backgroundColor: active ? c.accent : c.soft }}>
       {icon ? <Icon name="quiz" size={16} color={c.accent} /> : null}
-      <T size={13} weight="bold" color={active ? '#FFFFFF' : c.accent}>{label}</T>
+      <T size={13} weight="bold" color={active ? c.accentInk : c.accent}>{label}</T>
     </Pressable>
   );
 }

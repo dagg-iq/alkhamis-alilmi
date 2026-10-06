@@ -44,6 +44,11 @@ const PATHS: Record<string, string[]> = {
   refresh: ['M20 11a8 8 0 1 0-2.3 5.7', 'M20 5v6h-6'],
   at: ['M16 12v1.5a2.5 2.5 0 0 0 5 0V12a9 9 0 1 0-4 7.5'],
   more: [],
+  target: [],
+  info: ['M12 11v5.5', 'M12 7.6v.4'],
+  minus: ['M5 12h14'],
+  list: ['M9 6h11', 'M9 12h11', 'M9 18h11'],
+  sparkles: ['M10 4l1.6 4.4L16 10l-4.4 1.6L10 16l-1.6-4.4L4 10l4.4-1.6z', 'M18 14l.8 2.2L21 17l-2.2.8L18 20l-.8-2.2L15 17l2.2-.8z'],
 };
 
 const CIRCLES: Record<string, [number, number, number][]> = {
@@ -58,6 +63,9 @@ const CIRCLES: Record<string, [number, number, number][]> = {
   sun: [[12, 12, 4]],
   at: [[12, 12, 4]],
   more: [[6, 12, 1.5], [12, 12, 1.5], [18, 12, 1.5]],
+  target: [[12, 12, 9], [12, 12, 5], [12, 12, 1.2]],
+  info: [[12, 12, 9.5]],
+  list: [[4.5, 6, 1], [4.5, 12, 1], [4.5, 18, 1]],
 };
 
 export type IconName = keyof typeof PATHS;

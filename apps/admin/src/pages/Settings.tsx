@@ -27,6 +27,12 @@ export default function Settings() {
   }, [q.data]);
 
   const save = () => run(async () => {
+    // حماية من أرقام خاطئة تخرب حسابات كل الطلاب
+    const vals = [grading.individualExempt, grading.generalAvg, grading.generalMin, grading.pass];
+    if (vals.some((v) => !Number.isFinite(v) || v <= 0 || v > 100)) throw new Error('كل أرقام الإعفاء والنجاح يجب أن تكون بين ١ و١٠٠.');
+    if (grading.generalMin > grading.generalAvg) throw new Error('حد أقل مادة لا يمكن أن يكون أعلى من معدل الإعفاء العام.');
+    if (grading.pass >= grading.generalMin) throw new Error('درجة النجاح يجب أن تكون أقل من حد الإعفاء العام.');
+    if (!Number.isFinite(ai.daily_limit) || ai.daily_limit < 0) throw new Error('عدد الأسئلة اليومية غير صحيح.');
     const rows = [
       { key: 'grading', value: { individual_exempt: grading.individualExempt, general_avg: grading.generalAvg, general_min: grading.generalMin, pass: grading.pass, round: grading.round } },
       { key: 'ai', value: ai },

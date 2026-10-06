@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
-  DEFAULT_RULES, annualEffort, effortStatus, generalExemption, isIndividuallyExempt, neededFor, parseRules,
-  semester1, subjectVerdict,
+  DEFAULT_RULES, annualEffort, effortStatus, finalExamNeeded, generalExemption, generalPlan, goalTarget,
+  isIndividuallyExempt, neededFor, parseRules, projectedEffort, semester1, subjectNeed, subjectVerdict,
 } from './grading';
+import { analyzeGrades, countOf } from './plan';
 import { arDigits, formatScore, isTripleName, parseNumber, relativeDays, youtubeId } from './format';
 
 const noRound = { ...DEFAULT_RULES, round: 'none' as const };
@@ -128,5 +129,100 @@ describe('التنسيق', () => {
     const now = new Date(2026, 9, 5);
     expect(relativeDays(new Date(2026, 9, 9), now)).toBe('بعد ٤ أيام');
     expect(relativeDays(new Date(2026, 9, 6), now)).toBe('غداً');
+  });
+});
+
+describe('الهدف والخطة', () => {
+  it('هدف كل خيار', () => {
+    expect(goalTarget('pass')).toBe(50);
+    expect(goalTarget('individual')).toBe(90);
+    expect(goalTarget('general')).toBe(75);
+  });
+
+  it('ماذا لو: نفس الدرجة في الباقي', () => {
+    // ف١ ٩١٫٥ (×⅓) + نصف ٩٥ (×⅓) + ٨٠ في الشهرين الباقيين (×⅓)
+    expect(projectedEffort({ month1: 93, month2: 90, midyear: 95 }, 80)).toBeCloseTo((91.5 + 95 + 80) / 3);
+    expect(projectedEffort({}, 70)).toBeCloseTo(70);
+  });
+
+  it('الإعفاء العام: المادة بلا درجات تدخل في المعدل', () => {
+    const plan = generalPlan({ a: { month1: 100, month2: 100, midyear: 100 }, b: {} }, noRound);
+    // a: معروف ٦٦٫٦٧ ووزن متبقٍ ⅓ ، b: وزن متبقٍ ١ ← (١٧٠ − ٦٦٫٦٧) ÷ ١٫٣٣ = ٧٧٫٥
+    expect(plan.perExam).toBe(77.5);
+    expect(plan.state).toBe('possible');
+    // b تحتاج على الأقل حد أقل مادة (٧٥) والمعدل يطلب ٧٧٫٥
+    expect(plan.bySubject.b.perExam).toBe(77.5);
+  });
+
+  it('الإعفاء العام: مادة ضعيفة تمنعه حتى لو المعدل عالٍ', () => {
+    const plan = generalPlan({
+      a: { month1: 100, month2: 100, midyear: 100, month3: 100, month4: 100 },
+      b: { month1: 40, month2: 40, midyear: 40, month3: 40 },
+    }, noRound);
+    expect(plan.blockers).toEqual(['b']);
+    expect(plan.state).toBe('impossible');
+  });
+
+  it('الإعفاء العام: محقق عند اكتمال كل شيء', () => {
+    const full = { month1: 90, month2: 90, midyear: 90, month3: 90, month4: 90 };
+    const plan = generalPlan({ a: full, b: full });
+    expect(plan.state).toBe('achieved');
+    expect(plan.perExam).toBeNull();
+  });
+
+  it('الإعفاء العام مع جبر الكسور', () => {
+    const full = { month1: 84.5, month2: 84.5, midyear: 84.5, month3: 84.5, month4: 84.5 };
+    expect(generalPlan({ a: full }).state).toBe('achieved');
+    expect(generalPlan({ a: full }, noRound).state).toBe('missed');
+  });
+
+  it('جبر ٨٤٫٥ إلى ٨٥ رغم أخطاء الكسور العشرية', () => {
+    const s = { month1: 84.5, month2: 84.5, midyear: 84.5, month3: 84.5, month4: 84.5 };
+    expect(generalExemption({ a: s }).meetsAverage).toBe(true);
+    expect(isIndividuallyExempt(89.5)).toBe(true);
+  });
+
+  it('خطة المادة حسب الهدف', () => {
+    expect(subjectNeed({}, 'pass', noRound).perExam).toBe(50);
+    expect(subjectNeed({}, 'individual', noRound).perExam).toBe(90);
+  });
+
+  it('النهائي يغلق الفصل الثاني بشهر واحد', () => {
+    const st = effortStatus({ month1: 90, month2: 90, midyear: 90, month3: 60, final: 70 });
+    expect(st.remaining).toEqual([]);
+    expect(st.current).toBeCloseTo(80);
+  });
+
+  it('المطلوب في النهائي للنجاح (تقريبي)', () => {
+    expect(finalExamNeeded(60, noRound)).toBe(40);
+    expect(finalExamNeeded(60)).toBe(39);
+    expect(finalExamNeeded(100, noRound)).toBe(0);
+  });
+});
+
+describe('التحليل حسب الهدف', () => {
+  const subs = [{ id: 'a', name: 'الفيزياء' }, { id: 'b', name: 'الكيمياء' }];
+  it('بلا درجات', () => {
+    expect(analyzeGrades(subs, {}, 'general').state).toBe('empty');
+  });
+  it('النجاح: مادة على الطريق وأخرى تحتاج تحسين', () => {
+    const s = analyzeGrades(subs, { a: { month1: 80 }, b: { month1: 40 } }, 'pass', noRound);
+    expect(s.rows[0].tone).toBe('ontrack');
+    expect(s.rows[1].tone).toBe('improve');
+    expect(s.focus?.id).toBe('b');
+  });
+  it('الإعفاء من المواد: يعد الممكن', () => {
+    const s = analyzeGrades(subs, { a: { month1: 95, month2: 95, midyear: 95 }, b: { month1: 30, month2: 30, midyear: 30 } }, 'individual', noRound);
+    expect(s.headline).toBe('تستطيع الإعفاء من مادة واحدة');
+  });
+  it('الإعفاء العام ممكن', () => {
+    const s = analyzeGrades(subs, { a: { month1: 90 }, b: { month1: 88 } }, 'general');
+    expect(s.state).toBe('possible');
+    expect(s.perExam).not.toBeNull();
+  });
+  it('العدد بالعربية', () => {
+    expect(countOf(2, 'مادة', 'مادتان', 'مواد')).toBe('مادتان');
+    expect(countOf(3, 'مادة', 'مادتان', 'مواد')).toBe('٣ مواد');
+    expect(countOf(11, 'مادة', 'مادتان', 'مواد')).toBe('١١ مادة');
   });
 });

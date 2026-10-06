@@ -1,22 +1,26 @@
-import {
-  arDigits, effortStatus, formatScore, generalExemption, neededFor, subjectVerdict, type SubjectVerdict,
-} from '@saey/shared';
+import { GOAL_TITLES, TONE_LABELS, analyzeGrades, remainingExams, arDigits, formatScore, type GradeSummary } from '@saey/shared';
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { Pressable, View } from 'react-native';
-import { LogoMark } from '@/components/icon';
-import { Card, Empty, ErrorBox, Fab, Header, Loading, Row, Screen, T } from '@/components/ui';
+import { ExamDots, GoalPicker, HowItWorks, ToneChip, useToneColors } from '@/components/grades';
+import { Icon, LogoMark } from '@/components/icon';
 import { CountUp } from '@/components/motion';
+import { Button, Card, ErrorBox, Header, IconButton, Loading, ProgressBar, Row, Screen, SectionTitle, T } from '@/components/ui';
 import { useMe } from '@/lib/auth';
+import { setGoal, useGoal } from '@/lib/goal';
 import { loadMyGrades, loadSubjects, shortSubject } from '@/lib/queries';
 import { useGradingRules } from '@/lib/settings';
 import { useTheme } from '@/lib/theme';
 import { useLoad } from '@/lib/use-load';
 
 export default function Grades() {
-  const { c, verdict } = useTheme();
+  const { c } = useTheme();
   const me = useMe();
   const rules = useGradingRules();
+  const goal = useGoal();
+  const [picking, setPicking] = useState(false);
+  const [help, setHelp] = useState(false);
+  const toneColor = useToneColors();
   const q = useLoad(async () => {
     const [subjects, grades] = await Promise.all([loadSubjects(), loadMyGrades(me.id)]);
     return { subjects, grades };
@@ -26,99 +30,131 @@ export default function Grades() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []));
 
-  const footer = <Fab title="أضف درجة" onPress={() => router.push('/grades/edit')} />;
-  if (q.loading) return <Screen><Header back={false} title="سجل الدرجات" /><Loading /></Screen>;
-  if (q.error || !q.data) return <Screen><Header back={false} title="سجل الدرجات" /><ErrorBox message={q.error ?? ''} onRetry={q.reload} /></Screen>;
+  const header = (
+    <Header back={false} title="الدرجات" right={goal ? (
+      <>
+        <IconButton name="info" label="كيف يحسب سعي؟" onPress={() => setHelp(true)} />
+        <IconButton name="target" label="تغيير الهدف" onPress={() => setPicking((v) => !v)} />
+      </>
+    ) : undefined} />
+  );
+
+  if (goal === undefined || q.loading) return <Screen>{header}<Loading /></Screen>;
+  if (q.error || !q.data) return <Screen>{header}<ErrorBox message={q.error ?? ''} onRetry={q.reload} /></Screen>;
+
+  // أول مرة: اختيار الهدف قبل أي شيء
+  if (!goal || picking) {
+    return (
+      <Screen>
+        {header}
+        <View style={{ gap: 4 }}>
+          <T display size={26}>ما هدفك هذه السنة؟</T>
+          <T dim size={14}>سعي يبني حساباته ونصائحه على هدفك. تقدر تغيّره في أي وقت.</T>
+        </View>
+        <GoalPicker value={goal} rules={rules} onPick={(g) => { setGoal(g); setPicking(false); }} />
+        {goal ? <Button title="إلغاء" variant="ghost" onPress={() => setPicking(false)} /> : null}
+      </Screen>
+    );
+  }
 
   const { subjects, grades } = q.data;
-  const hasAny = Object.keys(grades).length > 0;
-  const general = generalExemption(Object.fromEntries(subjects.map((s) => [s.id, grades[s.id] ?? {}])), rules);
-
-  const rows = subjects.map((s) => {
-    const g = grades[s.id] ?? {};
-    const st = effortStatus(g);
-    const need = neededFor(g, rules.individualExempt, rules);
-    return { s, st, need, v: subjectVerdict(g, rules) };
-  });
-  const possible = rows.filter((r) => r.need.state === 'possible' || r.need.state === 'achieved').length;
-  // أقرب مادة للإعفاء الفردي (أقل درجة مطلوبة)
-  const closest = rows
-    .filter((r) => r.need.state === 'possible' && r.st.current !== null)
-    .sort((a, b) => (a.need.perExam ?? 999) - (b.need.perExam ?? 999))[0];
-  const hard = rows.filter((r) => r.need.state === 'impossible').map((r) => shortSubject(r.s.name));
-
-  const needLabel = (r: (typeof rows)[number]) => {
-    if (r.v === 'empty') return '—';
-    if (r.need.state === 'achieved') return 'معفى';
-    if (r.need.state === 'missed') return 'فات';
-    if (r.need.state === 'impossible') return 'غير ممكن';
-    return formatScore(r.need.perExam);
-  };
-  const chipColor = (v: SubjectVerdict, state: string) =>
-    state === 'impossible' || state === 'missed' ? verdict.risk : verdict[v];
+  const sum = analyzeGrades(subjects, grades, goal, rules, shortSubject);
+  const target = goal === 'general' ? rules.generalAvg : goal === 'individual' ? rules.individualExempt : rules.pass;
 
   return (
-    <Screen onRefresh={q.refresh} refreshing={q.refreshing} footer={footer}>
-      <Header back={false} title="سجل الدرجات" />
-      {!hasAny ? (
-        <Empty icon="chart" title="ابدأ بتسجيل درجاتك" body="أدخل درجة كل امتحان، وسعي يحسب سعيك السنوي والإعفاء وكم تحتاج في الامتحانات القادمة." />
-      ) : (
-        <>
-          <Row gap={10} style={{ alignItems: 'stretch' }}>
-            <Card tone="hero" style={{ flex: 1, gap: 2 }}>
-              <T size={13} color={c.heroInk2}>المعدل الحالي</T>
-              <CountUp value={general.average}>{(v) => <T display size={34} color={c.heroInk}>{formatScore(v)}</T>}</CountUp>
-              <T size={12} color={c.heroInk2}>
-                إعفاء عام: {general.exempt ? (general.final ? 'متحقق' : 'على الطريق') : general.meetsAverage ? 'مادة تحت ' + arDigits(rules.generalMin) : 'تحت ' + arDigits(rules.generalAvg)}
-              </T>
-            </Card>
-            <Card style={{ flex: 1, gap: 2 }}>
-              <T dim size={13}>إعفاء فردي ممكن</T>
-              <T display size={34}>
-                {arDigits(possible)}<T dim size={18}> من {arDigits(subjects.length)}</T>
-              </T>
-              <T dim size={12} lines={1}>{hard.length ? `${hard.slice(0, 2).join(' و')} صعبة` : 'كلها ممكنة'}</T>
-            </Card>
-          </Row>
+    <Screen onRefresh={q.refresh} refreshing={q.refreshing}>
+      {header}
 
-          {closest ? (
-            <Card tone="soft" style={{ flexDirection: 'row', gap: 10, alignItems: 'flex-start' }}>
-              <LogoMark size={20} ink={c.softInk} dot={c.accent} />
-              <T size={14} color={c.softInk} style={{ flex: 1 }}>
-                لتُعفى من <T size={14} weight="bold" color={c.softInk}>{shortSubject(closest.s.name)}</T> يكفيك{' '}
-                <T size={14} weight="bold" color={c.softInk}>{formatScore(closest.need.perExam)}</T> في {closest.need.remaining.length > 1 ? `كل امتحان من الامتحانات الـ${arDigits(closest.need.remaining.length)} القادمة` : 'الامتحان القادم'}.
-              </T>
-            </Card>
-          ) : null}
+      <Hero sum={sum} target={target} onGoal={() => setPicking(true)} />
 
-          <Card style={{ padding: 0, overflow: 'hidden' }}>
-            <Row style={{ paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: c.line }} gap={0}>
-              <T dim weight="bold" size={12} style={{ flex: 1.5 }}>المادة</T>
-              <T dim weight="bold" size={12} style={{ flex: 1 }} center>المعدل</T>
-              <T dim weight="bold" size={12} style={{ flex: 1.3, textAlign: 'left' }}>تحتاج للإعفاء</T>
-            </Row>
-            {rows.map((r) => {
-              const col = chipColor(r.v, r.need.state);
-              return (
-                <Pressable key={r.s.id} onPress={() => router.push(`/grades/${r.s.id}`)} accessibilityRole="button"
-                  style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, height: 50, borderBottomWidth: 1, borderBottomColor: c.line, opacity: pressed ? 0.6 : 1 })}>
-                  <T weight="bold" style={{ flex: 1.5 }} lines={1}>{shortSubject(r.s.name)}</T>
-                  <T style={{ flex: 1 }} center>{formatScore(r.st.annual ?? r.st.current)}</T>
-                  <View style={{ flex: 1.3, alignItems: 'flex-end' }}>
-                    <View style={{ paddingHorizontal: 10, paddingVertical: 3, borderRadius: 999, backgroundColor: col.bg }}>
-                      <T size={13} weight="bold" color={col.ink}>{needLabel(r)}</T>
-                    </View>
-                  </View>
-                </Pressable>
-              );
-            })}
-          </Card>
-          <T dim size={12} center>
-            الإعفاء الفردي {arDigits(rules.individualExempt)} · العام معدل {arDigits(rules.generalAvg)} وأقل مادة {arDigits(rules.generalMin)}{rules.round === 'half_up' ? ' · مع جبر الكسور' : ''}
-          </T>
-        </>
-      )}
-      <View style={{ height: 70 }} />
+      <Button title="أدخل درجات امتحان" icon="list" onPress={() => router.push('/grades/edit')} />
+
+      {sum.focus && sum.state !== 'empty' ? (
+        <Card tone="soft" onPress={() => router.push(`/grades/${sum.focus!.id}`)} style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
+          <LogoMark size={22} ink={c.softInk} dot={c.accent} />
+          <View style={{ flex: 1 }}>
+            <T size={12} weight="bold" color={c.accent}>ركّز الآن على</T>
+            <T size={15} weight="bold" color={c.softInk}>
+              {shortSubject(sum.focus.name)}
+              {sum.focus.need.state === 'possible' ? ` — تحتاج ${formatScore(sum.focus.need.perExam)} في ${remainingExams(sum.focus.need.remaining.length)}` : ''}
+            </T>
+          </View>
+          <Icon name="forward" size={18} color={c.softInk} />
+        </Card>
+      ) : null}
+
+      <SectionTitle title="موادك" />
+      <View style={{ gap: 8 }}>
+        {sum.rows.map((r) => {
+          const col = toneColor(r.tone);
+          return (
+            <Pressable key={r.id} onPress={() => router.push(`/grades/${r.id}`)} accessibilityRole="button"
+              accessibilityLabel={`${r.name}، المعدل ${formatScore(r.value)}، ${r.label}`}
+              style={({ pressed }) => ({
+                flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: c.card, borderRadius: 20,
+                borderWidth: 1, borderColor: c.line, paddingHorizontal: 14, paddingVertical: 12, opacity: pressed ? 0.7 : 1,
+              })}>
+              <View style={{ width: 4, alignSelf: 'stretch', borderRadius: 2, backgroundColor: r.tone === 'empty' ? c.line : col.ink }} />
+              <View style={{ flex: 1, gap: 6 }}>
+                <T weight="bold" size={16} lines={1}>{shortSubject(r.name)}</T>
+                <ExamDots scores={r.scores} rules={rules} />
+              </View>
+              <View style={{ alignItems: 'center', minWidth: 56 }}>
+                <T display size={22}>{formatScore(r.value)}</T>
+                <T dim size={11}>{r.final ? 'السعي' : 'المعدل'}</T>
+              </View>
+              <View style={{ alignItems: 'flex-end', minWidth: 84, gap: 2 }}>
+                <ToneChip tone={r.tone} label={r.need.state === 'possible' ? `تحتاج ${r.label}` : r.label} />
+                {r.tone === 'empty' ? <T dim size={11}>أضف درجة</T> : r.need.state === 'possible' ? <T size={11} weight="medium" color={col.ink}>{TONE_LABELS[r.tone]}</T> : null}
+              </View>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      <T dim size={12} center>
+        النقاط = امتحانات السعي الخمسة (الأعرض نصف السنة). الأخضر {arDigits(rules.individualExempt)}+ والأحمر تحت {arDigits(rules.pass)}.
+      </T>
+      <HowItWorks visible={help} onClose={() => setHelp(false)} rules={rules} />
     </Screen>
+  );
+}
+
+/** البطاقة الكبيرة: جملة واحدة واضحة + المعدل والهدف */
+function Hero({ sum, target, onGoal }: { sum: GradeSummary; target: number; onGoal: () => void }) {
+  const { c } = useTheme();
+  return (
+    <Card tone="hero" style={{ padding: 20, gap: 12 }}>
+      <Row style={{ justifyContent: 'space-between' }}>
+        <Pressable onPress={onGoal} hitSlop={8} accessibilityRole="button" accessibilityLabel="تغيير الهدف"
+          style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.12)' }}>
+          <Icon name="target" size={14} color={c.heroInk} />
+          <T size={12} weight="bold" color={c.heroInk}>هدفي: {GOAL_TITLES[sum.goal]}</T>
+        </Pressable>
+        <T size={12} color={c.heroInk2}>{arDigits(sum.counted)} من {arDigits(sum.total)} مواد فيها درجات</T>
+      </Row>
+
+      <T display size={28} color={c.heroInk}>{sum.headline}</T>
+      <T size={14} color={c.heroInk2}>{sum.detail}</T>
+
+      {sum.average !== null ? (
+        <View style={{ gap: 8, marginTop: 4 }}>
+          <Row style={{ justifyContent: 'space-between', alignItems: 'flex-end' }}>
+            <View>
+              <T size={12} color={c.heroInk2}>{sum.goal === 'general' ? 'معدلك الحالي' : 'معدل موادك'}</T>
+              <CountUp value={sum.average}>{(v) => <T display size={40} color={c.heroInk}>{formatScore(v)}</T>}</CountUp>
+            </View>
+            {sum.perExam !== null && sum.state === 'possible' ? (
+              <View style={{ alignItems: 'flex-end' }}>
+                <T size={12} color={c.heroInk2}>تحتاج في كل امتحان</T>
+                <T display size={40} color={c.heroInk}>{formatScore(sum.perExam)}</T>
+              </View>
+            ) : null}
+          </Row>
+          <ProgressBar value={sum.average / 100} track={c.track} color="#FFFFFF" marker={target / 100} height={8} />
+          <T size={12} color={c.heroInk2}>الخط = {sum.goal === 'general' ? 'معدل الإعفاء العام' : sum.goal === 'individual' ? 'حد الإعفاء من المادة' : 'درجة النجاح'} ({arDigits(target)})</T>
+        </View>
+      ) : null}
+    </Card>
   );
 }

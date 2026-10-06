@@ -14,7 +14,7 @@ import { useLoad } from '@/lib/use-load';
 
 export default function QuestionsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { c } = useTheme();
+  const { c, verdict } = useTheme();
   const { isStaff } = useAuth();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
@@ -55,8 +55,9 @@ export default function QuestionsScreen() {
   const remove = () => Alert.alert('حذف الأسئلة', 'هل أنت متأكد؟', [
     { text: 'إلغاء', style: 'cancel' },
     { text: 'حذف', style: 'destructive', onPress: async () => {
-      await supabase.from('question_sets').delete().eq('id', s.id);
-      router.back();
+      const { error } = await supabase.from('question_sets').delete().eq('id', s.id);
+      if (error) Alert.alert('تعذّر الحذف', error.message);
+      else router.back();
     } },
   ]);
 
@@ -74,7 +75,7 @@ export default function QuestionsScreen() {
       />
       <Row gap={8} style={{ flexWrap: 'wrap' }}>
         {s.source ? <Chip small label={s.source} /> : null}
-        {s.status === 'draft' ? <Chip small label="مسودة — لا يراها الطلاب" bg="#FBEFDF" color="#8A4700" /> : null}
+        {s.status === 'draft' ? <Chip small label="مسودة — لا يراها الطلاب" bg={verdict.near.bg} color={verdict.near.ink} /> : null}
       </Row>
 
       {editing ? (

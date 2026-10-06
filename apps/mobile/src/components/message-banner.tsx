@@ -2,7 +2,7 @@ import type { Message } from '@saey/shared';
 import { router, usePathname } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, View } from 'react-native';
-import Animated, { SlideInUp, SlideOutUp } from 'react-native-reanimated';
+import Animated, { Easing, SlideInUp, SlideOutUp } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '@/lib/supabase';
 import { useTheme } from '@/lib/theme';
@@ -57,7 +57,7 @@ export function MessageBanner({ myId }: { myId: string | null }) {
 
   if (!banner) return null;
   return (
-    <Animated.View key={banner.id} entering={SlideInUp.springify().damping(18).stiffness(220)} exiting={SlideOutUp.duration(200)}
+    <Animated.View key={banner.id} entering={SlideInUp.duration(220).easing(Easing.out(Easing.cubic))} exiting={SlideOutUp.duration(160)}
       style={{ position: 'absolute', top: insets.top + 6, left: 12, right: 12, zIndex: 50 }}>
       <Pressable
         onPress={() => { setBanner(null); router.push(`/chat/${banner.conversationId}`); }}

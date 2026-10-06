@@ -1,5 +1,5 @@
 import {
-  arDigits, formatDayDate, formatScore, generalExemption, POST_KIND_LABELS, relativeDays, TASK_TYPE_LABELS,
+  GOAL_TITLES, analyzeGrades, arDigits, formatDayDate, formatScore, POST_KIND_LABELS, relativeDays, TASK_TYPE_LABELS,
   type Post, type Subject, type Task,
 } from '@saey/shared';
 import { router, useFocusEffect } from 'expo-router';
@@ -10,6 +10,7 @@ import { CountUp } from '@/components/motion';
 import { Avatar, Card, IconButton, ProgressBar, Row, Screen, SectionTitle, T } from '@/components/ui';
 import { useMe } from '@/lib/auth';
 import { loadMyGrades, loadSubjectProgress, loadSubjects, shortSubject } from '@/lib/queries';
+import { useGoal } from '@/lib/goal';
 import { useGradingRules } from '@/lib/settings';
 import { must, supabase } from '@/lib/supabase';
 import { useTheme } from '@/lib/theme';
@@ -61,7 +62,9 @@ export default function Home() {
   const d = q.data;
   const subjects: Subject[] = d?.subjects ?? [];
   const nameOf = (id: string | null) => subjects.find((s) => s.id === id)?.name ?? '';
-  const general = d ? generalExemption(Object.fromEntries(subjects.map((s) => [s.id, d.grades[s.id] ?? {}])), rules) : null;
+  const goal = useGoal();
+  const sum = d ? analyzeGrades(subjects, d.grades, goal ?? 'general', rules, shortSubject) : null;
+  const target = goal === 'pass' ? rules.pass : goal === 'individual' ? rules.individualExempt : rules.generalAvg;
   const firstName = me.full_name.split(' ')[0];
 
   const toggleTask = async (t: Task) => {
@@ -84,26 +87,25 @@ export default function Home() {
         </Row>
       </Row>
 
-      {/* طريق الإعفاء */}
-      <Card tone="hero" onPress={() => router.push('/grades')} style={{ padding: 22, gap: 14 }}>
+      {/* هدفي: جملة واحدة واضحة من صفحة الدرجات */}
+      <Card tone="hero" onPress={() => router.push('/grades')} style={{ padding: 22, gap: 12 }}>
         <Row style={{ justifyContent: 'space-between' }}>
-          <T size={15} weight="medium" color={c.heroInk2}>طريقك إلى الإعفاء العام</T>
-          {general?.average != null ? (
-            <View style={{ paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, backgroundColor: general.exempt ? c.accent : '#C8312B' }}>
-              <T size={12} weight="bold" color="#FFFFFF">{general.exempt ? (general.final ? 'معفى' : 'على الطريق') : 'تحتاج جهداً'}</T>
-            </View>
+          <Row gap={6}>
+            <Icon name="target" size={15} color={c.heroInk2} />
+            <T size={14} weight="medium" color={c.heroInk2}>هدفي: {GOAL_TITLES[goal ?? 'general']}</T>
+          </Row>
+          {sum && sum.state !== 'empty' ? (
+            <T size={12} color={c.heroInk2}>{arDigits(sum.onTrack)} من {arDigits(sum.total)} على الطريق</T>
           ) : null}
         </Row>
-        {general?.average != null ? (
+        {sum && sum.average !== null ? (
           <>
+            <T display size={26} color={c.heroInk}>{sum.headline}</T>
             <Row gap={10} style={{ alignItems: 'baseline' }}>
-              <CountUp value={general.average}>{(v) => <T display size={60} color={c.heroInk}>{formatScore(v)}</T>}</CountUp>
-              <T size={14} color={c.heroInk2}>معدلك الحالي · الهدف {formatScore(rules.generalAvg, 0)}</T>
+              <CountUp value={sum.average}>{(v) => <T display size={52} color={c.heroInk}>{formatScore(v)}</T>}</CountUp>
+              <T size={14} color={c.heroInk2}>معدلك{sum.perExam && sum.state === 'possible' ? ` · تحتاج ${formatScore(sum.perExam)} في كل امتحان` : ''}</T>
             </Row>
-            <ProgressBar value={general.average / 100} track={c.track} marker={rules.generalAvg / 100} height={8} />
-            <T size={13} color={c.heroInk2}>
-              أقل مادة: {shortSubject(nameOf(general.minSubjectId))} {formatScore(general.min)} — الحد الأدنى {formatScore(rules.generalMin, 0)} {general.meetsMin ? '✓' : '✗'}
-            </T>
+            <ProgressBar value={sum.average / 100} track={c.track} color="#FFFFFF" marker={target / 100} height={8} />
           </>
         ) : (
           <View style={{ gap: 6 }}>
