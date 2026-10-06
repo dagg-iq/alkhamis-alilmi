@@ -279,3 +279,110 @@ main { overflow: hidden; }
 }
 .hero-mark { margin-bottom: 4px; color: var(--ink); }
 @media (max-width: 960px) { .hero-mark { display: flex; justify-content: center; } .mark-hero { width: 80px; height: 80px; } }
+
+/* ================================================================ الختام: مشهد الشعار السينمائي
+ * يبدأ عند وصول الزائر (main.js يضيف .play). الإيقاع (ثوانٍ):
+ * ٠٫٠ الكاميرا تقترب من ضبابية إلى وضوح · ٠٫٢ القاعدة تمتد · ٠٫٥٥–٠٫٨٥ الأسنان تصعد بالتتابع
+ * ١٫٣٥ النقطة تهبط كشهاب بذيل مضيء · ١٫٩ الاصطدام: انضغاط + موجتا ضوء + وهج
+ * ٢٫١ «سعي» يُكتب من اليمين بحافة ناعمة · ٢٫٩ «اسعَ تُعفَ.» · بعدها نبض خافت للنقطة */
+.finale { padding: 96px 0 0; }
+.finale-stage {
+  position: relative; overflow: hidden; isolation: isolate;
+  min-height: min(92vh, 860px); margin: 0 auto; max-width: 1400px;
+  background: #0B0B0C; color: #FFFFFF;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 28px;
+  padding: 80px 20px; border-radius: 0;
+}
+@media (min-width: 1440px) { .finale-stage { border-radius: 40px; } }
+/* بقعة ضوء تتفتح لحظة الاصطدام */
+.finale-light {
+  position: absolute; inset: -20%; z-index: -1; pointer-events: none; opacity: 0;
+  background: radial-gradient(closest-side at 50% 42%, rgba(35, 70, 245, .38), rgba(35, 70, 245, .08) 55%, transparent 75%);
+  transform: scale(.6);
+}
+.finale-inner {
+  all: unset; cursor: pointer; display: flex; flex-direction: column; align-items: center;
+  -webkit-tap-highlight-color: transparent;
+}
+.finale-inner:focus-visible { outline: 2px solid #7B92FF; outline-offset: 12px; border-radius: 24px; }
+.fm { width: clamp(150px, 24vw, 230px); height: auto; overflow: visible; }
+.fm rect { fill: #FFFFFF; }
+.fm-b, .fm-t, .fm-d, .fm-ring, .fm-meteor, .fm-tailwrap { transform-box: view-box; }
+.fm-b { transform-origin: 100px 94px; transform: scaleX(0); }
+.fm-t { transform-origin: 0 104px; transform: scaleY(0); }
+.fm-d { fill: #7B92FF; transform-origin: 30px 22px; }
+.fm-meteor { transform: translate(115px, -102px); opacity: 0; }
+.fm-tailwrap { transform-origin: 30px 12px; }
+.fm-ring { fill: none; stroke: #7B92FF; stroke-width: 2.5; transform-origin: 30px 12px; opacity: 0; }
+.fm-name {
+  font-family: 'Display', serif; font-weight: 900; font-size: clamp(88px, 17vw, 168px);
+  line-height: 1.55; padding: 0 .35em .12em; margin-top: -.08em; color: #FFFFFF;
+  /* الكشف: قناع بحافة ناعمة ينسحب من اليمين لليسار */
+  -webkit-mask-image: linear-gradient(to left, #000 0 38%, transparent 62% 100%);
+          mask-image: linear-gradient(to left, #000 0 38%, transparent 62% 100%);
+  -webkit-mask-size: 320% 100%; mask-size: 320% 100%;
+  -webkit-mask-position: 0% 0; mask-position: 0% 0;
+  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+  filter: blur(10px); transform: translateY(14px);
+}
+.fm-tag {
+  font-family: 'Sans', sans-serif; font-weight: 500; font-size: clamp(20px, 3vw, 28px); color: #B4B4B4;
+  margin-top: -.2em; opacity: 0; letter-spacing: .25em;
+}
+.fm-tag b { color: #7B92FF; font-weight: 700; }
+.finale-btn { opacity: 0; translate: 0 16px; transition: opacity .6s 3.3s ease, translate .6s 3.3s cubic-bezier(.2, .7, .2, 1); }
+
+/* ---- التشغيل */
+.play .finale-inner { animation: f-cam 1.4s cubic-bezier(.16, .8, .24, 1) both; }
+.play .fm-b { animation: f-base .6s .2s cubic-bezier(.16, 1, .3, 1) both; }
+.play .fm-t { animation: f-tooth .75s cubic-bezier(.34, 1.56, .5, 1) both; }
+.play .fm-t1 { animation-delay: .55s; }
+.play .fm-t2 { animation-delay: .7s; }
+.play .fm-t3 { animation-delay: .85s; }
+.play .fm-meteor { animation: f-meteor .55s 1.35s cubic-bezier(.55, 0, .9, .45) both; }
+.play .fm-tailwrap { animation: f-tail .9s 1.35s ease-out both; }
+.play .fm-d { animation: f-squash .6s 1.9s cubic-bezier(.3, 1.4, .5, 1) both, f-glow 3.2s 3.4s ease-in-out infinite; }
+/* forwards فقط: الموجة لا تظهر قبل لحظة الاصطدام */
+.play .fm-ring1 { animation: f-ring 1s 1.9s cubic-bezier(.1, .7, .3, 1) forwards; }
+.play .fm-ring2 { animation: f-ring 1.2s 2.05s cubic-bezier(.1, .7, .3, 1) forwards; }
+.play .finale-light { animation: f-light 2.4s 1.85s cubic-bezier(.2, .7, .2, 1) both; }
+.play .fm-name { animation: f-write 1s 2.1s cubic-bezier(.45, 0, .2, 1) both; }
+.play .fm-tag { animation: f-tag .9s 2.9s cubic-bezier(.2, .7, .2, 1) both; }
+.play .finale-btn { opacity: 1; translate: 0 0; }
+
+@keyframes f-cam { from { transform: scale(1.14); filter: blur(6px); } to { transform: none; filter: none; } }
+@keyframes f-base { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes f-tooth { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+@keyframes f-meteor { from { transform: translate(115px, -102px); opacity: 0; } 15% { opacity: 1; } to { transform: translate(0, 0); opacity: 1; } }
+@keyframes f-tail { 0% { transform: scale(.35); opacity: 0; } 25% { opacity: 1; } 60% { transform: scale(1); opacity: 1; } 100% { transform: scale(0); opacity: 0; } }
+@keyframes f-squash {
+  0% { transform: scale(1.45, .55); }
+  35% { transform: scale(.82, 1.25); }
+  65% { transform: scale(1.08, .94); }
+  100% { transform: none; }
+}
+@keyframes f-ring { from { transform: scale(1); opacity: .95; stroke-width: 4; } to { transform: scale(7); opacity: 0; stroke-width: .5; } }
+@keyframes f-light { 0% { opacity: 0; transform: scale(.5); } 30% { opacity: 1; } 100% { opacity: .55; transform: scale(1); } }
+@keyframes f-write {
+  from { -webkit-mask-position: 0% 0; mask-position: 0% 0; filter: blur(10px); transform: translateY(14px); }
+  to { -webkit-mask-position: 100% 0; mask-position: 100% 0; filter: blur(0); transform: none; }
+}
+@keyframes f-tag { from { opacity: 0; letter-spacing: .25em; } to { opacity: 1; letter-spacing: 0; } }
+@keyframes f-glow { 0%, 100% { filter: drop-shadow(0 0 0 rgba(123, 146, 255, 0)); } 50% { filter: drop-shadow(0 0 10px rgba(123, 146, 255, .9)); } }
+
+/* بدون JavaScript أو مع «تقليل الحركة»: المشهد النهائي ثابتاً */
+html:not(.js) .fm-b, html:not(.js) .fm-t { transform: none; }
+html:not(.js) .fm-meteor { transform: none; opacity: 1; }
+html:not(.js) .fm-tailwrap { opacity: 0; }
+html:not(.js) .fm-name { -webkit-mask-position: 100% 0; mask-position: 100% 0; filter: none; transform: none; }
+html:not(.js) .fm-tag, html:not(.js) .finale-btn { opacity: 1; translate: none; letter-spacing: 0; }
+@media (prefers-reduced-motion: reduce) {
+  .fm-b, .fm-t { transform: none !important; animation: none !important; }
+  .fm-meteor { transform: none !important; opacity: 1 !important; animation: none !important; }
+  .fm-tailwrap, .fm-ring { opacity: 0 !important; animation: none !important; }
+  .fm-d, .finale-inner { animation: none !important; }
+  .fm-name { -webkit-mask-position: 100% 0 !important; mask-position: 100% 0 !important; filter: none !important; transform: none !important; animation: none !important; }
+  .fm-tag { opacity: 1 !important; letter-spacing: 0 !important; animation: none !important; }
+  .finale-light { opacity: .55 !important; transform: none !important; animation: none !important; }
+  .finale-btn { opacity: 1 !important; translate: none !important; transition: none !important; }
+}

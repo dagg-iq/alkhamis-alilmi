@@ -58,3 +58,20 @@ img.onload = () => {
   if (av) { av.textContent = ''; img.alt = 'محمد حازم احمد'; av.appendChild(img); }
 };
 img.src = 'developer.jpg';
+
+// مشهد الختام: يُشغَّل عند الوصول إليه، والضغط على الشعار يعيده
+const finale = document.querySelector('.finale-stage');
+if (finale) {
+  const play = () => {
+    finale.classList.remove('play');
+    void finale.offsetWidth; // إعادة تشغيل الحركات من البداية
+    finale.classList.add('play');
+  };
+  if ('IntersectionObserver' in window) {
+    const fio = new IntersectionObserver((entries) => {
+      if (entries.some((e) => e.isIntersecting)) { play(); fio.disconnect(); }
+    }, { threshold: 0.45 });
+    fio.observe(finale);
+  } else play();
+  finale.querySelector('.finale-inner')?.addEventListener('click', play);
+}
