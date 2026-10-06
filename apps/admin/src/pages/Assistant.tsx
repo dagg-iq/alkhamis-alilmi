@@ -146,7 +146,7 @@ function LecturesTab({ data: d, reload }: { data: Data; reload: () => Promise<vo
       let ok = 0;
       for (let i = 0; i < added.length; i++) {
         try {
-          await indexLecture(added[i].id, (s, total) => setStep(`فهرسة بالدقيقة (${i + 1}/${added.length}) «${added[i].title}» — جزء ${s}/${total}`));
+          await indexLecture(added[i].id, (s, total) => setStep(`فهرسة بالدقيقة (${i + 1}/${added.length}) «${added[i].title}» — الجزء ${s}${total ? ` من ${total}` : ''}`));
           ok++;
         } catch (e) {
           toast(`${added[i].title}: ${e instanceof Error ? e.message : 'فشلت الفهرسة'}`, true);

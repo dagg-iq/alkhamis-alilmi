@@ -1,10 +1,11 @@
 import { callFunction, must, supabase } from './supabase';
 
-/** فهرسة محاضرة بالدقيقة: جزء ٢٠ دقيقة في كل طلب حتى النهاية */
-export async function indexLecture(lectureId: string, onProgress?: (done: number, total: number) => void) {
+/** فهرسة محاضرة بالدقيقة: جزء ١٠ دقائق في كل طلب حتى النهاية */
+export async function indexLecture(lectureId: string, onProgress?: (done: number, total: number | null) => void) {
   let segment = 0;
   for (;;) {
-    const r = await callFunction<{ done: boolean; next: number | null; segments: number; topics: number }>('content-ai', {
+    onProgress?.(segment + 1, null);
+    const r = await callFunction<{ done: boolean; next: number | null; segments: number | null; topics: number }>('content-ai', {
       action: 'index_lecture', lectureId, segment,
     });
     onProgress?.(segment + 1, r.segments);

@@ -9,8 +9,9 @@ import { getObject } from '../_shared/storage.ts';
 interface Video { youtube_id: string; title: string; duration_sec: number | null; channel?: string | null }
 
 const YT = 'https://www.googleapis.com/youtube/v3';
-const SEGMENT = 20 * 60; // فهرسة الفيديو على أجزاء (٢٠ دقيقة) حتى لا تتجاوز الدالة وقتها
-const UA = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36', 'Accept-Language': 'ar,en;q=0.8' };
+const SEGMENT = 10 * 60; // فهرسة الفيديو على أجزاء (١٠ دقائق) حتى لا تتجاوز الدالة وقتها
+// كوكي الموافقة يتجاوز صفحة «قبل أن تتابع» التي تظهر للخوادم الأوروبية
+const UA = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36', 'Accept-Language': 'ar,en;q=0.8', Cookie: 'CONSENT=YES+cb; SOCS=CAI' };
 
 function videoIdOf(url: string): string | null {
   const m = url.match(/(?:youtu\.be\/|v=|\/shorts\/|\/embed\/|\/live\/)([\w-]{11})/);
@@ -62,23 +63,55 @@ async function playlistVideos(listId: string): Promise<Video[]> {
     }
     return out;
   }
-  // بلا مفتاح: نقرأ صفحة القائمة نفسها (أول ١٠٠ فيديو)
-  const html = await (await fetch(`https://www.youtube.com/playlist?list=${listId}&hl=ar`, { headers: UA })).text();
-  const m = html.match(/var ytInitialData = (\{.+?\});<\/script>/s) ?? html.match(/ytInitialData"\]\s*=\s*(\{.+?\});/s);
-  if (!m) throw new HttpError(422, 'لم أستطع قراءة قائمة التشغيل. تأكد أنها عامة، أو أضف مفتاح YouTube (YOUTUBE_API_KEY).');
-  const channel = (html.match(/"ownerText":\{"runs":\[\{"text":"([^"]+)"/) ?? [])[1] ?? null;
-  const walk = (o: unknown) => {
-    if (!o || typeof o !== 'object') return;
-    const r = (o as Record<string, unknown>).playlistVideoRenderer as Record<string, unknown> | undefined;
-    if (r?.videoId) {
-      const title = ((r.title as { runs?: { text: string }[] })?.runs ?? []).map((x) => x.text).join('');
-      out.push({ youtube_id: r.videoId as string, title, duration_sec: Number(r.lengthSeconds) || null, channel });
-      return;
+  // بلا مفتاح: صفحة القائمة نفسها (أول ١٠٠ فيديو) ثم خلاصة RSS احتياطاً (آخر ١٥ فيديو)
+  try {
+    const res = await fetch(`https://www.youtube.com/playlist?list=${listId}&hl=ar`, { headers: UA });
+    const html = await res.text();
+    const m = html.match(/var ytInitialData = (\{.+?\});<\/script>/s) ?? html.match(/ytInitialData"\]\s*=\s*(\{.+?\});/s);
+    if (m) {
+      const channel = (html.match(/"ownerText":\{"runs":\[\{"text":"([^"]+)"/) ?? [])[1] ?? null;
+      walkPlaylist(JSON.parse(m[1]), out, channel);
     }
-    for (const v of Object.values(o as Record<string, unknown>)) walk(v);
-  };
-  walk(JSON.parse(m[1]));
+  } catch (e) {
+    console.error('playlist page', e);
+  }
+  if (!out.length) out.push(...await rssVideos(`playlist_id=${listId}`));
   return out;
+}
+
+/** يقرأ الفيديوهات من بيانات صفحة يوتيوب (الشكل القديم playlistVideoRenderer والجديد lockupViewModel) */
+function walkPlaylist(o: unknown, out: Video[], channel: string | null) {
+  if (!o || typeof o !== 'object') return;
+  const obj = o as Record<string, unknown>;
+  const r = obj.playlistVideoRenderer as Record<string, unknown> | undefined;
+  if (r?.videoId) {
+    const title = ((r.title as { runs?: { text: string }[] })?.runs ?? []).map((x) => x.text).join('');
+    out.push({ youtube_id: r.videoId as string, title, duration_sec: Number(r.lengthSeconds) || null, channel });
+    return;
+  }
+  const lv = obj.lockupViewModel as Record<string, unknown> | undefined;
+  if (lv?.contentId && lv.contentType === 'LOCKUP_CONTENT_TYPE_VIDEO') {
+    const json = JSON.stringify(lv);
+    const title = json.match(/"lockupMetadataViewModel":\{"title":\{"content":"((?:[^"\\]|\\.)*)"/)?.[1] ?? '';
+    const dur = json.match(/"text":"(\d{1,2}(?::\d{2}){1,2})"/)?.[1];
+    out.push({ youtube_id: lv.contentId as string, title: JSON.parse(`"${title}"`), duration_sec: dur ? toSeconds(dur) : null, channel });
+    return;
+  }
+  for (const v of Object.values(obj)) walkPlaylist(v, out, channel);
+}
+
+/** خلاصة RSS الرسمية من يوتيوب (تعمل غالباً حتى عندما تُمنع الصفحة) */
+async function rssVideos(query: string): Promise<Video[]> {
+  const res = await fetch(`https://www.youtube.com/feeds/videos.xml?${query}`, { headers: UA });
+  if (!res.ok) return [];
+  const xml = await res.text();
+  const decode = (t: string) => t.replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+  return [...xml.matchAll(/<entry>([\s\S]*?)<\/entry>/g)].map((e) => ({
+    youtube_id: e[1].match(/<yt:videoId>([\w-]{11})<\/yt:videoId>/)?.[1] ?? '',
+    title: decode(e[1].match(/<title>([\s\S]*?)<\/title>/)?.[1] ?? ''),
+    duration_sec: null,
+    channel: decode(e[1].match(/<author>\s*<name>([\s\S]*?)<\/name>/)?.[1] ?? '') || null,
+  })).filter((v) => v.youtube_id).reverse(); // الخلاصة من الأحدث، والقائمة من الأقدم
 }
 
 /** قائمة الرفع لقناة (@handle أو /channel/ID) */
@@ -166,6 +199,11 @@ Deno.serve(handler(async (req) => {
           if (id) videos.push(await singleVideo(id));
         }
       }
+      if (!videos.length) {
+        throw new HttpError(422, Deno.env.get('YOUTUBE_API_KEY')
+          ? 'لم أجد فيديوهات. تأكد أن القائمة «عامة» أو «غير مدرجة» وليست خاصة.'
+          : 'يوتيوب منع قراءة القائمة من الخادم. أضف مفتاح YouTube المجاني (الخطوة ١٢-ب في دليل الإعداد) ثم أعد المحاولة. مؤقتاً: الصق روابط الفيديوهات نفسها، كل رابط في سطر.');
+      }
       const seen = new Set<string>();
       const unique = videos.filter((v) => (seen.has(v.youtube_id) ? false : (seen.add(v.youtube_id), true)));
       const { data: existing } = await admin.from('lectures').select('youtube_id').in('youtube_id', unique.map((v) => v.youtube_id).concat(['-']));
@@ -207,7 +245,7 @@ ${batch.map((v, k) => `${k + 1}. id=${v.youtube_id} | ${v.title}${v.channel ? ` 
       return json({ items });
     }
 
-    // ٣) فهرسة محاضرة بالدقيقة (جزء ٢٠ دقيقة في كل استدعاء)
+    // ٣) فهرسة محاضرة بالدقيقة (جزء ١٠ دقائق في كل استدعاء، بدقة منخفضة: الشرح في الصوت والسبورة تكفيها صورة كل ثانيتين)
     if (body.action === 'index_lecture') {
       const { data: lec } = await admin.from('lectures')
         .select('id, title, youtube_id, duration_sec, chapter_id, chapters(title, books(subject_id))').eq('id', body.lectureId).single();
@@ -217,41 +255,59 @@ ${batch.map((v, k) => `${k + 1}. id=${v.youtube_id} | ${v.title}${v.channel ? ` 
         duration = await videoDuration(lec.youtube_id).catch(() => null);
         if (duration) await admin.from('lectures').update({ duration_sec: duration }).eq('id', lec.id);
       }
-      const total = duration ?? SEGMENT; // بلا مدة: جزء واحد
       const segment = Number(body.segment ?? 0);
       const from = segment * SEGMENT;
-      const to = Math.min(total, from + SEGMENT);
+      const to = from + SEGMENT;
       const subjectId = (lec.chapters as unknown as { books: { subject_id: string } })?.books?.subject_id ?? null;
       if (segment === 0) {
         await admin.from('lecture_topics').delete().eq('lecture_id', lec.id);
         await admin.from('content_chunks').delete().eq('source_type', 'lecture').eq('source_id', lec.id);
         await admin.from('lectures').update({ index_status: 'running', index_error: null }).eq('id', lec.id);
       }
+      const finish = async () => {
+        await admin.from('lectures').update({ index_status: 'done', index_error: null, indexed_at: new Date().toISOString() }).eq('id', lec.id);
+        return json({ done: true, segment, next: null, segments: duration ? Math.ceil(duration / SEGMENT) : segment + 1, topics: 0 });
+      };
+      if (duration && from >= duration) return await finish();
 
-      const raw = await ai([{
-        role: 'user',
-        parts: [
-          {
-            file_data: { file_uri: `https://www.youtube.com/watch?v=${lec.youtube_id}` },
-            ...(duration ? { video_metadata: { start_offset: `${from}s`, end_offset: `${to}s` } } : {}),
-          } as never,
-          {
-            text: `هذه محاضرة «${lec.title}» لطلاب الخامس العلمي في العراق${duration ? `، والجزء المعروض من الثانية ${from} إلى ${to}` : ''}.
-قسّمها إلى مواضيع حسب ما يشرحه الأستاذ فعلاً. لكل موضوع أعد:
-{"start": وقت بدايته بالثواني من بداية الفيديو كاملاً (ليس من بداية الجزء), "title": "عنوان قصير",
- "summary": "جملة أو جملتان تشرحان ما يقوله", "details": "الشرح بتفصيل كملاحظات طالب: التعاريف والقوانين ($LaTeX$) والأمثلة والتعليلات كما وردت"}
-أعد مصفوفة JSON فقط. لا تخترع ما لم يُقل. تجاهل المقدمات والإعلانات وطلبات الاشتراك.`,
-          },
-        ],
-      }], 32768);
-      const topics = parseJson<{ start: number | string; title: string; summary?: string; details?: string }[]>(raw)
+      let raw: string;
+      try {
+        raw = await generate(modelChain((await getSetting<{ model?: string }>('ai')).model, MAIN_MODELS), [{
+          role: 'user',
+          parts: [
+            {
+              file_data: { file_uri: `https://www.youtube.com/watch?v=${lec.youtube_id}` },
+              video_metadata: { start_offset: `${from}s`, end_offset: `${duration ? Math.min(to, duration) : to}s`, fps: 0.5 },
+            } as never,
+            {
+              text: `هذا جزء من محاضرة «${lec.title}» لطلاب الخامس العلمي في العراق، من الثانية ${from} إلى ${to}.
+قسّم هذا الجزء إلى مواضيع حسب ما يشرحه الأستاذ فعلاً. أعد JSON بالشكل:
+{"topics": [{"start": وقت بداية الموضوع بالثواني من بداية الفيديو كاملاً (ليس من بداية الجزء),
+  "title": "عنوان قصير", "summary": "جملة أو جملتان تشرحان ما يقوله",
+  "details": "الشرح بتفصيل كملاحظات طالب: التعاريف والقوانين ($LaTeX$) والأمثلة والتعليلات كما وردت"}],
+ "ended": true إذا انتهى الفيديو داخل هذا الجزء وإلا false}
+لا تخترع ما لم يُقل. تجاهل المقدمات والإعلانات وطلبات الاشتراك.`,
+            },
+          ],
+        }], { pool: 'admin', json: true, temperature: 0.1, maxOutputTokens: 32768, thinking: 'low', extraConfig: { mediaResolution: 'MEDIA_RESOLUTION_LOW' } });
+      } catch (e) {
+        // بلا مدة معروفة: جزء يبدأ بعد نهاية الفيديو يعطي خطأ ← انتهت الفهرسة
+        if (!duration && segment > 0 && !(e instanceof GeminiQuotaError)) return await finish();
+        throw e;
+      }
+      const parsed = parseJson<unknown>(raw);
+      const obj = (Array.isArray(parsed) && parsed.length === 1 && (parsed[0] as { topics?: unknown }).topics ? parsed[0] : parsed) as
+        { topics?: unknown[]; ended?: boolean } | unknown[];
+      const list = (Array.isArray(obj) ? obj : obj.topics ?? []) as { start: number | string; title: string; summary?: string; details?: string }[];
+      const ended = !Array.isArray(obj) && obj.ended === true;
+      const topics = list
         .map((t) => ({ ...t, start: toSeconds(t?.start) }))
         .filter((t) => t.title && t.start !== null)
-        .map((t) => ({ ...t, start: Math.max(0, Math.min(Math.round(t.start!), total)) }));
+        .map((t) => ({ ...t, start: Math.max(from, Math.min(Math.round(t.start!), duration ?? to)) }));
 
       if (topics.length) {
         await admin.from('lecture_topics').insert(topics.map((t, k) => ({
-          lecture_id: lec.id, start_sec: t.start, title: t.title.slice(0, 200), summary: t.summary?.slice(0, 600) ?? null, sort: segment * 1000 + k,
+          lecture_id: lec.id, start_sec: t.start, title: String(t.title).slice(0, 200), summary: t.summary?.slice(0, 600) ?? null, sort: segment * 1000 + k,
         })));
         const texts = topics.map((t) => `${lec.title} — ${t.title}\n${t.summary ?? ''}\n${t.details ?? ''}`.slice(0, 3000));
         const vectors = await embed(texts, 'RETRIEVAL_DOCUMENT', 'admin');
@@ -260,9 +316,10 @@ ${batch.map((v, k) => `${k + 1}. id=${v.youtube_id} | ${v.title}${v.channel ? ` 
           start_sec: t.start, content: texts[k], embedding: vectors[k],
         })));
       }
-      const done = to >= total;
-      if (done) await admin.from('lectures').update({ index_status: 'done', indexed_at: new Date().toISOString() }).eq('id', lec.id);
-      return json({ done, segment, next: done ? null : segment + 1, segments: Math.ceil(total / SEGMENT), topics: topics.length });
+      // ننتهي عند: نهاية المدة المعروفة، أو قول النموذج إن الفيديو انتهى، أو جزء بلا مواضيع (بلا مدة)، أو حد أمان ساعتين
+      const done = (duration ? to >= duration : ended || !topics.length) || segment >= 11; // ١٢ جزءاً = ساعتان
+      if (done) await admin.from('lectures').update({ index_status: 'done', index_error: null, indexed_at: new Date().toISOString() }).eq('id', lec.id);
+      return json({ done, segment, next: done ? null : segment + 1, segments: duration ? Math.ceil(duration / SEGMENT) : null, topics: topics.length });
     }
 
     // ٤) تصنيف ملف PDF من أول صفحاته: المادة، الأستاذ، النوع، الفصل، العنوان، وهل هو مصوّر

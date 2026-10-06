@@ -60,7 +60,7 @@ export default function Lectures() {
   const index = async (l: Lecture) => {
     setIndexing((s) => ({ ...s, [l.id]: 'يشاهد الفيديو…' }));
     try {
-      await indexLecture(l.id, (n, total) => setIndexing((s) => ({ ...s, [l.id]: `جزء ${n}/${total}` })));
+      await indexLecture(l.id, (n, total) => setIndexing((s) => ({ ...s, [l.id]: `يشاهد الجزء ${n}${total ? ` من ${total}` : ''} (١٠ دقائق لكل جزء)` })));
       toast('فُهرست المحاضرة — المساعد يعرف مواضيعها بالدقيقة');
     } catch (e) {
       toast(e instanceof Error ? e.message : 'فشلت الفهرسة', true);
@@ -114,7 +114,9 @@ export default function Lectures() {
                         {l.is_published ? <span className="pill ok">منشورة</span> : <span className="pill warn">مخفية</span>}{' '}
                         {indexing[l.id] ? <span className="pill accent">{indexing[l.id]}</span>
                           : (l as Lecture & { index_status?: string }).index_status === 'done' ? <span className="pill accent">مفهرسة بالدقيقة</span>
-                          : (l as Lecture & { index_status?: string }).index_status === 'error' ? <span className="pill bad" title={(l as Lecture & { index_error?: string }).index_error ?? ''}>فشلت الفهرسة</span> : null}
+                          : (l as Lecture & { index_status?: string }).index_status === 'error' ? <span className="pill bad">فشلت الفهرسة</span> : null}
+                        {(l as Lecture & { index_status?: string }).index_status === 'error' && !indexing[l.id]
+                          ? <div className="small" style={{ color: 'var(--bad)', marginTop: 4 }}>{(l as Lecture & { index_error?: string }).index_error}</div> : null}
                       </td>
                       <td>
                         <div className="row" style={{ justifyContent: 'flex-end', flexWrap: 'nowrap' }}>

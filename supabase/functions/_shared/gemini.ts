@@ -39,6 +39,8 @@ export interface GenerateOptions {
   keyIndex?: number;
   /** كل مفتاح يبدأ بنموذج مختلف (الافتراضي). false = الأسرع أولاً على كل المفاتيح */
   spread?: boolean;
+  /** إعدادات إضافية لـ generationConfig (مثل mediaResolution للفيديو) */
+  extraConfig?: Record<string, unknown>;
 }
 
 // النماذج المشغولة مؤقتاً: نتخطاها مباشرة بدل انتظارها في كل سؤال (تبقى في ذاكرة الدالة ما دامت تعمل)
@@ -88,6 +90,7 @@ export async function generate(model: string | string[], contents: Content[], op
       temperature: opts.temperature ?? 0.4,
       maxOutputTokens: opts.maxOutputTokens ?? 4096,
       ...(opts.json ? { responseMimeType: 'application/json' } : {}),
+      ...opts.extraConfig,
     },
   };
   if (opts.system) body.system_instruction = { parts: [{ text: opts.system }] };
