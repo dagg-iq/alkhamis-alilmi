@@ -9,6 +9,8 @@ web-build/
 .DS_Store
 __MACOSX/
 android/
+# الوحدات الأصلية المحلية (كود Kotlin نكتبه بأنفسنا) ليست مولّدة
+!apps/mobile/modules/*/android/
 ios/
 *.keystore
 *.jks
