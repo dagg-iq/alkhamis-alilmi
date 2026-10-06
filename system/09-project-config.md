@@ -24,7 +24,7 @@
 EXPO_PUBLIC_SUPABASE_URL=https://yjxhprmtyuqnbgraocar.supabase.co
 EXPO_PUBLIC_SUPABASE_ANON_KEY=<anon public أعلاه>
 
-# apps/admin/.env.local  و  Netlify → Environment variables
+# apps/admin/.env.local (للتجربة المحلية) — النشر يتم بسير عمل Deploy Site
 VITE_SUPABASE_URL=https://yjxhprmtyuqnbgraocar.supabase.co
 VITE_SUPABASE_ANON_KEY=<anon public أعلاه>
 ```

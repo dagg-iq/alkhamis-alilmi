@@ -69,12 +69,12 @@
 ### ب) في Supabase
 1. **Authentication ← Sign In / Providers ← Google**: فعّله والصق Client ID و Client secret. احفظ.
 2. **Authentication ← URL Configuration**:
-   - **Site URL**: رابط لوحة التحكم (مؤقتاً `http://localhost:5173`، وبعد Netlify ضع رابطه).
+   - **Site URL**: `https://saeyiq.web.app/saey-dashboard/`
    - **Redirect URLs** أضف:
      - `saey://auth-callback` (التطبيق)
      - `exp://**` (للتجربة عبر Expo Go)
      - `http://localhost:5173` (لوحة التحكم محلياً)
-     - رابط Netlify لاحقاً، مثل `https://saey-admin.netlify.app`
+     - `https://saeyiq.web.app/saey-dashboard/`
 
 ## ٣. اجعل نفسك أدمن
 1. سجّل الدخول مرة واحدة (من التطبيق أو لوحة التحكم) — سيقول إنك بانتظار الموافقة، هذا طبيعي.
@@ -187,6 +187,14 @@ npm run mobile:start
   - `SUPABASE_URL`
   - `SUPABASE_ANON_KEY`
 
+## ١١. إصدار نسخة جديدة للطلاب (بعد كل APK)
+كل نسخة من apk-19 فما بعد تعرض للطالب «تحديث جديد متاح» وتُثبَّت فوق القديمة (البيانات تبقى). الخطوات:
+1. GitHub ← **Releases** ← آخر `apk-<رقم>` ← حمّل `saey.apk`.
+2. Dropbox ← ارفعه **بنفس الاسم** `saey.apk` في نفس المكان ← اختر **Replace** (الرابط يبقى نفسه).
+3. قل للمساعد «رفعت apk-<رقم>» ← يحدّث `version` في `apps/site/download-config.json` إلى نفس الرقم ويرفعه
+   (سير عمل Deploy Site ينشر `download.json`، فيظهر التحديث للطلاب خلال دقائق).
+> لا تنسَ الخطوة ٣: بدونها لا يعرف التطبيق أن هناك نسخة جديدة.
+
 ---
 
 ## بعد الإعداد: أول محتوى
@@ -203,6 +211,8 @@ npm run mobile:start
 |---|---|
 | بعد الدخول بـ Google لا يرجع للتطبيق | تأكد من `saey://auth-callback` في Redirect URLs |
 | «إعداد غير مكتمل» | ملف `.env` ناقص أو لم تُعِد تشغيل التطبيق/البناء |
-| فشل رفع الملزمة في لوحة التحكم | إعداد CORS في R2 (خطوة ٥-٤) غير محفوظ |
+| فشل رفع الملزمة في لوحة التحكم | الملف أكبر من ٥٠ ميغا (اضغطه)، أو سير عمل Deploy Supabase فشل في «Storage self-test» |
+| التحديث داخل التطبيق لا يظهر | رقم النسخة في `apps/site/download-config.json` لم يُحدَّث بعد رفع الملف على Dropbox |
+| المنبّه لا يرنّ والتطبيق مغلق | شاشة المؤقت ← «لم يرنّ؟» ← سعي ← «بلا قيود» للبطارية (شاومي، هواوي…) |
 | «المساعد مشغول» كثيراً | انتهى الحد المجاني لـ Gemini اليوم — خفّض الحد اليومي من الإعدادات |
 | الإشعارات لا تصل | خطوة ٩ كاملة، ثم Actions ← Deploy Supabase يجب أن يكون ✅، ثم ثبّت APK بُني بعد إضافة GOOGLE_SERVICES_JSON |
