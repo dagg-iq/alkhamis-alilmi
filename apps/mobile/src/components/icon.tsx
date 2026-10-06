@@ -93,14 +93,14 @@ export function LogoMark({ size = 40, ink, dot }: { size?: number; ink: string; 
 }
 
 /** شارة التوثيق */
+// ختم مسنّن متناظر (١٢ نتوءاً) بعلامة صح
+const BADGE = 'M12.00 2.60Q15.31 -0.36 16.70 3.86Q21.05 2.95 20.14 7.30Q24.36 8.69 21.40 12.00Q24.36 15.31 20.14 16.70Q21.05 21.05 16.70 20.14Q15.31 24.36 12.00 21.40Q8.69 24.36 7.30 20.14Q2.95 21.05 3.86 16.70Q-0.36 15.31 2.60 12.00Q-0.36 8.69 3.86 7.30Q2.95 2.95 7.30 3.86Q8.69 -0.36 12.00 2.60Z';
+
 export function VerifiedBadge({ size = 16, color }: { size?: number; color: string }) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 24 24">
-      <Path
-        d="M12 2l2.4 1.8 3-.2.9 2.9 2.5 1.7-1 2.8 1 2.8-2.5 1.7-.9 2.9-3-.2L12 22l-2.4-1.8-3 .2-.9-2.9-2.5-1.7 1-2.8-1-2.8 2.5-1.7.9-2.9 3 .2z"
-        fill={color}
-      />
-      <Path d="M8 12.3l2.7 2.7L16 9.7" stroke="#FFFFFF" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" fill="none" />
+    <Svg width={size} height={size} viewBox="0 0 24 24" accessibilityLabel="موثّق">
+      <Path d={BADGE} fill={color} />
+      <Path d="M7.6 12.4l2.9 2.9 5.9-6.1" stroke="#FFFFFF" strokeWidth={2.3} strokeLinecap="round" strokeLinejoin="round" fill="none" />
     </Svg>
   );
 }

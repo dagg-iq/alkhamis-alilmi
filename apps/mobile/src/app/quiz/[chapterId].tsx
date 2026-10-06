@@ -68,7 +68,7 @@ export default function Quiz() {
       <Screen>
         <Header title="النتيجة" />
         <Card tone="hero" style={{ alignItems: 'center', gap: 8, padding: 28 }}>
-          <T display size={64} color={c.heroInk} style={{ lineHeight: 76 }}>{arDigits(score)}/{arDigits(qs.length)}</T>
+          <T display size={64} color={c.heroInk}>{arDigits(score)}/{arDigits(qs.length)}</T>
           <T color={c.heroInk2}>{pct >= 0.9 ? 'ممتاز! هذا مستوى إعفاء' : pct >= 0.7 ? 'جيد جداً، راجع أخطاءك' : 'تحتاج مراجعة الفصل مرة أخرى'}</T>
         </Card>
         <Button title="إعادة الاختبار" icon="refresh" onPress={restart} />

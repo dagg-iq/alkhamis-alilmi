@@ -30,10 +30,10 @@ export default function Welcome() {
       <View style={{ flex: 1, justifyContent: 'center', gap: 28 }}>
         <Animated.View entering={enter(0)} style={{ flexDirection: 'row', alignItems: 'center', gap: 18 }}>
           <LogoMark size={96} ink={c.ink} dot={c.accent} />
-          <T display size={96} style={{ lineHeight: 110 }}>سعي</T>
+          <T display size={96}>سعي</T>
         </Animated.View>
         <Animated.View entering={enter(2)} style={{ gap: 10 }}>
-          <T display size={36} style={{ lineHeight: 46 }}>
+          <T display size={36}>
             اسعَ <T display size={36} color={c.accent}>تُعفَ.</T>
           </T>
           <T dim size={17} style={{ lineHeight: 30 }}>

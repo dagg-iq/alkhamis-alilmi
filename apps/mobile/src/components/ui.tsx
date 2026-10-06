@@ -10,7 +10,7 @@ import Animated, { Easing, ZoomIn, useAnimatedStyle, useSharedValue, withTiming 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { fonts, useTheme } from '@/lib/theme';
 import { Icon, type IconName, VerifiedBadge } from './icon';
-import { PressScale, Skeleton, Stagger, tap } from './motion';
+import { KeyboardView, PressScale, Skeleton, Stagger, tap } from './motion';
 
 // ---------------------------------------------------------------- النص
 type Weight = 'regular' | 'medium' | 'bold' | 'black';
@@ -46,7 +46,8 @@ export function T({
         {
           fontFamily: family,
           fontSize: size,
-          lineHeight: Math.round(size * (display ? 1.25 : serif ? 1.9 : 1.55)),
+          // خط العناوين له نقاط وذيول عميقة (ي، ج): مسافة سطر كافية حتى لا تُقص في أندرويد
+          lineHeight: Math.round(size * (display ? 1.5 : serif ? 1.9 : 1.6)),
           color: color ?? (dim ? c.ink2 : c.ink),
           writingDirection: 'rtl',
           ...(center ? { textAlign: 'center' as const } : null),
@@ -80,14 +81,14 @@ export function Screen({
   const inner = padded ? { paddingHorizontal: 20 } : null;
   if (!scroll) {
     return (
-      <View style={[{ flex: 1, backgroundColor: c.bg }, pad, style]}>
+      <KeyboardView style={[{ flex: 1, backgroundColor: c.bg }, pad, style]} bottomInset={insets.bottom}>
         <View style={[{ flex: 1 }, inner]}>{children}</View>
         {footer}
-      </View>
+      </KeyboardView>
     );
   }
   return (
-    <View style={{ flex: 1, backgroundColor: c.bg }}>
+    <KeyboardView style={{ backgroundColor: c.bg }} bottomInset={insets.bottom}>
       <ScrollView
         contentContainerStyle={[pad, inner, { gap: 16 }, style]}
         keyboardShouldPersistTaps="handled"
@@ -95,7 +96,9 @@ export function Screen({
         <Stagger>{children}</Stagger>
       </ScrollView>
       {footer}
-    </View>
+      {/* شريط خفيف تحت ساعة الهاتف حتى لا يتداخل المحتوى مع شريط الحالة عند التمرير */}
+      {edges.includes('top') ? <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, height: insets.top, backgroundColor: c.bg, opacity: 0.94 }} /> : null}
+    </KeyboardView>
   );
 }
 
@@ -385,8 +388,8 @@ export function Avatar({ name, url, size = 44, verified }: { name: string; url?:
         </View>
       )}
       {verified ? (
-        <View style={{ position: 'absolute', bottom: -2, left: -2, backgroundColor: c.bg, borderRadius: 10, padding: 1 }}>
-          <VerifiedBadge size={Math.max(14, size * 0.36)} color={c.accent} />
+        <View style={{ position: 'absolute', bottom: size > 80 ? size * 0.04 : -2, left: size > 80 ? size * 0.04 : -2, backgroundColor: c.bg, borderRadius: 99, padding: 2 }}>
+          <VerifiedBadge size={Math.min(26, Math.max(14, size * 0.3))} color={c.accent} />
         </View>
       ) : null}
     </View>
@@ -411,7 +414,7 @@ export function ProgressBar({ value, color, track, height = 6, marker }: {
   const pct = Math.max(0, Math.min(1, Number.isFinite(value) ? value : 0));
   const w = useSharedValue(0);
   useEffect(() => {
-    w.value = withTiming(pct, { duration: 900, easing: Easing.out(Easing.cubic) });
+    w.value = withTiming(pct, { duration: 500, easing: Easing.out(Easing.cubic) });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pct]);
   const fill = useAnimatedStyle(() => ({ width: `${w.value * 100}%` }));

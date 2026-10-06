@@ -2,7 +2,7 @@ import * as Haptics from 'expo-haptics';
 import { Children, isValidElement, useEffect, useState, type ReactNode } from 'react';
 import { Platform, Pressable, View, type PressableProps, type StyleProp, type ViewStyle } from 'react-native';
 import Animated, {
-  Easing, FadeInDown, ReduceMotion, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withSpring, withTiming,
+  Easing, FadeInDown, ReduceMotion, useAnimatedKeyboard, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withSpring, withTiming,
 } from 'react-native-reanimated';
 import { useTheme } from '@/lib/theme';
 
@@ -38,10 +38,10 @@ export function PressScale({
 
 /** دخول متتابع للعناصر: كل عنصر يصعد ويظهر بعد الذي قبله */
 export function enter(i: number) {
-  return FadeInDown.delay(Math.min(i, 8) * 55)
-    .duration(420)
-    .easing(Easing.out(Easing.cubic))
-    .withInitialValues({ transform: [{ translateY: 14 }] })
+  return FadeInDown.delay(Math.min(i, 4) * 25)
+    .duration(220)
+    .easing(Easing.out(Easing.quad))
+    .withInitialValues({ transform: [{ translateY: 6 }] })
     .reduceMotion(ReduceMotion.System);
 }
 
@@ -58,7 +58,7 @@ export function Stagger({ children }: { children: ReactNode }) {
 }
 
 /** رقم يعدّ تصاعدياً حتى قيمته (لمعدل الإعفاء وغيره) */
-export function useCountUp(target: number | null | undefined, duration = 900) {
+export function useCountUp(target: number | null | undefined, duration = 600) {
   const [v, setV] = useState(target ?? 0);
   useEffect(() => {
     if (target == null || !Number.isFinite(target)) return;
@@ -117,4 +117,14 @@ export function usePop(dep: unknown) {
 export function CountUp({ value, children }: { value: number | null; children: (v: number | null) => ReactNode }) {
   const v = useCountUp(value);
   return <>{children(value == null ? null : v ?? value)}</>;
+}
+
+/**
+ * حاوية تصعد مع لوحة المفاتيح بنفس سرعتها (أندرويد بوضع ملء الشاشة لا يرفع المحتوى تلقائياً).
+ * تُستخدم في الدردشة والمساعد وكل الشاشات التي فيها حقول كتابة.
+ */
+export function KeyboardView({ children, style, bottomInset = 0 }: { children: ReactNode; style?: StyleProp<ViewStyle>; bottomInset?: number }) {
+  const kb = useAnimatedKeyboard();
+  const pad = useAnimatedStyle(() => ({ paddingBottom: Math.max(0, kb.height.value - bottomInset) }));
+  return <Animated.View style={[{ flex: 1 }, style, pad]}>{children}</Animated.View>;
 }

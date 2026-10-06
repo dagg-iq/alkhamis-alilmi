@@ -1,6 +1,7 @@
 import { ThemeProvider, DarkTheme, DefaultTheme, Stack, router, useSegments } from 'expo-router';
 import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
+import { NavigationBar } from 'expo-navigation-bar';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { I18nManager, LogBox, Platform, ScrollView, Text, View } from 'react-native';
@@ -12,6 +13,7 @@ import { onNotificationTap, registerPush } from '@/lib/push';
 import { isConfigured } from '@/lib/supabase';
 import { AppThemeProvider, fontAssets, useTheme } from '@/lib/theme';
 import { Intro } from '@/components/intro';
+import { MessageBanner } from '@/components/message-banner';
 import { NotConfigured } from '@/components/not-configured';
 import { useWidgetSync } from '@/widgets/sync';
 
@@ -124,6 +126,8 @@ function Navigator() {
   return (
     <ThemeProvider value={navTheme}>
       <StatusBar style={dark ? 'light' : 'dark'} />
+      {/* ملء الشاشة: نخفي أزرار أندرويد السفلية (تظهر بالسحب من الأسفل) */}
+      {Platform.OS === 'android' ? <NavigationBar hidden /> : null}
       {/* المقدمة تبقى في نفس الموضع من الشجرة حتى لا تُعاد عند جاهزية الدخول */}
       {!ready ? <View style={{ flex: 1, backgroundColor: c.bg }} /> : (
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: c.bg }, animation: 'slide_from_left' }}>
@@ -133,6 +137,7 @@ function Navigator() {
         <Stack.Screen name="planner/new" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
       </Stack>
       )}
+      {ready ? <MessageBanner myId={approvedId} /> : null}
       {!introDone ? <Intro ready={ready} onDone={() => setIntroDone(true)} /> : null}
     </ThemeProvider>
   );

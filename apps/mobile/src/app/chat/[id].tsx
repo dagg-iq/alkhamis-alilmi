@@ -1,15 +1,17 @@
-import { arDigits, formatTime, type Attachment, type Message, type Profile } from '@saey/shared';
+import { arDigits, formatTime, ROLE_LABELS, type Attachment, type Message, type Profile } from '@saey/shared';
 import * as Clipboard from 'expo-clipboard';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator, Alert, FlatList, KeyboardAvoidingView, Platform, Pressable, ScrollView, TextInput, View,
+  ActivityIndicator, Alert, FlatList, Platform, Pressable, ScrollView, TextInput, View,
 } from 'react-native';
 import Animated, { FadeInDown, LinearTransition } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { KeyboardView } from '@/components/motion';
 import { Icon } from '@/components/icon';
+import { ConversationMark } from '@/components/group-mark';
 import { Sheet, SheetItem } from '@/components/sheet';
 import { Avatar, Field, IconButton, NameLine, Row, T } from '@/components/ui';
 import { useAuth, useMe } from '@/lib/auth';
@@ -31,6 +33,7 @@ export default function ChatScreen() {
 
   const [conv, setConv] = useState<ConversationRow | null>(null);
   const [members, setMembers] = useState<Record<string, Member>>({});
+  const [membersOpen, setMembersOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [reactions, setReactions] = useState<Reaction[]>([]);
   const [images, setImages] = useState<Record<string, string>>({});
@@ -223,18 +226,20 @@ export default function ChatScreen() {
   const byId = useMemo(() => Object.fromEntries(messages.map((m) => [m.id, m])), [messages]);
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: c.bg }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardView style={{ flex: 1, backgroundColor: c.bg }} bottomInset={insets.bottom}>
       {/* الرأس */}
       <View style={{ paddingTop: insets.top + 6, paddingHorizontal: 16, paddingBottom: 10, backgroundColor: c.card, borderBottomWidth: 1, borderBottomColor: c.line }}>
         <Row>
           <IconButton name="back" label="رجوع" onPress={() => router.back()} size={40} />
           <Pressable style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 }}
-            onPress={() => conv?.type === 'direct' && conv.peer_id && router.push(`/profile/${conv.peer_id}`)}>
+            accessibilityLabel={isGroup ? 'عرض الأعضاء' : 'الملف الشخصي'}
+            onPress={() => {
+              if (conv?.type === 'direct') { if (conv.peer_id) router.push(`/profile/${conv.peer_id}`); }
+              else setMembersOpen(true);
+            }}>
             {conv?.type === 'direct'
               ? <Avatar name={conv.peer_name ?? '؟'} url={conv.peer_avatar} size={38} />
-              : <View style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: c.soft, alignItems: 'center', justifyContent: 'center' }}>
-                <Icon name={conv?.type === 'school' ? 'home' : 'users'} size={20} color={c.accent} />
-              </View>}
+              : <ConversationMark type={conv?.type ?? 'group'} title={title} size={38} />}
             <View style={{ flex: 1 }}>
               <NameLine name={title} verified={conv?.type === 'direct' && !!conv.peer_verified} size={16} />
               <T dim size={12}>{isGroup ? `${arDigits(Object.keys(members).length)} عضو` : 'محادثة خاصة'}</T>
@@ -361,13 +366,55 @@ export default function ChatScreen() {
         <SheetItem icon="image" label="صورة من المعرض" onPress={() => sendImage(false)} />
         <SheetItem icon="book" label="من المنهج (محاضرة، ملزمة، أسئلة)" onPress={() => { setAttachOpen(false); setCurriculumOpen(true); }} />
       </Sheet>
+      <MembersSheet visible={membersOpen} onClose={() => setMembersOpen(false)} members={Object.values(members)}
+        title={title} type={conv?.type === 'direct' ? 'group' : conv?.type ?? 'group'} />
       <CurriculumPicker visible={curriculumOpen} onClose={() => setCurriculumOpen(false)}
         onPick={(a) => { setCurriculumOpen(false); send(a); }} />
-    </KeyboardAvoidingView>
+    </KeyboardView>
   );
 }
 
 // ---------------------------------------------------------------- الفقاعة
+const ROLE_ORDER: Member['role'][] = ['admin', 'moderator', 'student'];
+const ROLE_GROUP: Record<Member['role'], string> = { admin: 'الإدارة', moderator: 'المشرفون', student: 'الطلاب' };
+
+/** أعضاء المجموعة/الشعبة مصنّفين حسب الدور */
+function MembersSheet({ visible, onClose, members, title, type }: {
+  visible: boolean; onClose: () => void; members: Member[]; title: string; type: 'school' | 'section' | 'group';
+}) {
+  const { c } = useTheme();
+  const groups = ROLE_ORDER.map((role) => ({
+    role,
+    list: members.filter((m) => m.role === role).sort((a, b) => a.full_name.localeCompare(b.full_name, 'ar')),
+  })).filter((g) => g.list.length);
+  return (
+    <Sheet visible={visible} onClose={onClose}>
+      <View style={{ alignItems: 'center', gap: 8, paddingBottom: 8 }}>
+        <ConversationMark type={type} title={title} size={72} />
+        <T display size={24} center>{title}</T>
+        <T dim size={13}>{arDigits(members.length)} عضو</T>
+      </View>
+      <ScrollView style={{ maxHeight: 420 }}>
+        {groups.map((g) => (
+          <View key={g.role} style={{ gap: 2, marginTop: 10 }}>
+            <T weight="bold" size={13} color={c.ink2}>{ROLE_GROUP[g.role]} · {arDigits(g.list.length)}</T>
+            {g.list.map((m) => (
+              <Pressable key={m.id} onPress={() => { onClose(); router.push(`/profile/${m.id}`); }}
+                style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 8, opacity: pressed ? 0.6 : 1 })}>
+                <Avatar name={m.full_name} url={m.avatar_url} size={42} verified={m.is_verified} />
+                <View style={{ flex: 1 }}><NameLine name={m.full_name} verified={m.is_verified} /></View>
+                <View style={{ paddingHorizontal: 10, paddingVertical: 2, borderRadius: 999, backgroundColor: m.role === 'student' ? c.soft : m.role === 'admin' ? c.ink : c.accent }}>
+                  <T size={11} weight="bold" color={m.role === 'student' ? c.accent : m.role === 'admin' ? c.bg : '#FFFFFF'}>{ROLE_LABELS[m.role]}</T>
+                </View>
+              </Pressable>
+            ))}
+          </View>
+        ))}
+      </ScrollView>
+    </Sheet>
+  );
+}
+
 function Bubble({ m, mine, sender, showName, reply, replySender, imageUrl, reactions, myId, onLongPress, onReact }: {
   m: Message; mine: boolean; sender?: Member; showName: boolean; reply?: Message; replySender?: string;
   imageUrl?: string; reactions: Reaction[]; myId: string; onLongPress: () => void; onReact: (e: string) => void;

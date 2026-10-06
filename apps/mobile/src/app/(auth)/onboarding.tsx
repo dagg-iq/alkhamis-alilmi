@@ -1,3 +1,5 @@
+import { SectionMark } from '@/components/group-mark';
+import { PressScale, tap } from '@/components/motion';
 import { isTripleName, type Section } from '@saey/shared';
 import * as ImagePicker from 'expo-image-picker';
 import { File } from 'expo-file-system';
@@ -71,9 +73,17 @@ export default function Onboarding() {
         <T weight="bold" size={14}>الشعبة</T>
         {sections.loading ? <Loading /> : (
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
-            {(sections.data ?? []).map((s) => (
-              <Chip key={s.id} label={`شعبة ${s.name}`} active={section === s.id} onPress={() => setSection(s.id)} />
-            ))}
+            {(sections.data ?? []).map((s) => {
+              const on = section === s.id;
+              return (
+                <PressScale key={s.id} onPress={() => { tap('select'); setSection(s.id); }} scaleTo={0.92}
+                  accessibilityRole="button" accessibilityState={{ selected: on }}
+                  style={{ alignItems: 'center', gap: 6, padding: 6, borderRadius: 22, borderWidth: 2, borderColor: on ? c.accent : 'transparent' }}>
+                  <SectionMark name={s.name} size={58} />
+                  <T size={13} weight={on ? 'bold' : 'medium'} color={on ? c.accent : c.ink2}>شعبة {s.name}</T>
+                </PressScale>
+              );
+            })}
           </View>
         )}
       </View>

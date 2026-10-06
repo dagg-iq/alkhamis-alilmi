@@ -142,6 +142,13 @@
             }
           ]
         }
+      ],
+      [
+        "expo-navigation-bar",
+        {
+          "hidden": true,
+          "style": "auto"
+        }
       ]
     ],
     "experiments": {

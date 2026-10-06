@@ -12,7 +12,7 @@ const ACircle = Animated.createAnimatedComponent(Circle);
 
 // مراحل المدّ (الكشيدة) للاسم: سعي ← سـعــــي ← سعي
 const KASHIDA: [number, number][] = [
-  [0, 0], [1, 1], [1, 2], [2, 3], [2, 4], [2, 5], [2, 5], [2, 5], [2, 4], [1, 3], [1, 2], [1, 1], [0, 0],
+  [0, 0], [1, 1], [1, 2], [2, 3], [2, 4], [2, 4], [1, 3], [1, 2], [0, 1], [0, 0],
 ];
 const TATWEEL = 'ـ';
 const word = ([a, b]: [number, number]) => `س${TATWEEL.repeat(a)}ع${TATWEEL.repeat(b)}ي`;
@@ -41,15 +41,15 @@ export function Intro({ ready, onDone }: { ready: boolean; onDone: () => void })
   useEffect(() => {
     SplashScreen.hideAsync().catch(() => {});
     const ease = Easing.out(Easing.cubic);
-    const spring = { damping: 11, stiffness: 140, mass: 0.7 };
-    base.value = withTiming(80, { duration: 380, easing: ease });
-    h1.value = withDelay(260, withSpring(42, spring));
-    h2.value = withDelay(400, withSpring(60, spring));
-    h3.value = withDelay(540, withSpring(74, spring));
-    dotR.value = withDelay(820, withTiming(10, { duration: 120 }));
-    dotY.value = withDelay(820, withSpring(12, { damping: 7, stiffness: 160, mass: 0.6 }));
-    nameOpacity.value = withDelay(1050, withTiming(1, { duration: 320 }));
-    nameY.value = withDelay(1050, withSpring(0, { damping: 14, stiffness: 120 }));
+    const spring = { damping: 13, stiffness: 320, mass: 0.6 };
+    base.value = withTiming(80, { duration: 220, easing: ease });
+    h1.value = withDelay(120, withSpring(42, spring));
+    h2.value = withDelay(190, withSpring(60, spring));
+    h3.value = withDelay(260, withSpring(74, spring));
+    dotR.value = withDelay(380, withTiming(10, { duration: 90 }));
+    dotY.value = withDelay(380, withSpring(12, { damping: 9, stiffness: 300, mass: 0.5 }));
+    nameOpacity.value = withDelay(430, withTiming(1, { duration: 200 }));
+    nameY.value = withDelay(430, withSpring(0, { damping: 16, stiffness: 260 }));
 
     // المدّ: يبدأ بعد ظهور الاسم
     let i = 0;
@@ -59,13 +59,13 @@ export function Intro({ ready, onDone }: { ready: boolean; onDone: () => void })
         i += 1;
         if (i >= KASHIDA.length) {
           if (interval) clearInterval(interval);
-          nameScale.value = withSequence(withTiming(1.06, { duration: 140 }), withSpring(1, { damping: 8 }));
-          setTimeout(() => setAnimDone(true), 380);
+          nameScale.value = withSequence(withTiming(1.05, { duration: 90 }), withSpring(1, { damping: 10, stiffness: 300 }));
+          setTimeout(() => setAnimDone(true), 160);
           return;
         }
         setStep(i);
-      }, 70);
-    }, 1350);
+      }, 45);
+    }, 560);
     return () => {
       clearTimeout(start);
       if (interval) clearInterval(interval);
@@ -77,7 +77,7 @@ export function Intro({ ready, onDone }: { ready: boolean; onDone: () => void })
   useEffect(() => {
     if (animDone && ready && !leaving.current) {
       leaving.current = true;
-      exit.value = withTiming(1, { duration: 420, easing: Easing.inOut(Easing.cubic) }, (fin) => {
+      exit.value = withTiming(1, { duration: 260, easing: Easing.out(Easing.cubic) }, (fin) => {
         if (fin) runOnJS(onDone)();
       });
     }
@@ -117,7 +117,7 @@ export function Intro({ ready, onDone }: { ready: boolean; onDone: () => void })
           <ACircle animatedProps={dot} cx={30} fill={c.accent} />
         </Svg>
         <Animated.View style={nameStyle}>
-          <Text style={{ fontFamily: fonts.display, fontSize: 64, lineHeight: 92, color: c.ink, writingDirection: 'rtl' }}>
+          <Text style={{ fontFamily: fonts.display, fontSize: 64, lineHeight: 112, paddingBottom: 6, color: c.ink, writingDirection: 'rtl' }}>
             {word(KASHIDA[step])}
           </Text>
         </Animated.View>

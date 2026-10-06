@@ -97,7 +97,7 @@ export default function Timer() {
             transform={`rotate(-90 ${size / 2} ${size / 2})`} />
         </Svg>
         <View style={{ position: 'absolute', alignItems: 'center' }}>
-          <T display size={60} style={{ lineHeight: 72 }}>{mm}:{ss}</T>
+          <T display size={60}>{mm}:{ss}</T>
           <T dim>{mode === 'focus' ? 'وقت التركيز' : 'استراحة'}</T>
         </View>
       </View>

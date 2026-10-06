@@ -42,7 +42,7 @@ const rpc = {
 
 (async () => {
   const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH });
-  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const ctx = await browser.newContext({ viewport: { width: Number(process.env.W || 390), height: 800 } });
   await ctx.addInitScript(([s]) => localStorage.setItem('sb-yjxhprmtyuqnbgraocar-auth-token', s), [JSON.stringify(session)]);
   await ctx.route('**/*.supabase.co/**', async (route) => {
     const req = route.request();
@@ -57,7 +57,7 @@ const rpc = {
     if (url.pathname.includes('/auth/v1/')) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ user: session.user }) });
     return route.fulfill({ status: 200, contentType: 'application/json', headers: { 'content-range': '0-0/1' }, body: JSON.stringify(body) });
   });
-  const routes = ['/', '/subjects', '/grades', '/chat', '/more', '/subject/s0', '/subject/s2', '/lecture/l1', '/questions/q1', '/grades/s0', '/grades/edit',
+  const routes = process.env.ROUTES ? process.env.ROUTES.split(',') : ['/', '/subjects', '/grades', '/chat', '/more', '/subject/s0', '/subject/s2', '/lecture/l1', '/questions/q1', '/grades/s0', '/grades/edit',
     '/planner', '/planner/new', '/news', '/news/p1', '/news/new', '/notifications', '/ai', '/ai/a1', '/quiz/c1', '/timer', '/scan',
     `/profile/${UID}`, '/settings', '/document/d1', '/chat/cv1', '/chat/new'];
   const results = [];

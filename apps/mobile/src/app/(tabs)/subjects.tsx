@@ -32,7 +32,7 @@ export default function Subjects() {
               <Card key={s.id} onPress={() => router.push(`/subject/${s.id}`)} style={{ gap: 12 }}>
                 <Row>
                   <View style={{ width: 44, height: 44, borderRadius: 14, backgroundColor: c.soft, alignItems: 'center', justifyContent: 'center' }}>
-                    <T display size={20} color={c.accent} style={{ lineHeight: 26 }}>{arDigits(i + 1)}</T>
+                    <T display size={20} color={c.accent}>{arDigits(i + 1)}</T>
                   </View>
                   <View style={{ flex: 1 }}>
                     <T weight="bold" size={17}>{s.name}</T>

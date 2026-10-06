@@ -2,8 +2,9 @@ import type { AiSource, Subject } from '@saey/shared';
 import { arDigits } from '@saey/shared';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, KeyboardAvoidingView, Platform, Pressable, ScrollView, TextInput, View } from 'react-native';
+import { ActivityIndicator, FlatList, Platform, Pressable, ScrollView, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { KeyboardView } from '@/components/motion';
 import { Icon, LogoMark } from '@/components/icon';
 import { RichText } from '@/components/rich-text';
 import { Chip, IconButton, Row, T } from '@/components/ui';
@@ -57,7 +58,7 @@ export default function AiChat() {
   };
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: c.bg }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardView style={{ flex: 1, backgroundColor: c.bg }} bottomInset={insets.bottom}>
       <View style={{ paddingTop: insets.top + 6, paddingHorizontal: 16, paddingBottom: 10, gap: 10, backgroundColor: c.card, borderBottomWidth: 1, borderBottomColor: c.line }}>
         <Row>
           <IconButton name="back" label="رجوع" size={40} onPress={() => router.back()} />
@@ -129,6 +130,6 @@ export default function AiChat() {
           <Icon name="send" size={20} color="#FFFFFF" strokeWidth={2} />
         </Pressable>
       </Row>
-    </KeyboardAvoidingView>
+    </KeyboardView>
   );
 }

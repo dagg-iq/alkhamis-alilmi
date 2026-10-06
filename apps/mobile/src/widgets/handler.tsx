@@ -1,3 +1,4 @@
+'use no memo'; // الويدجتات دوال خام: مترجم React يكسرها (Invalid hook call)
 import type { WidgetTaskHandlerProps } from 'react-native-android-widget';
 import { fetchSnapshot, readSnapshot, writeSnapshot } from './data';
 import { renderWidgetFor } from './registry';

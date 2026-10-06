@@ -67,14 +67,14 @@ export default function Grades() {
           <Row gap={10} style={{ alignItems: 'stretch' }}>
             <Card tone="hero" style={{ flex: 1, gap: 2 }}>
               <T size={13} color={c.heroInk2}>المعدل الحالي</T>
-              <CountUp value={general.average}>{(v) => <T display size={34} color={c.heroInk} style={{ lineHeight: 44 }}>{formatScore(v)}</T>}</CountUp>
+              <CountUp value={general.average}>{(v) => <T display size={34} color={c.heroInk}>{formatScore(v)}</T>}</CountUp>
               <T size={12} color={c.heroInk2}>
                 إعفاء عام: {general.exempt ? (general.final ? 'متحقق' : 'على الطريق') : general.meetsAverage ? 'مادة تحت ' + arDigits(rules.generalMin) : 'تحت ' + arDigits(rules.generalAvg)}
               </T>
             </Card>
             <Card style={{ flex: 1, gap: 2 }}>
               <T dim size={13}>إعفاء فردي ممكن</T>
-              <T display size={34} style={{ lineHeight: 44 }}>
+              <T display size={34}>
                 {arDigits(possible)}<T dim size={18}> من {arDigits(subjects.length)}</T>
               </T>
               <T dim size={12} lines={1}>{hard.length ? `${hard.slice(0, 2).join(' و')} صعبة` : 'كلها ممكنة'}</T>

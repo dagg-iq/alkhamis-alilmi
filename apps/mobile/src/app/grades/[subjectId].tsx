@@ -49,7 +49,7 @@ export default function SubjectGrades() {
       <Row gap={10}>
         <Card tone="hero" style={{ flex: 1 }}>
           <T size={13} color={c.heroInk2}>{st.annual !== null ? 'السعي السنوي' : 'المعدل الحالي'}</T>
-          <T display size={36} color={c.heroInk} style={{ lineHeight: 46 }}>{formatScore(st.annual ?? st.current)}</T>
+          <T display size={36} color={c.heroInk}>{formatScore(st.annual ?? st.current)}</T>
         </Card>
         <Card style={{ flex: 1, gap: 4 }}>
           <Row style={{ justifyContent: 'space-between' }}><T dim size={13}>الفصل الأول</T><T weight="bold">{formatScore(semester1(g))}</T></Row>

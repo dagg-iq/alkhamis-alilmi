@@ -1,3 +1,4 @@
+import { SectionMark } from '@/components/group-mark';
 import { ROLE_LABELS, formatDate, type Profile } from '@saey/shared';
 import { File } from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
@@ -74,7 +75,7 @@ export default function ProfileScreen() {
         <NameLine name={p.full_name} verified={p.is_verified} size={24} />
         <Row gap={8}>
           {p.role !== 'student' ? <Chip small label={ROLE_LABELS[p.role]} bg={c.accent} color="#FFFFFF" /> : null}
-          {p.sections ? <Chip small label={`شعبة ${p.sections.name}`} /> : null}
+          {p.sections ? <Row gap={6}><SectionMark name={p.sections.name} size={26} /><T size={13} weight="bold">شعبة {p.sections.name}</T></Row> : null}
         </Row>
       </View>
       {editing ? (

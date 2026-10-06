@@ -97,7 +97,7 @@ export default function Home() {
         {general?.average != null ? (
           <>
             <Row gap={10} style={{ alignItems: 'baseline' }}>
-              <CountUp value={general.average}>{(v) => <T display size={60} color={c.heroInk} style={{ lineHeight: 70 }}>{formatScore(v)}</T>}</CountUp>
+              <CountUp value={general.average}>{(v) => <T display size={60} color={c.heroInk}>{formatScore(v)}</T>}</CountUp>
               <T size={14} color={c.heroInk2}>معدلك الحالي · الهدف {formatScore(rules.generalAvg, 0)}</T>
             </Row>
             <ProgressBar value={general.average / 100} track={c.track} marker={rules.generalAvg / 100} height={8} />
@@ -160,7 +160,7 @@ export default function Home() {
 
       {/* المواد */}
       <SectionTitle title="موادك" action="الكل" onAction={() => router.push('/subjects')} />
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 10 }}>
         {subjects.map((s) => {
           const p = d?.progress[s.id];
           return (

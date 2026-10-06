@@ -27,7 +27,7 @@ export default function TabsLayout() {
 
   return (
     <Tabs
-      screenOptions={{ headerShown: false, sceneStyle: { backgroundColor: c.bg }, animation: 'fade' }}
+      screenOptions={{ headerShown: false, sceneStyle: { backgroundColor: c.bg } }}
       tabBar={({ state, navigation }) => (
         <View style={{
           flexDirection: 'row', backgroundColor: c.card, borderTopWidth: 1, borderTopColor: c.line,

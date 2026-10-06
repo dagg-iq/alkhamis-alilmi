@@ -3,6 +3,7 @@ import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect } from 'react';
 import { Pressable, View } from 'react-native';
 import { Icon } from '@/components/icon';
+import { ConversationMark } from '@/components/group-mark';
 import { Avatar, Empty, ErrorBox, Header, IconButton, Loading, NameLine, Row, Screen, T } from '@/components/ui';
 import { useSettings } from '@/lib/settings';
 import { must, supabase } from '@/lib/supabase';
@@ -50,9 +51,7 @@ export default function ChatList() {
                 {conv.type === 'direct' ? (
                   <Avatar name={conv.peer_name ?? '؟'} url={conv.peer_avatar} size={52} verified={!!conv.peer_verified} />
                 ) : (
-                  <View style={{ width: 52, height: 52, borderRadius: 26, backgroundColor: conv.type === 'school' ? c.heroBg : c.soft, alignItems: 'center', justifyContent: 'center' }}>
-                    <Icon name={conv.type === 'school' ? 'home' : 'users'} size={24} color={conv.type === 'school' ? '#FFFFFF' : c.accent} />
-                  </View>
+                  <ConversationMark type={conv.type} title={conversationTitle(conv)} size={52} />
                 )}
                 <View style={{ flex: 1, gap: 2 }}>
                   <Row style={{ justifyContent: 'space-between' }}>
