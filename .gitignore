@@ -14,3 +14,4 @@ ios/
 *.jks
 supabase/.temp/
 supabase/.branches/
+hosting/

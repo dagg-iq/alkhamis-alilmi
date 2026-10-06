@@ -1,0 +1,45 @@
+# ينشر موقع سعي التعريفي + لوحة التحكم على Firebase Hosting:
+#   https://saeyiq.web.app                 الموقع
+#   https://saeyiq.web.app/saey-dashboard  لوحة التحكم
+# يستخدم سر FCM_SERVICE_ACCOUNT (حساب خدمة Firebase نفسه). رابط التنزيل اختياري من متغير DOWNLOAD_URL.
+name: Deploy Site
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, claude/repository-name-arabic-iegosv]
+    paths:
+      - 'apps/site/**'
+      - 'apps/admin/**'
+      - 'packages/shared/**'
+      - 'firebase.json'
+      - 'scripts/build-hosting.sh'
+      - '.github/workflows/deploy-site.yml'
+
+concurrency:
+  group: deploy-site
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Build site + dashboard
+        env:
+          DOWNLOAD_URL: ${{ vars.DOWNLOAD_URL }}
+          DOWNLOAD_VERSION: ${{ vars.DOWNLOAD_VERSION }}
+          DOWNLOAD_SIZE_MB: ${{ vars.DOWNLOAD_SIZE_MB }}
+        run: bash scripts/build-hosting.sh
+      - name: Deploy to Firebase Hosting
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FCM_SERVICE_ACCOUNT }}
+          projectId: saeyiq
+          channelId: live

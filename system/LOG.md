@@ -108,3 +108,8 @@
 - ✅ بناء `apk-14` (كل تعديلات الجلسة ٢) نجح: Releases ← `apk-14`.
 - ✅ صاحب المشروع أضاف `SUPABASE_ACCESS_TOKEN` و `PUSH_WEBHOOK_SECRET` وشغّل «Deploy Supabase»: رُفعت الدوال السبع، وأُنشئت مشغّلات الإشعارات (migration ١١) وحُفظ الرابط والسر في `private.settings` (تحقق من السجل).
 - **التالي**: `GEMINI_API_KEY` (الخطوة ٤) ← ثم Firebase (`GOOGLE_SERVICES_JSON` + `FCM_SERVICE_ACCOUNT`، الخطوة ٩) ← إعادة تشغيل Deploy Supabase وبناء APK. قرار التخزين ما زال معلّقاً.
+
+## 2026-10-06 — الخطوات مع صاحب المشروع + التخزين + الموقع
+- ✅ Gemini (المفتاح بصيغة `AQ.` الجديدة يعمل — اختُبر بطلب مجاني)، ✅ أدمن، ✅ Firebase (مشروع `saeyiq`) وسرّاه، apk-15 أول نسخة مع Firebase.
+- التخزين: Supabase Storage بدل R2 (+ اختبار ذاتي في سير العمل). الموقع التعريفي `apps/site` + لوحة التحكم على `/saey-dashboard/` عبر Firebase Hosting.
+- **معلّق**: مكان ملف APK للتنزيل العام (المستودع خاص، وFirebase المجاني لا يتحمل).

@@ -1,7 +1,7 @@
-// روابط رفع وتحميل مؤقتة لملفات R2 بعد التحقق من الصلاحية
+// روابط رفع وتحميل مؤقتة للملفات بعد التحقق من الصلاحية (Supabase Storage أو R2/B2)
 import { handler, HttpError, json } from '../_shared/cors.ts';
 import { getCaller } from '../_shared/supabase.ts';
-import { presign } from '../_shared/r2.ts';
+import { MAX_UPLOAD_BYTES, presign } from '../_shared/storage.ts';
 
 type Kind = 'material' | 'chat' | 'scan' | 'cover';
 const PREFIX: Record<Kind, string> = { material: 'materials', chat: 'chat', scan: 'scans', cover: 'covers' };
@@ -24,6 +24,9 @@ Deno.serve(handler(async (req) => {
     const kind = body.kind as Kind;
     if (!PREFIX[kind]) throw new HttpError(400, 'نوع ملف غير معروف.');
     if (!ALLOWED_TYPES[kind].includes(body.contentType)) throw new HttpError(400, 'صيغة الملف غير مدعومة.');
+    if (typeof body.size === 'number' && body.size > MAX_UPLOAD_BYTES) {
+      throw new HttpError(413, `الملف أكبر من ${Math.round(MAX_UPLOAD_BYTES / 1048576)} ميغا. اضغطه (مثلاً بموقع ilovepdf.com) ثم ارفعه.`);
+    }
     let folder = PREFIX[kind];
     if (kind === 'chat') {
       const { data: member } = await caller.client.rpc('is_member', { p_conversation: body.conversationId });

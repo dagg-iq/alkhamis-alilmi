@@ -4,7 +4,7 @@ import { PDFDocument } from 'npm:pdf-lib@1.17.1';
 import { handler, HttpError, json } from '../_shared/cors.ts';
 import { admin, getCaller, getSetting } from '../_shared/supabase.ts';
 import { chunkText, embed, generate, GeminiQuotaError, parseJson, uploadFile } from '../_shared/gemini.ts';
-import { getObject } from '../_shared/r2.ts';
+import { getObject } from '../_shared/storage.ts';
 
 const BATCH = 10;
 

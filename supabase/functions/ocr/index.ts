@@ -3,7 +3,7 @@ import { PDFDocument } from 'npm:pdf-lib@1.17.1';
 import { handler, HttpError, json } from '../_shared/cors.ts';
 import { admin, getCaller, getSetting } from '../_shared/supabase.ts';
 import { generate, GeminiQuotaError, toBase64 } from '../_shared/gemini.ts';
-import { getObject, putObject } from '../_shared/r2.ts';
+import { getObject, putObject } from '../_shared/storage.ts';
 
 const PROMPT = `هذه صور لورقة أسئلة امتحان لطلاب الخامس الإعدادي العلمي في العراق.
 انسخ الأسئلة كاملة بدقة تامة إلى Markdown:

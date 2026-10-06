@@ -32,16 +32,16 @@ export async function callFunction<T>(name: string, body: Record<string, unknown
   return data as T;
 }
 
-/** يرفع ملفاً إلى R2 عبر رابط موقّع، مع تقدّم الرفع */
-export async function uploadToR2(file: File, kind: 'material' | 'cover' | 'scan', onProgress?: (p: number) => void): Promise<string> {
-  const { key, url: putUrl } = await callFunction<{ key: string; url: string }>('files', { action: 'upload', kind, contentType: file.type });
+/** يرفع ملفاً إلى التخزين عبر رابط موقّع، مع تقدّم الرفع */
+export async function uploadFile(file: File, kind: 'material' | 'cover' | 'scan', onProgress?: (p: number) => void): Promise<string> {
+  const { key, url: putUrl } = await callFunction<{ key: string; url: string }>('files', { action: 'upload', kind, contentType: file.type, size: file.size });
   await new Promise<void>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open('PUT', putUrl);
     xhr.setRequestHeader('Content-Type', file.type);
     xhr.upload.onprogress = (e) => e.lengthComputable && onProgress?.(e.loaded / e.total);
-    xhr.onload = () => (xhr.status < 300 ? resolve() : reject(new Error(`فشل الرفع (${xhr.status}) — تأكد من إعداد CORS في R2`)));
-    xhr.onerror = () => reject(new Error('فشل الرفع — تأكد من إعداد CORS في R2'));
+    xhr.onload = () => (xhr.status < 300 ? resolve() : reject(new Error(`فشل الرفع (${xhr.status}) — حاول مرة أخرى`)));
+    xhr.onerror = () => reject(new Error('فشل الرفع — تأكد من الإنترنت وحاول مرة أخرى'));
     xhr.send(file);
   });
   return key;

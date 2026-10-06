@@ -4,7 +4,7 @@ import {
 import { useState } from 'react';
 import { Empty, Field, Modal, check, useAction, useToast } from '../components/ui';
 import { useLoad } from '../lib/hooks';
-import { callFunction, must, signedUrl, supabase, uploadToR2 } from '../lib/supabase';
+import { callFunction, must, signedUrl, supabase, uploadFile } from '../lib/supabase';
 
 interface Draft { file: File | null; subject_id: string; chapter_id: string; teacher_id: string; kind: DocumentKind; title: string }
 
@@ -39,7 +39,7 @@ export default function Documents() {
     if (draft.file.type !== 'application/pdf') throw new Error('الملف يجب أن يكون PDF');
     if (!draft.title.trim()) throw new Error('اكتب عنوان الملزمة');
     setUpload(0);
-    const key = await uploadToR2(draft.file, 'material', setUpload);
+    const key = await uploadFile(draft.file, 'material', setUpload);
     await check(supabase.from('documents').insert({
       subject_id: draft.subject_id, chapter_id: draft.chapter_id || null, teacher_id: draft.teacher_id || null,
       kind: draft.kind, title: draft.title.trim(), file_key: key, size_bytes: draft.file.size,

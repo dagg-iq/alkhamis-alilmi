@@ -28,23 +28,29 @@ const data = {
   posts: [{ id: 'p1', author_id: UID, kind: 'holiday', title: 'عطلة غداً', body: 'غداً عطلة رسمية', cover_key: null, section_id: null, is_pinned: true, published_at: new Date().toISOString(), profiles: { full_name: 'الأدمن' } }],
   notifications: [{ id: 'n1', user_id: UID, type: 'post', title: 'عطلة غداً', body: 'تفاصيل', payload: { post_id: 'p1' }, read_at: null, created_at: new Date().toISOString() }],
   app_settings: [{ key: 'grading', value: { individual_exempt: 90, general_avg: 85, general_min: 75, pass: 50, round: 'half_up' } }, { key: 'ai', value: { daily_limit: 20 } }, { key: 'chat', value: { direct_messages: true } }],
-  conversation_members: [{ profiles: profile }],
-  messages: [{ id: 'm1', conversation_id: 'cv1', sender_id: UID, body: 'السلام عليكم @علي_حسين', reply_to_id: null, attachment: null, mentions: [], created_at: new Date().toISOString(), edited_at: null, deleted_at: null },
-             { id: 'm2', conversation_id: 'cv1', sender_id: UID, body: null, reply_to_id: 'm1', attachment: { type: 'lecture', id: 'l1', title: 'المحاضرة ١' }, mentions: [], created_at: new Date().toISOString(), edited_at: null, deleted_at: null }],
-  message_reactions: [{ message_id: 'm1', user_id: UID, emoji: '❤️' }],
+  conversation_members: [{ profiles: profile }, { profiles: { id: 'u2', full_name: 'حيدر كريم جاسم', avatar_url: null, is_verified: false, role: 'student' } }],
+  messages: [
+    { id: 'm4', conversation_id: 'cv1', sender_id: UID, body: 'شكراً، سأراجعها الليلة @حيدر_كريم', reply_to_id: 'm3', attachment: null, mentions: [], created_at: new Date().toISOString(), edited_at: null, deleted_at: null },
+    { id: 'm3', conversation_id: 'cv1', sender_id: 'u2', body: null, reply_to_id: null, attachment: { type: 'lecture', id: 'l1', title: 'المتسعات — المحاضرة الأولى' }, mentions: [], created_at: new Date(Date.now() - 60000).toISOString(), edited_at: null, deleted_at: null },
+    { id: 'm2', conversation_id: 'cv1', sender_id: 'u2', body: 'هذه محاضرة المتسعات، شرحها ممتاز', reply_to_id: null, attachment: null, mentions: [], created_at: new Date(Date.now() - 120000).toISOString(), edited_at: null, deleted_at: null },
+    { id: 'm1', conversation_id: 'cv1', sender_id: UID, body: 'السلام عليكم، أحد عنده شرح لفصل المتسعات؟', reply_to_id: null, attachment: null, mentions: [], created_at: new Date(Date.now() - 180000).toISOString(), edited_at: null, deleted_at: null },
+  ],
+  message_reactions: [{ message_id: 'm2', user_id: UID, emoji: '❤️' }],
   ai_chats: [{ id: 'a1', title: 'سؤال عن المتسعات', updated_at: new Date().toISOString() }],
-  ai_messages: [{ id: 'am1', role: 'user', content: 'ما هي السعة؟', sources: null }, { id: 'am2', role: 'assistant', content: 'السعة $C=Q/V$ [١]', sources: [{ title: 'ملزمة الفيزياء', page: 3 }] }],
+  ai_messages: [{ id: 'am1', role: 'user', content: 'ما هي السعة؟', sources: null }, { id: 'am2', role: 'assistant', content: '**السعة** هي نسبة الشحنة المختزنة على أحد لوحي المتسعة إلى فرق الجهد بينهما.\n\n- السعة = الشحنة ÷ فرق الجهد\n- وحدتها **الفاراد**\n- تزداد بزيادة مساحة اللوحين\n- وتقل بزيادة البعد بينهما [١]', sources: [{ title: 'ملزمة الفيزياء — الفصل الأول', page: 3 }] }],
   ai_usage: [{ count: 3 }], quiz_attempts: [], study_sessions: [], push_tokens: [],
 };
 const rpc = {
-  my_conversations: [{ id: 'cv1', type: 'school', title: 'المدرسة', only_staff_can_post: false, last_message_at: new Date().toISOString(), last_body: 'السلام عليكم', last_sender: 'علي', unread: 2, muted: false, peer_id: null, peer_name: null, peer_avatar: null, peer_verified: null }],
+  my_conversations: [{ id: 'cv1', type: 'section', title: 'شعبة أ', only_staff_can_post: false, last_message_at: new Date().toISOString(), last_body: 'شكراً، سأراجعها الليلة', last_sender: 'علي', unread: 0, muted: false, peer_id: null, peer_name: null, peer_avatar: null, peer_verified: null },
+    { id: 'cv2', type: 'direct', title: null, only_staff_can_post: false, last_message_at: new Date(Date.now() - 3600000).toISOString(), last_body: 'متى امتحان الكيمياء؟', last_sender: 'حيدر', unread: 1, muted: false, peer_id: 'u2', peer_name: 'حيدر كريم جاسم', peer_avatar: null, peer_verified: false },
+    { id: 'cv3', type: 'school', title: 'المدرسة', only_staff_can_post: false, last_message_at: new Date().toISOString(), last_body: 'غداً عطلة رسمية بمناسبة المولد النبوي', last_sender: 'الإدارة', unread: 2, muted: false, peer_id: null, peer_name: null, peer_avatar: null, peer_verified: null }],
   my_study_week: Array.from({ length: 7 }, (_, i) => ({ day: new Date(Date.now() - (6 - i) * 86400000).toISOString().slice(0, 10), minutes: i * 10 })),
   mark_read: null,
 };
 
 (async () => {
   const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH });
-  const ctx = await browser.newContext({ viewport: { width: Number(process.env.W || 390), height: Number(process.env.H || 800) } });
+  const ctx = await browser.newContext({ viewport: { width: Number(process.env.W || 390), height: Number(process.env.H || 800) }, deviceScaleFactor: Number(process.env.DSF || 1) });
   await ctx.addInitScript(([s, goal, theme]) => {
     localStorage.setItem('sb-yjxhprmtyuqnbgraocar-auth-token', s);
     if (goal) localStorage.setItem('saey.goal', goal);

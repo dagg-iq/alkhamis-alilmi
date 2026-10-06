@@ -6,7 +6,7 @@ export default function Login({ denied }: { denied: boolean }) {
   const [busy, setBusy] = useState(false);
   const signIn = async () => {
     setBusy(true);
-    await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin, queryParams: { prompt: 'select_account' } } });
+    await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin + import.meta.env.BASE_URL, queryParams: { prompt: 'select_account' } } });
   };
   return (
     <div className="login">

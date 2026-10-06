@@ -1,0 +1,22 @@
+{
+  "hosting": {
+    "public": "hosting",
+    "cleanUrls": true,
+    "rewrites": [
+      { "source": "/saey-dashboard/**", "destination": "/saey-dashboard/index.html" }
+    ],
+    "headers": [
+      { "source": "**", "headers": [
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" }
+      ] },
+      { "source": "/saey-dashboard/**", "headers": [
+        { "key": "X-Frame-Options", "value": "DENY" },
+        { "key": "X-Robots-Tag", "value": "noindex, nofollow" }
+      ] },
+      { "source": "**/*.@(woff2|webp|png)", "headers": [{ "key": "Cache-Control", "value": "public, max-age=2592000" }] },
+      { "source": "/saey-dashboard/assets/**", "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }] },
+      { "source": "/download.json", "headers": [{ "key": "Cache-Control", "value": "no-cache" }] }
+    ]
+  }
+}

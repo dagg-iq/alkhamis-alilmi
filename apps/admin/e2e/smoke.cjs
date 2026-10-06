@@ -1,5 +1,5 @@
 // اختبار دخان للوحة التحكم (Supabase وهمي) على عرض هاتف وحاسوب — يحفظ لقطات في shots/
-// الاستخدام: npm run build && npx serve -s dist -l 4176 & BASE=http://localhost:4176 W=390 node e2e/smoke.cjs
+// الاستخدام: ADMIN_BASE=/ npm run build && npx serve -s dist -l 4176 & BASE=http://localhost:4176 W=390 node e2e/smoke.cjs
 const { chromium } = require(process.env.PLAYWRIGHT_PATH || 'playwright');
 const UID = '11111111-1111-1111-1111-111111111111';
 const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');

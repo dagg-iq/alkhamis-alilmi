@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>سعي — تطبيق طلاب الخامس العلمي</title>
+  <meta name="description" content="سعي: محاضراتك وملازمك وأسئلتك المتوقعة ودرجاتك محسوبة بدقة نحو الإعفاء — في تطبيق واحد لطلاب الخامس العلمي في إعدادية الشهاب للبنين." />
+  <meta name="theme-color" content="#111111" />
+  <meta property="og:title" content="سعي — اسعَ تُعفَ." />
+  <meta property="og:description" content="تطبيق طلاب الخامس العلمي: المحاضرات، الملازم، الأسئلة، ودرجاتك محسوبة بدقة نحو الإعفاء." />
+  <meta property="og:image" content="screens/home.webp" />
+  <meta property="og:locale" content="ar_IQ" />
+  <link rel="icon" type="image/png" href="favicon.png" />
+  <link rel="preload" href="fonts/thmanyahserifdisplay-Black.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="fonts/thmanyahsans-Regular.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- الرمز: السين بثلاث أسنان صاعدة ونقطة الإعفاء -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="logo" viewBox="0 0 120 120">
+      <rect x="80" y="62" width="20" height="42" rx="10" fill="currentColor" />
+      <rect x="50" y="44" width="20" height="60" rx="10" fill="currentColor" />
+      <rect x="20" y="30" width="20" height="74" rx="10" fill="currentColor" />
+      <rect x="20" y="84" width="80" height="20" rx="10" fill="currentColor" />
+      <circle cx="30" cy="12" r="10" fill="var(--accent)" />
+    </symbol>
+  </svg>
+
+  <header class="nav" id="top">
+    <a class="brand" href="#top" aria-label="سعي">
+      <svg width="34" height="34"><use href="#logo" /></svg>
+      <b>سعي</b>
+    </a>
+    <nav class="links" aria-label="أقسام الصفحة">
+      <a href="#features">المميزات</a>
+      <a href="#grades">الدرجات</a>
+      <a href="#screens">صور التطبيق</a>
+      <a href="#install">التثبيت</a>
+      <a href="#developer">المطوّر</a>
+    </nav>
+    <a class="btn btn-sm" href="#download" data-download>تنزيل</a>
+  </header>
+
+  <main>
+    <!-- ======================================================== البداية -->
+    <section class="hero">
+      <div class="hero-text">
+        <span class="eyebrow">لطلاب الخامس العلمي · إعدادية الشهاب للبنين</span>
+        <h1>اسعَ <span class="accent">تُعفَ.</span></h1>
+        <p class="lead">
+          محاضراتك، ملازمك، الأسئلة المتوقعة، ودرجاتك محسوبة بدقة نحو الإعفاء —
+          كل ما تحتاجه هذه السنة في تطبيق واحد، مجاني بالكامل.
+        </p>
+        <div class="cta" id="download">
+          <a class="btn btn-big" href="#" data-download>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7 10l5 5 5-5M5 20h14" /></svg>
+            <span>تنزيل التطبيق لأندرويد</span>
+          </a>
+          <a class="btn btn-ghost" href="#install">كيف أثبّته؟</a>
+        </div>
+        <p class="meta" data-download-meta>ملف APK · أندرويد ٨ فما فوق</p>
+      </div>
+      <div class="hero-phones" aria-hidden="true">
+        <figure class="phone phone-back"><img src="screens/grades-dark.webp" alt="" width="390" height="844" /></figure>
+        <figure class="phone phone-front"><img src="screens/home.webp" alt="" width="390" height="844" fetchpriority="high" /></figure>
+      </div>
+    </section>
+
+    <!-- ======================================================== أرقام -->
+    <section class="strip" aria-label="سعي باختصار">
+      <div><b>٨</b><span>مواد الخامس العلمي كاملة</span></div>
+      <div><b>٥</b><span>امتحانات تُحسب في سعيك تلقائياً</span></div>
+      <div><b>٢٤/٧</b><span>مساعد ذكي يجيب من ملازمكم</span></div>
+      <div><b>٠</b><span>دينار — مجاني تماماً</span></div>
+    </section>
+
+    <!-- ======================================================== المميزات -->
+    <section class="section" id="features">
+      <div class="section-head">
+        <span class="eyebrow">ماذا في سعي؟</span>
+        <h2>كل سنتك الدراسية في جيبك</h2>
+        <p>صُمم سعي لطالب الخامس العلمي تحديداً: مواده، امتحاناته، وضوابط الإعفاء في العراق.</p>
+      </div>
+      <div class="features">
+        <article class="feature feature-wide">
+          <div class="icon"><svg viewBox="0 0 24 24"><path d="M6 20v-7M12 20V9M18 20V5" /></svg></div>
+          <h3>الدرجات والإعفاء</h3>
+          <p>أدخل درجة كل امتحان، وسعي يحسب سعيك السنوي ويخبرك بجملة واحدة واضحة: كم تحتاج في كل امتحان قادم لتصل للإعفاء العام أو إعفاء المواد أو النجاح.</p>
+        </article>
+        <article class="feature">
+          <div class="icon"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg></div>
+          <h3>المحاضرات</h3>
+          <p>محاضرات أفضل الأساتذة مرتبة حسب الفصول، وتعرف ما شاهدته وما بقي.</p>
+        </article>
+        <article class="feature">
+          <div class="icon"><svg viewBox="0 0 24 24"><path d="M7 3h7l5 5v13H7z" /><path d="M14 3v5h5" /></svg></div>
+          <h3>الملازم بلا إنترنت</h3>
+          <p>حمّل الملزمة مرة واحدة واقرأها متى شئت حتى بدون إنترنت.</p>
+        </article>
+        <article class="feature">
+          <div class="icon"><svg viewBox="0 0 24 24"><path d="M12 3l1.8 4.7 4.7 1.8-4.7 1.8L12 16l-1.8-4.7-4.7-1.8 4.7-1.8z" /><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z" /></svg></div>
+          <h3>مساعد سعي</h3>
+          <p>اسأل عن أي قانون أو مسألة، والمساعد يجيبك من ملازمكم ويذكر الصفحة.</p>
+        </article>
+        <article class="feature">
+          <div class="icon"><svg viewBox="0 0 24 24"><path d="M9 9a3 3 0 1 1 4 2.8c-.6.3-1 .9-1 1.6V15" /><path d="M12 18.5v.5" /><circle cx="12" cy="12" r="9.5" /></svg></div>
+          <h3>الأسئلة المتوقعة وامتحاناتنا</h3>
+          <p>أسئلة كل شهر، وأسئلة امتحانات مدرستنا مصوّرة ومحوّلة لنص واضح بالمعادلات.</p>
+        </article>
+        <article class="feature">
+          <div class="icon"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z" /></svg></div>
+          <h3>دردشة الشعب</h3>
+          <p>محادثة لكل شعبة وللمدرسة كلها، وتشارك فيها محاضرة أو ملزمة بضغطة.</p>
+        </article>
+        <article class="feature">
+          <div class="icon"><svg viewBox="0 0 24 24"><path d="M4 6h16v14H4z" /><path d="M4 10h16M8 3v4M16 3v4" /></svg></div>
+          <h3>المنظِّم والتذكير</h3>
+          <p>الواجبات والامتحانات بمواعيدها، وتذكير قبل كل امتحان.</p>
+        </article>
+        <article class="feature">
+          <div class="icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="8" /><path d="M12 9v4l2.5 2.5M9 2h6" /></svg></div>
+          <h3>مؤقت الدراسة</h3>
+          <p>جلسات تركيز ٢٥ دقيقة، وترى كم درست كل يوم في الأسبوع.</p>
+        </article>
+        <article class="feature">
+          <div class="icon"><svg viewBox="0 0 24 24"><path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z" /></svg></div>
+          <h3>ويدجتات الشاشة الرئيسية</h3>
+          <p>معدلك والامتحان القادم ومهامك على شاشة هاتفك مباشرة، فاتحة أو داكنة.</p>
+        </article>
+      </div>
+    </section>
+
+    <!-- ======================================================== الدرجات -->
+    <section class="section grades" id="grades">
+      <div class="grades-text">
+        <span class="eyebrow">الميزة الأهم</span>
+        <h2>اعرف بالضبط كم تحتاج</h2>
+        <p>
+          اختر هدفك — <b>النجاح</b> أو <b>الإعفاء من مواد</b> أو <b>الإعفاء العام</b> — وسعي يحسب كل شيء حسب
+          ضوابط وزارة التربية، مع جبر الكسور.
+        </p>
+        <div class="formula">
+          <span>السعي السنوي</span>
+          <b>=</b>
+          <span class="part">الفصل الأول</span><b>+</b><span class="part">نصف السنة</span><b>+</b><span class="part">الفصل الثاني</span>
+          <b>÷ ٣</b>
+        </div>
+        <ul class="checks">
+          <li>جملة واحدة واضحة: «خذ ٨٥ أو أكثر في كل امتحان قادم»</li>
+          <li>«ركّز الآن على»: المادة التي تحتاج انتباهك أكثر</li>
+          <li>«ماذا لو؟»: جرّب درجة متوقعة وشاهد سعيك النهائي</li>
+          <li>أدخل درجات امتحان كامل لكل المواد مرة واحدة</li>
+        </ul>
+      </div>
+      <div class="grades-phones" aria-hidden="true">
+        <figure class="phone"><img src="screens/grades.webp" alt="" loading="lazy" width="390" height="844" /></figure>
+        <figure class="phone phone-offset"><img src="screens/subject-grades.webp" alt="" loading="lazy" width="390" height="844" /></figure>
+      </div>
+    </section>
+
+    <!-- ======================================================== صور -->
+    <section class="section" id="screens">
+      <div class="section-head">
+        <span class="eyebrow">من داخل التطبيق</span>
+        <h2>بسيط، سريع، وعربي بالكامل</h2>
+        <p>خط ثمانية، وضع فاتح وغامق، ومصمم من اليمين لليسار من أول نقطة.</p>
+      </div>
+      <div class="gallery" tabindex="0" aria-label="صور من التطبيق">
+        <figure class="phone"><img src="screens/home.webp" alt="الرئيسية" loading="lazy" width="390" height="844" /><figcaption>الرئيسية</figcaption></figure>
+        <figure class="phone"><img src="screens/grades.webp" alt="الدرجات" loading="lazy" width="390" height="844" /><figcaption>الدرجات</figcaption></figure>
+        <figure class="phone"><img src="screens/assistant.webp" alt="مساعد سعي" loading="lazy" width="390" height="844" /><figcaption>مساعد سعي</figcaption></figure>
+        <figure class="phone"><img src="screens/chat.webp" alt="دردشة الشعبة" loading="lazy" width="390" height="844" /><figcaption>دردشة الشعبة</figcaption></figure>
+        <figure class="phone"><img src="screens/subject.webp" alt="المادة" loading="lazy" width="390" height="844" /><figcaption>المادة</figcaption></figure>
+        <figure class="phone"><img src="screens/chats.webp" alt="المحادثات" loading="lazy" width="390" height="844" /><figcaption>المحادثات</figcaption></figure>
+        <figure class="phone"><img src="screens/planner.webp" alt="المنظِّم" loading="lazy" width="390" height="844" /><figcaption>المنظِّم</figcaption></figure>
+        <figure class="phone"><img src="screens/home-dark.webp" alt="الوضع الغامق" loading="lazy" width="390" height="844" /><figcaption>الوضع الغامق</figcaption></figure>
+      </div>
+    </section>
+
+    <!-- ======================================================== التثبيت -->
+    <section class="section" id="install">
+      <div class="section-head">
+        <span class="eyebrow">ثلاث خطوات</span>
+        <h2>كيف تثبّت سعي؟</h2>
+      </div>
+      <ol class="steps">
+        <li>
+          <span class="n">١</span>
+          <h3>نزّل الملف</h3>
+          <p>اضغط «تنزيل التطبيق» من هاتفك الأندرويد، وانتظر حتى يكتمل التنزيل.</p>
+        </li>
+        <li>
+          <span class="n">٢</span>
+          <h3>اسمح بالتثبيت</h3>
+          <p>افتح الملف. إذا طلب الهاتف «السماح من هذا المصدر» فعّله ثم ارجع واضغط «تثبيت».</p>
+        </li>
+        <li>
+          <span class="n">٣</span>
+          <h3>سجّل دخولك</h3>
+          <p>ادخل بحساب Google، اكتب اسمك الثلاثي وشعبتك، وتُفتح لك كل الأقسام بعد موافقة الإدارة.</p>
+        </li>
+      </ol>
+      <div class="cta cta-center">
+        <a class="btn btn-big" href="#" data-download>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7 10l5 5 5-5M5 20h14" /></svg>
+          <span>تنزيل التطبيق</span>
+        </a>
+      </div>
+    </section>
+
+    <!-- ======================================================== أسئلة -->
+    <section class="section" id="faq">
+      <div class="section-head"><h2>أسئلة شائعة</h2></div>
+      <div class="faq">
+        <details>
+          <summary>هل التطبيق مجاني؟</summary>
+          <p>نعم، مجاني بالكامل وبلا إعلانات. صُنع لخدمة طلاب المدرسة.</p>
+        </details>
+        <details>
+          <summary>هل يعمل على الآيفون؟</summary>
+          <p>حالياً على أندرويد فقط (ويعمل على الأجهزة اللوحية أيضاً). نسخة الآيفون في الخطة القادمة.</p>
+        </details>
+        <details>
+          <summary>لماذا يطلب الهاتف السماح بالتثبيت؟</summary>
+          <p>لأن التطبيق يُنزّل من هذا الموقع وليس من متجر Google Play. هذا طبيعي وآمن، ويكفي أن تسمح مرة واحدة.</p>
+        </details>
+        <details>
+          <summary>من يستطيع الدخول؟</summary>
+          <p>طلاب إعدادية الشهاب للبنين. بعد التسجيل تراجع الإدارة طلبك وتوافق عليه، حتى تبقى الدردشة والمحتوى خاصة بطلاب المدرسة.</p>
+        </details>
+        <details>
+          <summary>هل حسابات الإعفاء دقيقة؟</summary>
+          <p>تتبع ضوابط وزارة التربية (الإعفاء الفردي ٩٠، العام معدل ٨٥ وأقل مادة ٧٥، مع جبر الكسور)، وتُحدّث من الإدارة إذا تغيرت الضوابط.</p>
+        </details>
+        <details>
+          <summary>هل بياناتي ودرجاتي آمنة؟</summary>
+          <p>درجاتك لا يراها غيرك، ومحمية في قاعدة بيانات بصلاحيات صارمة. لا نبيع ولا نشارك أي بيانات.</p>
+        </details>
+      </div>
+    </section>
+
+    <!-- ======================================================== المطوّر -->
+    <section class="section developer" id="developer">
+      <div class="dev-card">
+        <div class="dev-avatar" aria-hidden="true">م</div>
+        <div class="dev-text">
+          <span class="eyebrow">عن المطوّر</span>
+          <h2>محمد حازم احمد</h2>
+          <p>
+            طالب في الخامس العلمي بإعدادية الشهاب للبنين. بدأت «سعي» من سؤال يتكرر علينا كل سنة:
+            <b>كم أحتاج حتى أُعفى؟</b> فصار التطبيق مكاناً واحداً يجمع كل ما يحتاجه زملائي —
+            من المحاضرات والملازم إلى حساب الإعفاء بدقة — بتصميم عربي نظيف يليق بنا.
+          </p>
+          <p class="dim">عندك فكرة أو ملاحظة أو وجدت خطأ؟ راسلني مباشرة.</p>
+          <div class="socials">
+            <a href="https://instagram.com/tiipf" target="_blank" rel="noopener" aria-label="إنستغرام">
+              <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="5" /><circle cx="12" cy="12" r="4" /><circle cx="17.5" cy="6.5" r="1" fill="currentColor" /></svg>
+              <span>tiipf</span>
+            </a>
+            <a href="https://t.me/dagg_iq" target="_blank" rel="noopener" aria-label="تلغرام">
+              <svg viewBox="0 0 24 24"><path d="M21 4L3 11l6 2 2 6 3-4 5 4z" /><path d="M9 13l8-6" /></svg>
+              <span>dagg_iq</span>
+            </a>
+            <a href="https://wa.me/9647771821250" target="_blank" rel="noopener" aria-label="واتساب">
+              <svg viewBox="0 0 24 24"><path d="M4 20l1.3-4A8 8 0 1 1 8 18.7z" /><path d="M9 9.5c.5 2 2.5 4 4.5 4.5l1.2-1.2 2 1-.5 1.7c-3.5.3-7.7-3.9-7.4-7.4l1.7-.5 1 2z" /></svg>
+              <span dir="ltr">0777 182 1250</span>
+            </a>
+            <a href="https://www.facebook.com/mohammed.al.ahmed.23957" target="_blank" rel="noopener" aria-label="فيسبوك">
+              <svg viewBox="0 0 24 24"><path d="M14 8h3V4h-3a4 4 0 0 0-4 4v3H7v4h3v7h4v-7h3l1-4h-4V8z" /></svg>
+              <span>فيسبوك</span>
+            </a>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="brand"><svg width="26" height="26"><use href="#logo" /></svg><b>سعي</b></div>
+    <p>اسعَ تُعفَ. · صُنع بحب لطلاب إعدادية الشهاب للبنين · <span data-year>٢٠٢٦</span></p>
+  </footer>
+
+  <script src="main.js" defer></script>
+</body>
+</html>

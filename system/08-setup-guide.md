@@ -13,9 +13,9 @@
 | ٢ | تسجيل الدخول بـ Google | ١٥ د | كل شيء |
 | ٣ | جعل نفسك أدمن | ٢ د | لوحة التحكم |
 | ٤ | مفتاح Gemini | ٣ د | المساعد الذكي، تصوير الأسئلة، الاختبارات |
-| ٥ | Cloudflare R2 | ١٠ د | الملازم، الصور في الدردشة، تصوير الأسئلة |
+| ٥ | التخزين (Supabase Storage — تلقائي) | ٠ د | الملازم، الصور، تصوير الأسئلة |
 | ٦ | أسرار GitHub + رفع الدوال (من المتصفح) | ٥ د | كل ما سبق |
-| ٧ | لوحة التحكم على Netlify | ١٠ د | إدارة التطبيق |
+| ٧ | الموقع ولوحة التحكم (Firebase Hosting) | ٢ د | إدارة التطبيق + صفحة التنزيل |
 | ٨ | بناء ملف APK | ٢٠ د | الطلاب |
 | ٩ | الإشعارات (Firebase) | ١٠ د | الإشعارات والتطبيق مغلق |
 | ١٠ | إبقاء Supabase نشطاً | ٣ د | منع توقف المشروع المجاني |
@@ -93,27 +93,11 @@
 2. **Create API key** ← في مشروع جديد. انسخه.
 3. ⚠️ مفتاح واحد فقط. الحد المجاني لكل مشروع؛ لا تنشئ حسابات متعددة لتجاوزه (مخالف للشروط).
 
-## ٥. Cloudflare R2 (تخزين الملازم والصور — ١٠GB مجاناً)
-1. أنشئ حساباً في https://dash.cloudflare.com
-2. من القائمة **R2 Object Storage** ← فعّله.
-   > ⚠️ قد يطلب Cloudflare إضافة وسيلة دفع لتفعيل R2 حتى مع الخطة المجانية. لن تُخصم أي مبالغ ما دمت تحت ١٠GB. إذا لم تستطع إضافة بطاقة، أخبر المساعد لنستخدم بديلاً.
-3. **Create bucket**: الاسم `saey`، الموقع Automatic.
-4. داخل الـ bucket ← **Settings ← CORS Policy** ← Edit، والصق (آمن لأن الرفع يحتاج رابطاً موقّعاً من الخادم):
-   ```json
-   [
-     {
-       "AllowedOrigins": ["*"],
-       "AllowedMethods": ["GET", "PUT"],
-       "AllowedHeaders": ["Content-Type"],
-       "MaxAgeSeconds": 3600
-     }
-   ]
-   ```
-5. ارجع لصفحة R2 ← **Manage API tokens** ← **Create API token**:
-   - Permissions: **Object Read & Write**
-   - Specify bucket: `saey`
-   - انسخ **Access Key ID** و **Secret Access Key**.
-6. انسخ **Account ID** (يظهر في صفحة R2 على اليمين).
+## ٥. التخزين — Supabase Storage (تلقائي، بلا بطاقة)
+الملازم والصور تُحفظ في Supabase Storage (حاوية `files` خاصة، تُنشأ تلقائياً). المجاني: ١ جيجا، وأقصى ملف ٥٠ ميغا.
+عندما تكبر المساحة: أنشئ حساباً في Backblaze B2 أو Cloudflare R2 وأضف الأسرار
+`R2_ACCESS_KEY_ID` و `R2_SECRET_ACCESS_KEY` و `R2_BUCKET` و (`R2_ACCOUNT_ID` لـ R2، أو `S3_ENDPOINT` و `S3_REGION` لـ B2)
+ثم شغّل Deploy Supabase — الملفات الجديدة تذهب إليه تلقائياً بلا تغيير في التطبيق.
 
 ## ٦. رفع دوال الخادم وإضافة الأسرار — من موقع GitHub فقط (بلا حاسوب ولا طرفية)
 ملف `.github/workflows/deploy-supabase.yml` يرفع كل الدوال، ويضع أسرارها، ويربط الإشعارات بقاعدة البيانات تلقائياً.
@@ -144,21 +128,13 @@
 > ⚠️ **لا تنشئ Database Webhooks يدوياً** من لوحة Supabase: الربط صار تلقائياً (migration رقم ١١)، والاثنان معاً يكرران كل إشعار.
 > إذا كنت أنشأتها سابقاً: Supabase ← Database ← Webhooks ← احذف `push-notifications` و `push-messages`.
 
-## ٧. لوحة التحكم على Netlify
-1. ادخل https://app.netlify.com ← **Add new site ← Import from Git** ← GitHub ← اختر `alkhamis-alilmi`.
-2. الإعدادات تُقرأ تلقائياً من `netlify.toml` (لا تغيّر شيئاً). اختر الفرع المطلوب (`main` بعد الدمج).
-3. **Environment variables**:
-   - `VITE_SUPABASE_URL` = Project URL
-   - `VITE_SUPABASE_ANON_KEY` = anon key
-4. **Deploy**. ✅ افتح الرابط وسجّل الدخول بحسابك (الأدمن).
-5. أضف رابط Netlify في: Supabase Site URL + Redirect URLs (خطوة ٢-ب).
-6. لاحقاً: **Domain management** لربط دومينك.
-
-للتجربة محلياً:
-```bash
-cp apps/admin/.env.example apps/admin/.env.local   # واملأ القيمتين
-npm run admin:dev    # http://localhost:5173
-```
+## ٧. الموقع ولوحة التحكم على Firebase Hosting (تلقائي)
+- الموقع التعريفي: **https://saeyiq.web.app**
+- لوحة التحكم: **https://saeyiq.web.app/saey-dashboard**
+- يُنشران تلقائياً من سير عمل `deploy-site.yml` عند أي تعديل في `apps/site` أو `apps/admin` (أو Actions ← Deploy Site ← Run workflow).
+- يستخدم نفس السر `FCM_SERVICE_ACCOUNT`. إذا فشل النشر بخطأ صلاحيات: Google Cloud ← IAM ← حساب `firebase-adminsdk-…` ← أضف دور **Firebase Hosting Admin**.
+- **مرة واحدة**: Supabase ← Authentication ← URL Configuration ← Redirect URLs ← أضف `https://saeyiq.web.app/saey-dashboard/` (حتى يعمل تسجيل الدخول بـ Google في اللوحة).
+- رابط زر التنزيل: GitHub ← Settings ← Secrets and variables ← Actions ← تبويب **Variables**: `DOWNLOAD_URL` (و`DOWNLOAD_VERSION` و`DOWNLOAD_SIZE_MB` اختيارياً).
 
 ## ٨. تطبيق الهاتف (ملف APK)
 ### تجربة سريعة بدون بناء (Expo Go)
