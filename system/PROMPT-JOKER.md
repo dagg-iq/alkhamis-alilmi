@@ -45,4 +45,37 @@ cd supabase/functions && deno check */index.ts  # دوال الخادم
 - في Expo: لا تثق بذاكرتك عن الـ APIs — تحقق من أنواع الحزمة المثبتة (`node_modules/<pkg>/build/*.d.ts`).
 - أكمل من حيث توقفنا كما هو مكتوب في `LOG.md`.
 
+**Git و GitHub:**
+- اعمل وادفع دائماً على الفرع `claude/repository-name-arabic-iegosv` (لا تنشئ Pull Request إلا إذا طلب).
+- أدوات GitHub (MCP) تعرف المستودع باسم `dagg-iq/-----` (الاسم القديم)، والرابط الحقيقي `github.com/dagg-iq/alkhamis-alilmi`.
+- المستودع **خاص**: صاحب المشروع ينزّله ZIP من المتصفح (لا git clone).
+
+**ملف APK:** كل push يغيّر `apps/mobile` يبني APK تلقائياً (`.github/workflows/build-apk.yml`, ~٢٥ دقيقة)
+وينشره في `github.com/dagg-iq/alkhamis-alilmi/releases` باسم `apk-<رقم>`. بعد كل push تابع البناء
+(أدوات actions في GitHub MCP) وإذا فشل اقرأ السجل وأصلحه قبل أن تخبره أنه جاهز.
+
+**أين وصل صاحب المشروع (راجع LOG.md للأحدث):**
+- ✅ Supabase (migrations مُطبقة) + تسجيل الدخول بـ Google + APK يعمل على هاتفه.
+- ⏳ seed.sql + جعل نفسه أدمن (SQL جاهز في `09-project-config.md`).
+- ⏳ لم يُنفذ بعد: مفتاح Gemini، رفع دوال الخادم + الأسرار + Webhooks، التخزين (R2 يطلب بطاقة ← ربما Supabase Storage)،
+  Netlify للوحة التحكم، Firebase + حساب Expo (projectId) لإشعارات الهاتف، أسرار keepalive.
+- يجرب على ويندوز (PowerShell) + Expo Go + ملف APK على هاتف أندرويد.
+
+**دروس تعلمناها (لا تكررها):**
+- مترجم React (`reactCompiler` في app.json) يكسر الويدجتات ← كل ملفات `src/widgets/` تبدأ بـ `'use no memo'`.
+- خط العناوين (ثمانية Display) له نقاط وذيول عميقة: لا تضع `lineHeight` أقل من ١٫٥ × الحجم وإلا تُقص نقاط الياء في أندرويد.
+- التطبيق بوضع ملء الشاشة (edge-to-edge): استخدم `KeyboardView` من `components/motion.tsx` لا `KeyboardAvoidingView`.
+- الشبكات: استخدم `justifyContent: 'space-between'` بدل `gap` مع عرض نسبي (الهواتف أضيق من ٣٩٠).
+- الحركة يجب أن تكون سريعة وخفيفة (هو انتقد البطء): دخول ≤ ٢٢٠ms، المقدمة ~١٫٣ ثانية.
+- expo-notifications لا تعمل في Expo Go ← تُحمّل عند الحاجة فقط. الويدجتات لا تعمل في Expo Go.
+- Expo Go على ويندوز: `--tunnel` قد يفشل (ngrok) ← الأسهل `npx expo start --lan` على نفس الواي فاي.
+- `npx expo install` لا يعمل في بيئة السحابة (expo.dev محجوب) ← `npm install -w apps/mobile <pkg>@~<SDK>.x`.
+- اختبر الشاشات بـ `apps/mobile/e2e/smoke.js` (ويب + Supabase وهمي، `W=360` لعرض هاتف ضيق، `ROUTES=` لشاشات محددة).
+
+**أسلوب التعامل معه:**
+- نفّذ **كل** نقطة يطلبها حرفياً ولا تتجاوز أي واحدة؛ إذا لم تستطع شيئاً قل ذلك بوضوح ولماذا.
+- أعطه أوامر **كاملة جاهزة للصق** في PowerShell (بمسارات صحيحة)، لا خطوات ناقصة.
+- لا تقل إن شيئاً «يعمل» إلا إذا اختبرته؛ وإن لم تستطع اختباره على هاتف حقيقي فقل ذلك.
+- ردود قصيرة وواضحة بالعربية، وفي النهاية: ما تم، وما يحتاجه منه.
+
 ---
