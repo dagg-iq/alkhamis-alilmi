@@ -8,7 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardView, PressScale, tap } from '@/components/motion';
 import { Icon, LogoMark, type IconName } from '@/components/icon';
 import { ConversationPicker } from '@/components/conversation-picker';
-import { RichText } from '@/components/rich-text';
+import { RichText, clock } from '@/components/rich-text';
 import { Chip, IconButton, Row, T, MAX_WIDTH } from '@/components/ui';
 import { useMe } from '@/lib/auth';
 import { conversationTitle } from '@/lib/chat';
@@ -71,11 +71,11 @@ export default function AiChat() {
     setMessages((m) => [...m, { id: `u${Date.now()}`, role: 'user', content: question }]);
     setThinking(true);
     try {
-      const res = await callFunction<{ chatId: string; answer: string; messageId: string | null; sources: AiSource[]; remaining: number | null }>('ai-chat', {
+      const res = await callFunction<{ chatId: string; answer: string; messageId: string | null; sources: AiSource[]; remaining?: number | null }>('ai-chat', {
         chatId, message: question, subjectId, brief: brief.current,
       });
       setChatId(res.chatId);
-      setRemaining(res.remaining);
+      if (res.remaining !== undefined) setRemaining(res.remaining);
       setMessages((m) => [...m, { id: res.messageId ?? `a${Date.now()}`, role: 'assistant', content: res.answer, sources: res.sources }]);
     } catch (e) {
       setMessages((m) => [...m, { id: `e${Date.now()}`, role: 'assistant', content: e instanceof Error ? e.message : 'حدث خطأ', error: true }]);
@@ -208,10 +208,14 @@ export default function AiChat() {
             {item.sources?.length ? (
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
                 {item.sources.map((s, i) => (
-                  <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, backgroundColor: c.soft }}>
-                    <Icon name="file" size={12} color={c.accent} />
-                    <T size={11} weight="bold" color={c.softInk}>[{arDigits(i + 1)}] {s.title}{s.page ? ` · ص${arDigits(s.page)}` : ''}</T>
-                  </View>
+                  <Pressable key={i} disabled={!s.lecture_id}
+                    onPress={() => s.lecture_id && router.push({ pathname: '/lecture/[id]', params: { id: s.lecture_id, t: String(s.start ?? 0) } })}
+                    style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, backgroundColor: c.soft }}>
+                    <Icon name={s.lecture_id ? 'play' : 'file'} size={12} color={c.accent} />
+                    <T size={11} weight="bold" color={c.softInk}>
+                      [{arDigits(i + 1)}] {s.title}{s.page ? ` · ص${arDigits(s.page)}` : ''}{s.lecture_id ? ` · ${arDigits(clock(s.start ?? 0))}` : ''}
+                    </T>
+                  </Pressable>
                 ))}
               </View>
             ) : null}

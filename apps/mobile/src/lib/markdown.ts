@@ -10,11 +10,11 @@ import { marked } from 'marked';
 
 export type Token =
   | { kind: 'md'; text: string }
-  | { kind: 'item'; type: 'lecture' | 'document' | 'question_set'; id: string }
+  | { kind: 'item'; type: 'lecture' | 'document' | 'question_set'; id: string; start?: number }
   | { kind: 'developer' }
   | { kind: 'pdf'; of: string };
 
-const TOKEN = /^\s*\[\[(lecture|document|question_set|developer|pdf)(?::([\w-]+))?\]\]\s*$/;
+const TOKEN = /^\s*\[\[(lecture|document|question_set|developer|pdf)(?::([\w-]+))?(?:@(\d+))?\]\]\s*$/;
 
 /** يفصل الرموز الخاصة (بطاقة محاضرة، بطاقة المطور…) عن النص، كل رمز في سطر مستقل */
 export function splitTokens(text: string): Token[] {
@@ -31,7 +31,7 @@ export function splitTokens(text: string): Token[] {
     flush();
     if (m[1] === 'developer') out.push({ kind: 'developer' });
     else if (m[1] === 'pdf' && m[2]) out.push({ kind: 'pdf', of: m[2] });
-    else if (m[2]) out.push({ kind: 'item', type: m[1] as 'lecture' | 'document' | 'question_set', id: m[2] });
+    else if (m[2]) out.push({ kind: 'item', type: m[1] as 'lecture' | 'document' | 'question_set', id: m[2], start: m[3] ? Number(m[3]) : undefined });
   }
   flush();
   return out;

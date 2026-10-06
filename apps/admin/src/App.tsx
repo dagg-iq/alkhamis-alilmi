@@ -4,6 +4,7 @@ import { Logo } from './components/ui';
 import { useAuth } from './lib/auth';
 import { useLoad } from './lib/hooks';
 import { isConfigured, supabase } from './lib/supabase';
+import Assistant from './pages/Assistant';
 import Audit from './pages/Audit';
 import Chat from './pages/Chat';
 import Content from './pages/Content';
@@ -20,6 +21,7 @@ import Tasks from './pages/Tasks';
 const NAV = [
   { to: '/', label: 'نظرة عامة', end: true },
   { to: '/students', label: 'الطلاب', badge: true },
+  { to: '/assistant', label: 'مساعد المحتوى' },
   { to: '/content', label: 'المواد والفصول' },
   { to: '/lectures', label: 'المحاضرات' },
   { to: '/documents', label: 'الملازم' },
@@ -84,6 +86,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/students" element={<Students onChange={pending.reload} />} />
+          <Route path="/assistant" element={<Assistant />} />
           <Route path="/content" element={<Content />} />
           <Route path="/lectures" element={<Lectures />} />
           <Route path="/documents" element={<Documents />} />

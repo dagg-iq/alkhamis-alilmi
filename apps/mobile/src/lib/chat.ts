@@ -28,7 +28,7 @@ export type CurriculumAttachment = Extract<Attachment, { type: 'lecture' | 'docu
 
 /** فتح مرفق: المنهج في شاشته، والإجابة المشاركة وملف PDF داخل التطبيق */
 export function openAttachment(a: Attachment, messageId?: string) {
-  if (a.type === 'lecture') router.push(`/lecture/${a.id}`);
+  if (a.type === 'lecture') router.push(a.start ? { pathname: '/lecture/[id]', params: { id: a.id, t: String(a.start) } } : `/lecture/${a.id}`);
   else if (a.type === 'question_set') router.push(`/questions/${a.id}`);
   else if (a.type === 'document') router.push({ pathname: '/document/[id]', params: { id: a.id } });
   else if (a.type === 'answer' && messageId) router.push({ pathname: '/answer/[id]', params: { id: messageId } });

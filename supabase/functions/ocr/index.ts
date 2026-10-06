@@ -47,7 +47,7 @@ Deno.serve(handler(async (req) => {
         })),
         { text: PROMPT },
       ],
-    }], { temperature: 0.1, maxOutputTokens: 8192 });
+    }], { temperature: 0.1, maxOutputTokens: 8192, pool: 'admin' });
   } catch (e) {
     if (!(e instanceof GeminiQuotaError)) console.error(e);
     content = '> تعذّر استخراج النص تلقائياً الآن. ملف PDF جاهز، ويمكنك إعادة المحاولة لاحقاً أو كتابة الأسئلة يدوياً.';

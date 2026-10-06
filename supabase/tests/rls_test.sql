@@ -116,4 +116,23 @@ do $$ begin
   assert public.consume_ai_quota('00000000-0000-0000-0000-00000000000b', 2) = -1, 'تجاوز الحد';
 end $$;
 
+-- ٧. المرحلة ب: الإجابات المحفوظة للخادم فقط، ومواضيع المحاضرات يكتبها المشرفون فقط
+insert into public.ai_cache (key, question, answer) values ('t1', 'س', 'ج');
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000b');
+do $$ begin
+  assert (select count(*) from public.ai_cache) = 0, 'الطالب يرى الإجابات المحفوظة';
+  begin
+    insert into public.ai_cache (key, question, answer) values ('t2', 'س', 'ج');
+    raise exception 'طالب كتب في الإجابات المحفوظة!';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    insert into public.lecture_topics (lecture_id, start_sec, title) values (gen_random_uuid(), 0, 'x');
+    raise exception 'طالب أضاف موضوع محاضرة!';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+reset role;
+
 select 'ALL RLS TESTS PASSED' as result;

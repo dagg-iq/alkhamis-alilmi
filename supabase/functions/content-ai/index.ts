@@ -1,0 +1,313 @@
+// مساعد المحتوى (لوحة التحكم): سحب قوائم يوتيوب، تصنيف المحاضرات والملازم بالذكاء الاصطناعي، وفهرسة المحاضرات بالدقيقة.
+// يستخدم مفتاح لوحة التحكم (GEMINI_ADMIN_API_KEY) حتى لا يأكل من حصة الطلاب.
+import { PDFDocument } from 'npm:pdf-lib@1.17.1';
+import { handler, HttpError, json } from '../_shared/cors.ts';
+import { admin, getCaller, getSetting } from '../_shared/supabase.ts';
+import { embed, generate, GeminiQuotaError, MAIN_MODELS, modelChain, parseJson, toBase64 } from '../_shared/gemini.ts';
+import { getObject } from '../_shared/storage.ts';
+
+interface Video { youtube_id: string; title: string; duration_sec: number | null; channel?: string | null }
+
+const YT = 'https://www.googleapis.com/youtube/v3';
+const SEGMENT = 20 * 60; // فهرسة الفيديو على أجزاء (٢٠ دقيقة) حتى لا تتجاوز الدالة وقتها
+const UA = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36', 'Accept-Language': 'ar,en;q=0.8' };
+
+function videoIdOf(url: string): string | null {
+  const m = url.match(/(?:youtu\.be\/|v=|\/shorts\/|\/embed\/|\/live\/)([\w-]{11})/);
+  return m ? m[1] : /^[\w-]{11}$/.test(url.trim()) ? url.trim() : null;
+}
+
+/** 75 أو "1:15" أو "01:01:15" ← ثوانٍ */
+function toSeconds(v: unknown): number | null {
+  if (typeof v === 'number' && Number.isFinite(v)) return v;
+  if (typeof v !== 'string') return null;
+  const parts = v.trim().split(':').map(Number);
+  if (!parts.length || parts.some((n) => !Number.isFinite(n))) return null;
+  return parts.reduce((a, n) => a * 60 + n, 0);
+}
+
+function isoDuration(s: string): number {
+  const m = s.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+  return m ? (Number(m[1] ?? 0) * 3600) + (Number(m[2] ?? 0) * 60) + Number(m[3] ?? 0) : 0;
+}
+
+// ---------------------------------------------------------------- يوتيوب
+async function ytApi(path: string, params: Record<string, string>) {
+  const key = Deno.env.get('YOUTUBE_API_KEY');
+  if (!key) return null;
+  const res = await fetch(`${YT}/${path}?${new URLSearchParams({ ...params, key })}`);
+  if (!res.ok) throw new HttpError(502, `YouTube API ${res.status}: ${(await res.text()).slice(0, 200)}`);
+  return await res.json();
+}
+
+/** كل فيديوهات قائمة تشغيل (أو رفع قناة) */
+async function playlistVideos(listId: string): Promise<Video[]> {
+  const out: Video[] = [];
+  if (Deno.env.get('YOUTUBE_API_KEY')) {
+    let page = '';
+    for (let i = 0; i < 10; i++) {
+      const d = await ytApi('playlistItems', { part: 'snippet,contentDetails', maxResults: '50', playlistId: listId, ...(page ? { pageToken: page } : {}) });
+      for (const it of d.items ?? []) {
+        if (it.snippet?.title === 'Private video' || it.snippet?.title === 'Deleted video') continue;
+        out.push({ youtube_id: it.contentDetails.videoId, title: it.snippet.title, duration_sec: null, channel: it.snippet.videoOwnerChannelTitle ?? null });
+      }
+      if (!d.nextPageToken) break;
+      page = d.nextPageToken;
+    }
+    // المدد
+    for (let i = 0; i < out.length; i += 50) {
+      const d = await ytApi('videos', { part: 'contentDetails', id: out.slice(i, i + 50).map((v) => v.youtube_id).join(',') });
+      const dur = new Map<string, number>((d.items ?? []).map((v: { id: string; contentDetails: { duration: string } }) => [v.id, isoDuration(v.contentDetails.duration)]));
+      for (const v of out.slice(i, i + 50)) v.duration_sec = dur.get(v.youtube_id) ?? null;
+    }
+    return out;
+  }
+  // بلا مفتاح: نقرأ صفحة القائمة نفسها (أول ١٠٠ فيديو)
+  const html = await (await fetch(`https://www.youtube.com/playlist?list=${listId}&hl=ar`, { headers: UA })).text();
+  const m = html.match(/var ytInitialData = (\{.+?\});<\/script>/s) ?? html.match(/ytInitialData"\]\s*=\s*(\{.+?\});/s);
+  if (!m) throw new HttpError(422, 'لم أستطع قراءة قائمة التشغيل. تأكد أنها عامة، أو أضف مفتاح YouTube (YOUTUBE_API_KEY).');
+  const channel = (html.match(/"ownerText":\{"runs":\[\{"text":"([^"]+)"/) ?? [])[1] ?? null;
+  const walk = (o: unknown) => {
+    if (!o || typeof o !== 'object') return;
+    const r = (o as Record<string, unknown>).playlistVideoRenderer as Record<string, unknown> | undefined;
+    if (r?.videoId) {
+      const title = ((r.title as { runs?: { text: string }[] })?.runs ?? []).map((x) => x.text).join('');
+      out.push({ youtube_id: r.videoId as string, title, duration_sec: Number(r.lengthSeconds) || null, channel });
+      return;
+    }
+    for (const v of Object.values(o as Record<string, unknown>)) walk(v);
+  };
+  walk(JSON.parse(m[1]));
+  return out;
+}
+
+/** قائمة الرفع لقناة (@handle أو /channel/ID) */
+async function channelUploads(url: string): Promise<string> {
+  const handle = url.match(/youtube\.com\/@([\w.-]+)/)?.[1];
+  const id = url.match(/\/channel\/(UC[\w-]+)/)?.[1];
+  if (Deno.env.get('YOUTUBE_API_KEY')) {
+    const d = await ytApi('channels', { part: 'contentDetails', ...(id ? { id } : { forHandle: `@${handle}` }) });
+    const up = d.items?.[0]?.contentDetails?.relatedPlaylists?.uploads;
+    if (!up) throw new HttpError(404, 'لم أجد القناة.');
+    return up;
+  }
+  let cid = id;
+  if (!cid) {
+    const html = await (await fetch(`https://www.youtube.com/@${handle}`, { headers: UA })).text();
+    cid = html.match(/"channelId":"(UC[\w-]+)"/)?.[1] ?? html.match(/channel\/(UC[\w-]{22})/)?.[1];
+  }
+  if (!cid) throw new HttpError(404, 'لم أجد القناة. الصق رابط قائمة تشغيل بدلاً منها.');
+  return `UU${cid.slice(2)}`; // قائمة «كل الفيديوهات» للقناة
+}
+
+async function singleVideo(id: string): Promise<Video> {
+  let title = id;
+  let channel: string | null = null;
+  let duration: number | null = null;
+  const o = await fetch(`https://www.youtube.com/oembed?format=json&url=${encodeURIComponent(`https://www.youtube.com/watch?v=${id}`)}`);
+  if (o.ok) {
+    const d = await o.json();
+    title = d.title;
+    channel = d.author_name;
+  }
+  duration = await videoDuration(id).catch(() => null);
+  return { youtube_id: id, title, duration_sec: duration, channel };
+}
+
+async function videoDuration(id: string): Promise<number | null> {
+  if (Deno.env.get('YOUTUBE_API_KEY')) {
+    const d = await ytApi('videos', { part: 'contentDetails', id });
+    return d.items?.[0] ? isoDuration(d.items[0].contentDetails.duration) : null;
+  }
+  const html = await (await fetch(`https://www.youtube.com/watch?v=${id}`, { headers: UA })).text();
+  const s = html.match(/"lengthSeconds":"(\d+)"/)?.[1];
+  return s ? Number(s) : null;
+}
+
+// ---------------------------------------------------------------- سياق المنهج للتصنيف
+async function curriculum() {
+  const [{ data: subjects }, { data: books }, { data: chapters }, { data: teachers }] = await Promise.all([
+    admin.from('subjects').select('id, name').order('sort'),
+    admin.from('books').select('id, subject_id, name').order('sort'),
+    admin.from('chapters').select('id, book_id, number, title').order('sort').order('number'),
+    admin.from('teachers').select('id, name, subject_id'),
+  ]);
+  const bookSubject = new Map((books ?? []).map((b) => [b.id, b.subject_id]));
+  const lines = (subjects ?? []).map((s) => {
+    const chs = (chapters ?? []).filter((c) => bookSubject.get(c.book_id) === s.id);
+    const ch = chs.length ? chs.map((c) => `    - chapter_id=${c.id} | الفصل ${c.number}: ${c.title}`).join('\n') : '    (لا فصول بعد)';
+    return `- subject_id=${s.id} | ${s.name}\n${ch}`;
+  });
+  const t = (teachers ?? []).map((x) => `- teacher_id=${x.id} | ${x.name}`).join('\n') || '(لا أساتذة بعد)';
+  return { text: `المواد وفصولها:\n${lines.join('\n')}\n\nالأساتذة:\n${t}`, subjects: subjects ?? [], chapters: chapters ?? [], teachers: teachers ?? [] };
+}
+
+async function ai(contents: Parameters<typeof generate>[1], maxOutputTokens = 16384) {
+  const settings = await getSetting<{ model?: string }>('ai');
+  return await generate(modelChain(settings.model, MAIN_MODELS), contents, { pool: 'admin', json: true, temperature: 0.1, maxOutputTokens, thinking: 'low' });
+}
+
+Deno.serve(handler(async (req) => {
+  await getCaller(req, { staff: true });
+  const body = await req.json();
+
+  try {
+    // ١) روابط ← فيديوهات (قائمة تشغيل، قناة، أو روابط مفردة)
+    if (body.action === 'videos') {
+      const links = String(body.links ?? '').split(/\s+/).map((l) => l.trim()).filter(Boolean);
+      if (!links.length) throw new HttpError(400, 'الصق رابطاً واحداً على الأقل.');
+      const videos: Video[] = [];
+      for (const link of links.slice(0, 20)) {
+        const list = link.match(/[?&]list=([\w-]+)/)?.[1];
+        if (list) videos.push(...await playlistVideos(list));
+        else if (/youtube\.com\/(@|channel\/)/.test(link)) videos.push(...await playlistVideos(await channelUploads(link)));
+        else {
+          const id = videoIdOf(link);
+          if (id) videos.push(await singleVideo(id));
+        }
+      }
+      const seen = new Set<string>();
+      const unique = videos.filter((v) => (seen.has(v.youtube_id) ? false : (seen.add(v.youtube_id), true)));
+      const { data: existing } = await admin.from('lectures').select('youtube_id').in('youtube_id', unique.map((v) => v.youtube_id).concat(['-']));
+      const have = new Set((existing ?? []).map((e) => e.youtube_id));
+      return json({ videos: unique.map((v) => ({ ...v, exists: have.has(v.youtube_id) })) });
+    }
+
+    // ٢) تصنيف الفيديوهات: المادة، الفصل، الأستاذ، الترتيب، وعنوان مرتب
+    if (body.action === 'classify_lectures') {
+      const videos = (body.videos ?? []) as Video[];
+      if (!videos.length) return json({ items: [] });
+      const cur = await curriculum();
+      const hint = [body.subjectId ? `كل الفيديوهات من مادة subject_id=${body.subjectId}` : '', body.teacherId ? `كلها للأستاذ teacher_id=${body.teacherId}` : ''].filter(Boolean).join('. ');
+      const items: unknown[] = [];
+      for (let i = 0; i < videos.length; i += 60) {
+        const batch = videos.slice(i, i + 60);
+        const raw = await ai([{
+          role: 'user',
+          parts: [{
+            text: `أنت تنظم محاضرات يوتيوب لمنهج الصف الخامس الإعدادي العلمي في العراق.
+${cur.text}
+
+${hint}
+الفيديوهات (بالترتيب):
+${batch.map((v, k) => `${k + 1}. id=${v.youtube_id} | ${v.title}${v.channel ? ` | القناة: ${v.channel}` : ''}`).join('\n')}
+
+لكل فيديو أعد كائناً في مصفوفة JSON بالترتيب نفسه:
+{"youtube_id": "...", "subject_id": "معرف المادة أو null", "chapter_id": "معرف الفصل الموجود أو null",
+ "new_chapter": {"number": رقم, "title": "عنوان الفصل"} أو null (فقط إذا لم يوجد فصل مناسب في القائمة),
+ "teacher_id": "معرف الأستاذ الموجود أو null", "new_teacher": "اسم الأستاذ إن عرفته من العنوان أو القناة ولم يكن في القائمة، وإلا null",
+ "lecture_number": رقم المحاضرة داخل الفصل إن ظهر في العنوان وإلا null,
+ "title": "عنوان قصير مرتب بالعربية (مثل: المحاضرة ٣ — قانون كولوم)"، احذف أسماء القنوات والإعلانات والرموز,
+ "skip": true إذا كان الفيديو ليس محاضرة دراسية (إعلان، بث مباشر عام، مقدمة القناة)}
+لا تخترع معرفات. استخدم المعرفات كما هي فقط.`,
+          }],
+        }]);
+        items.push(...parseJson<unknown[]>(raw));
+      }
+      return json({ items });
+    }
+
+    // ٣) فهرسة محاضرة بالدقيقة (جزء ٢٠ دقيقة في كل استدعاء)
+    if (body.action === 'index_lecture') {
+      const { data: lec } = await admin.from('lectures')
+        .select('id, title, youtube_id, duration_sec, chapter_id, chapters(title, books(subject_id))').eq('id', body.lectureId).single();
+      if (!lec) throw new HttpError(404, 'المحاضرة غير موجودة.');
+      let duration = lec.duration_sec as number | null;
+      if (!duration) {
+        duration = await videoDuration(lec.youtube_id).catch(() => null);
+        if (duration) await admin.from('lectures').update({ duration_sec: duration }).eq('id', lec.id);
+      }
+      const total = duration ?? SEGMENT; // بلا مدة: جزء واحد
+      const segment = Number(body.segment ?? 0);
+      const from = segment * SEGMENT;
+      const to = Math.min(total, from + SEGMENT);
+      const subjectId = (lec.chapters as unknown as { books: { subject_id: string } })?.books?.subject_id ?? null;
+      if (segment === 0) {
+        await admin.from('lecture_topics').delete().eq('lecture_id', lec.id);
+        await admin.from('content_chunks').delete().eq('source_type', 'lecture').eq('source_id', lec.id);
+        await admin.from('lectures').update({ index_status: 'running', index_error: null }).eq('id', lec.id);
+      }
+
+      const raw = await ai([{
+        role: 'user',
+        parts: [
+          {
+            file_data: { file_uri: `https://www.youtube.com/watch?v=${lec.youtube_id}` },
+            ...(duration ? { video_metadata: { start_offset: `${from}s`, end_offset: `${to}s` } } : {}),
+          } as never,
+          {
+            text: `هذه محاضرة «${lec.title}» لطلاب الخامس العلمي في العراق${duration ? `، والجزء المعروض من الثانية ${from} إلى ${to}` : ''}.
+قسّمها إلى مواضيع حسب ما يشرحه الأستاذ فعلاً. لكل موضوع أعد:
+{"start": وقت بدايته بالثواني من بداية الفيديو كاملاً (ليس من بداية الجزء), "title": "عنوان قصير",
+ "summary": "جملة أو جملتان تشرحان ما يقوله", "details": "الشرح بتفصيل كملاحظات طالب: التعاريف والقوانين ($LaTeX$) والأمثلة والتعليلات كما وردت"}
+أعد مصفوفة JSON فقط. لا تخترع ما لم يُقل. تجاهل المقدمات والإعلانات وطلبات الاشتراك.`,
+          },
+        ],
+      }], 32768);
+      const topics = parseJson<{ start: number | string; title: string; summary?: string; details?: string }[]>(raw)
+        .map((t) => ({ ...t, start: toSeconds(t?.start) }))
+        .filter((t) => t.title && t.start !== null)
+        .map((t) => ({ ...t, start: Math.max(0, Math.min(Math.round(t.start!), total)) }));
+
+      if (topics.length) {
+        await admin.from('lecture_topics').insert(topics.map((t, k) => ({
+          lecture_id: lec.id, start_sec: t.start, title: t.title.slice(0, 200), summary: t.summary?.slice(0, 600) ?? null, sort: segment * 1000 + k,
+        })));
+        const texts = topics.map((t) => `${lec.title} — ${t.title}\n${t.summary ?? ''}\n${t.details ?? ''}`.slice(0, 3000));
+        const vectors = await embed(texts, 'RETRIEVAL_DOCUMENT', 'admin');
+        await admin.from('content_chunks').insert(topics.map((t, k) => ({
+          source_type: 'lecture', source_id: lec.id, subject_id: subjectId, chapter_id: lec.chapter_id,
+          start_sec: t.start, content: texts[k], embedding: vectors[k],
+        })));
+      }
+      const done = to >= total;
+      if (done) await admin.from('lectures').update({ index_status: 'done', indexed_at: new Date().toISOString() }).eq('id', lec.id);
+      return json({ done, segment, next: done ? null : segment + 1, segments: Math.ceil(total / SEGMENT), topics: topics.length });
+    }
+
+    // ٤) تصنيف ملف PDF من أول صفحاته: المادة، الأستاذ، النوع، الفصل، العنوان، وهل هو مصوّر
+    if (body.action === 'classify_document') {
+      const key = String(body.key ?? '');
+      if (!key.startsWith('materials/')) throw new HttpError(400, 'مفتاح غير صالح.');
+      const bytes = await getObject(key);
+      const src = await PDFDocument.load(bytes, { ignoreEncryption: true, updateMetadata: false });
+      const pages = src.getPageCount();
+      const first = await PDFDocument.create();
+      const copy = await first.copyPages(src, [...Array(Math.min(4, pages)).keys()]);
+      copy.forEach((p) => first.addPage(p));
+      const sample = await first.save();
+      const cur = await curriculum();
+      const raw = await ai([{
+        role: 'user',
+        parts: [
+          { inline_data: { mime_type: 'application/pdf', data: toBase64(sample) } },
+          {
+            text: `هذه أول صفحات ملف PDF لطلاب الخامس الإعدادي العلمي في العراق (اسم الملف: ${String(body.name ?? '')}).
+${cur.text}
+
+أعد JSON واحداً:
+{"subject_id": "معرف المادة", "kind": "malzama" أو "summary" أو "book" أو "other",
+ "chapter_id": "معرف الفصل إن كان الملف لفصل واحد وإلا null", "teacher_id": "معرف الأستاذ الموجود أو null",
+ "new_teacher": "اسم الأستاذ/المؤلف إن ظهر ولم يكن في القائمة وإلا null",
+ "title": "عنوان قصير مرتب (مثل: ملزمة الفيزياء — الفصل الأول)", "scanned": true إذا كانت الصفحات صوراً ممسوحة بلا نص قابل للتحديد}
+لا تخترع معرفات.`,
+          },
+        ],
+      }], 2048);
+      return json({ ...parseJson<Record<string, unknown>>(raw), pages });
+    }
+
+    throw new HttpError(400, 'عملية غير معروفة.');
+  } catch (e) {
+    if (e instanceof GeminiQuotaError) {
+      if (body.action === 'index_lecture' && body.lectureId) {
+        await admin.from('lectures').update({ index_status: 'error', index_error: 'انتهى رصيد Gemini مؤقتاً' }).eq('id', body.lectureId);
+      }
+      throw new HttpError(503, 'انتهى رصيد Gemini المجاني لمفتاح لوحة التحكم مؤقتاً. أكمل بعد قليل أو غداً.');
+    }
+    if (body.action === 'index_lecture' && body.lectureId && !(e instanceof HttpError)) {
+      await admin.from('lectures').update({ index_status: 'error', index_error: String((e as Error).message ?? e).slice(0, 300) }).eq('id', body.lectureId);
+    }
+    throw e;
+  }
+}));

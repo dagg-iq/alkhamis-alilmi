@@ -40,6 +40,20 @@ const data = {
         if (v.startsWith('eq.') && !['select', 'order', 'limit'].includes(k)) body = body.filter((row) => !(k in row) || String(row[k]) === v.slice(3));
       }
     }
+    if (url.pathname.endsWith('/functions/v1/content-ai')) {
+      const b = JSON.parse(req.postData() || '{}');
+      const vids = [
+        { youtube_id: 'dQw4w9WgXcQ', title: 'فيزياء الخامس العلمي المتسعات محاضرة 3 ربط التوالي', duration_sec: 2710, channel: 'الاستاذ احمد', exists: false },
+        { youtube_id: 'aaaaaaaaaa2', title: 'اشترك بالقناة', duration_sec: 40, channel: 'الاستاذ احمد', exists: false },
+        { youtube_id: 'aaaaaaaaaa3', title: 'المتسعات محاضرة 1', duration_sec: 1900, channel: 'الاستاذ احمد', exists: true },
+      ];
+      const out = b.action === 'videos' ? { videos: vids }
+        : b.action === 'classify_lectures' ? { items: [
+          { youtube_id: 'dQw4w9WgXcQ', subject_id: 's0', chapter_id: 'c1', teacher_id: null, new_teacher: 'احمد السوداني', lecture_number: 3, title: 'المحاضرة ٣ — ربط التوالي', skip: false },
+          { youtube_id: 'aaaaaaaaaa2', subject_id: 's0', chapter_id: null, new_chapter: { number: 2, title: 'الحث' }, skip: true, title: 'اشترك' },
+        ] } : {};
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(out) });
+    }
     if (url.pathname.includes('/auth/v1/')) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ user: session.user }) });
     if (single && Array.isArray(body)) body = body[0] ?? null;
     return route.fulfill({ status: 200, contentType: 'application/json', headers: { 'content-range': '0-1/2' }, body: JSON.stringify(body) });
@@ -51,6 +65,15 @@ const data = {
     page.on('pageerror', (e) => errs.push(e.message));
     await page.goto((process.env.BASE || 'http://localhost:4176') + r, { waitUntil: 'networkidle' });
     await page.waitForTimeout(600);
+    // FILL="textarea=نص" ثم CLICK="نص الزر" (لتجربة نموذج في الصفحة)
+    if (process.env.FILL) {
+      const [sel, ...val] = process.env.FILL.split('=');
+      await page.fill(sel, val.join('='));
+    }
+    if (process.env.CLICK) {
+      await page.getByRole('button', { name: process.env.CLICK }).click();
+      await page.waitForTimeout(1500);
+    }
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     await page.screenshot({ path: `shots/admin${r.replace(/\//g, '_')}.png`, fullPage: true });
     console.log(`${errs.length || overflow > 1 ? '❌' : '✅'} ${r} overflow=${overflow} ${errs.join(' | ')}`);

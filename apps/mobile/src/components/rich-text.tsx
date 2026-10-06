@@ -27,7 +27,7 @@ export function RichText({ text, size = 16, color, serif, renderToken }: {
             ? <MathWebView key={i} text={t.text} size={size} color={color} />
             : <NativeMarkdown key={i} text={t.text} size={size} color={color} serif={serif} />;
         }
-        if (t.kind === 'item') return <LinkedItem key={i} type={t.type} id={t.id} />;
+        if (t.kind === 'item') return <LinkedItem key={i} type={t.type} id={t.id} start={t.start} />;
         if (t.kind === 'developer') return <DeveloperCard key={i} />;
         return <View key={i}>{renderToken?.(t) ?? null}</View>;
       })}
@@ -92,6 +92,7 @@ function NativeMarkdown({ text, size, color, serif }: { text: string; size: numb
 }
 
 const arNum = (n: string) => n.replace(/[0-9]/g, (d) => '٠١٢٣٤٥٦٧٨٩'[+d]);
+export const clock = (sec: number) => `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, '0')}`;
 
 /** عريض **…**، تظليل ==…== (مثل قلم التحديد في الملزمة)، وروابط [نص](رابط) */
 function inline(s: string, c: { highlight: string; accent: string }) {
@@ -128,7 +129,7 @@ function MathWebView({ text, size, color }: { text: string; size: number; color?
 type Linked = Exclude<Attachment, { type: 'image' | 'answer' | 'file' }>;
 
 /** محاضرة أو ملزمة أو أسئلة من فهرس التطبيق: تُجلب تفاصيلها وتظهر كبطاقة تُفتح بضغطة */
-function LinkedItem({ type, id }: { type: Linked['type']; id: string }) {
+function LinkedItem({ type, id, start }: { type: Linked['type']; id: string; start?: number }) {
   const { c } = useTheme();
   const [item, setItem] = useState<Linked | null | undefined>(undefined);
   useEffect(() => {
@@ -140,8 +141,12 @@ function LinkedItem({ type, id }: { type: Linked['type']; id: string }) {
         const d = data as { title: string; youtube_id: string | null; teachers: { name: string } | null; chapters: { number: number; title: string } | null } | null;
         if (d) {
           a = {
-            type, id, title: d.title, thumb: d.youtube_id ?? undefined,
-            subtitle: [d.teachers?.name ? `الأستاذ ${d.teachers.name}` : null, d.chapters ? `الفصل ${arNum(String(d.chapters.number))} · ${d.chapters.title}` : null].filter(Boolean).join(' · '),
+            type, id, title: d.title, thumb: d.youtube_id ?? undefined, start,
+            subtitle: [
+              start ? `من الدقيقة ${arNum(clock(start))}` : null,
+              d.teachers?.name ? `الأستاذ ${d.teachers.name}` : null,
+              !start && d.chapters ? `الفصل ${arNum(String(d.chapters.number))} · ${d.chapters.title}` : null,
+            ].filter(Boolean).join(' · '),
           };
         }
       } else if (type === 'document') {
@@ -156,7 +161,7 @@ function LinkedItem({ type, id }: { type: Linked['type']; id: string }) {
       if (alive) setItem(a);
     })().catch(() => alive && setItem(null));
     return () => { alive = false; };
-  }, [type, id]);
+  }, [type, id, start]);
 
   if (item === undefined) return <View style={{ width: 248, height: type === 'lecture' ? 196 : 74, borderRadius: 16, backgroundColor: c.soft }} />;
   if (!item) return <T dim size={13}>(هذا المحتوى لم يعد موجوداً)</T>;

@@ -1,7 +1,8 @@
 import { youtubeId, type Book, type Chapter, type Lecture, type Subject, type Teacher } from '@saey/shared';
 import { useState } from 'react';
-import { Empty, Field, Modal, check, useAction } from '../components/ui';
+import { Empty, Field, Modal, check, useAction, useToast } from '../components/ui';
 import { useLoad } from '../lib/hooks';
+import { indexLecture } from '../lib/content-ai';
 import { callFunction, must, supabase } from '../lib/supabase';
 
 export default function Lectures() {
@@ -10,6 +11,8 @@ export default function Lectures() {
   const [adding, setAdding] = useState<{ chapterId: string; teacherId: string; urls: string } | null>(null);
   const [edit, setEdit] = useState<Lecture | null>(null);
   const [progress, setProgress] = useState('');
+  const [indexing, setIndexing] = useState<Record<string, string>>({});
+  const toast = useToast();
 
   const q = useLoad(async () => {
     const [subjects, books, chapters, teachers, lectures] = await Promise.all([
@@ -53,6 +56,20 @@ export default function Lectures() {
     await q.reload();
   }, 'أُضيفت المحاضرات');
 
+  // فهرسة بالدقيقة: الذكاء الاصطناعي يشاهد الفيديو ويستخرج المواضيع ووقتها
+  const index = async (l: Lecture) => {
+    setIndexing((s) => ({ ...s, [l.id]: 'يشاهد الفيديو…' }));
+    try {
+      await indexLecture(l.id, (n, total) => setIndexing((s) => ({ ...s, [l.id]: `جزء ${n}/${total}` })));
+      toast('فُهرست المحاضرة — المساعد يعرف مواضيعها بالدقيقة');
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'فشلت الفهرسة', true);
+    } finally {
+      setIndexing((s) => { const n = { ...s }; delete n[l.id]; return n; });
+      q.reload();
+    }
+  };
+
   const save = () => run(async () => {
     if (!edit) return;
     await check(supabase.from('lectures').update({
@@ -93,9 +110,15 @@ export default function Lectures() {
                         </a>
                       </td>
                       <td><b>{l.title}</b><div className="small dim">{teacherName(l.teacher_id)}</div></td>
-                      <td>{l.is_published ? <span className="pill ok">منشورة</span> : <span className="pill warn">مخفية</span>}</td>
+                      <td>
+                        {l.is_published ? <span className="pill ok">منشورة</span> : <span className="pill warn">مخفية</span>}{' '}
+                        {indexing[l.id] ? <span className="pill accent">{indexing[l.id]}</span>
+                          : (l as Lecture & { index_status?: string }).index_status === 'done' ? <span className="pill accent">مفهرسة بالدقيقة</span>
+                          : (l as Lecture & { index_status?: string }).index_status === 'error' ? <span className="pill bad" title={(l as Lecture & { index_error?: string }).index_error ?? ''}>فشلت الفهرسة</span> : null}
+                      </td>
                       <td>
                         <div className="row" style={{ justifyContent: 'flex-end', flexWrap: 'nowrap' }}>
+                          <button className="btn sm" disabled={!!indexing[l.id]} onClick={() => index(l)}>فهرسة</button>
                           <button className="btn sm" onClick={() => setEdit(l)}>تعديل</button>
                           <button className="btn danger sm" onClick={() => confirm('حذف المحاضرة؟') && run(async () => { await check(supabase.from('lectures').delete().eq('id', l.id)); await q.reload(); }, 'تم الحذف')}>حذف</button>
                         </div>

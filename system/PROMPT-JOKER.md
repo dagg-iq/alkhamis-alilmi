@@ -28,15 +28,16 @@
 ```
 packages/shared     منطق الدرجات والإعفاء والهدف (grading.ts, plan.ts) + الأنواع + الألوان — اختبارات vitest
 supabase/           migrations (SQL) + seed + functions (Deno) + tests (RLS على Postgres محلي)
-  functions/_shared  gemini.ts (سلسلة نماذج + تخطي المشغول) · storage.ts (Supabase Storage أو S3) · fcm.ts
-  functions/ai-chat  المساعد: فهرس التطبيق، معلومات الطالب، رموز البطاقات
+  functions/_shared  gemini.ts (مجموعات مفاتيح + سلسلة نماذج + تخطي المشغول) · storage.ts (Supabase Storage أو S3) · fcm.ts
+  functions/ai-chat  المساعد: فهرس التطبيق، معلومات الطالب، رموز البطاقات، الإجابات المحفوظة
+  functions/content-ai مساعد المحتوى للوحة التحكم: يوتيوب، تصنيف، فهرسة المحاضرات بالدقيقة، تصنيف PDF
 apps/mobile         Expo SDK 57 + expo-router (src/app) — RTL عربي، خط ثمانية
   src/components     ui.tsx (T, Screen…) · motion.tsx · rich-text.tsx · pdf-view.tsx · conversation-picker.tsx
   src/lib            markdown.ts (Markdown+KaTeX ← HTML) · pdf.ts · timer.ts · live-timer.ts · updater.ts · push.ts
   src/widgets/       ويدجتات أندرويد
   modules/saey-timer وحدة Kotlin محلية: عدّاد تنازلي في الستارة
   assets/sounds/     نغمة المنبّه saey_alarm.wav
-apps/admin          React + Vite — لوحة التحكم (base /saey-dashboard/)
+apps/admin          React + Vite — لوحة التحكم (base /saey-dashboard/) — صفحة «مساعد المحتوى» pages/Assistant.tsx
 apps/site           الموقع التعريفي (HTML/CSS/JS بلا إطار)
 scripts/            build-hosting.sh (يجمع الموقع واللوحة ويكتب download.json)
 system/             التخطيط والقرارات والسجل ← اقرأه أولاً
@@ -45,7 +46,7 @@ system/             التخطيط والقرارات والسجل ← اقرأ�
 **قبل أي عمل، اقرأ بهذا الترتيب:**
 1. `system/LOG.md`: آخر ما حدث والخطوة التالية.
 2. `system/TASKS.md`: المراحل وحالتها، وقسم «الآن» فيه المعلّق.
-3. `system/02-decisions.md`: القرارات. لا تغيّر قراراً عليه ✅ دون نقاش. القرارات ١٣ و١٤ و١٥ هي الأحدث.
+3. `system/02-decisions.md`: القرارات. لا تغيّر قراراً عليه ✅ دون نقاش. القرارات ١٤ و١٥ و١٦ هي الأحدث.
 4. `system/05-brand.md`: الهوية (ألوان، خطوط، قواعد التصميم). التزم بها حرفياً.
 5. حسب المهمة: `06-database.md`، `07-screens.md`، `08-setup-guide.md`، `03-research-iraq.md`، `04-open-questions.md`.
 
@@ -54,7 +55,7 @@ system/             التخطيط والقرارات والسجل ← اقرأ�
 | سير العمل | متى يعمل | ماذا يفعل |
 |---|---|---|
 | `build-apk.yml` | عند تغيير `apps/mobile` أو `packages/shared` | يبني APK في حوالي ٢٠–٢٥ دقيقة، وينشره في Releases باسم `apk-<رقم>`. الرقم = versionCode = `APK_BUILD` |
-| `deploy-supabase.yml` | عند تغيير `supabase/functions` | يضبط الأسرار، ويرفع الدوال، ويربط الإشعارات، ويختبر التخزين |
+| `deploy-supabase.yml` | عند تغيير `supabase/functions` أو `supabase/migrations` | يضبط الأسرار، ويرفع الدوال، **ويطبّق migrations ١٢ فما بعد**، ويربط الإشعارات، ويختبر التخزين |
 | `deploy-site.yml` | تلقائياً | ينشر الموقع واللوحة على Firebase Hosting |
 | `ci.yml` | تلقائياً | الاختبارات |
 | `keepalive.yml` | كل ٣ أيام | يزور Supabase حتى لا يتوقف (يعمل، يعطي 200) |
@@ -83,10 +84,10 @@ cd apps/mobile && npx expo export -p web --output-dir /tmp/web && (npx serve -s 
 
 **قواعد العمل:**
 - كل قرار جديد يُكتب في `02-decisions.md`، وكل مهمة في `TASKS.md`، وفي نهاية كل جلسة فقرة في `LOG.md`.
-- أي تغيير في قاعدة البيانات يكون في ملف migration **جديد**. لا تعدّل ملفاً طُبّق على Supabase الحقيقي.
+- أي تغيير في قاعدة البيانات يكون في ملف migration **جديد** (رقم ١٣ فما بعد، آمن لإعادة التشغيل لأنه يُطبَّق في كل نشر). لا تعدّل ملفاً طُبّق، ولا تغيّر نوع إرجاع دالة قديمة (أنشئ v2).
 - أرقام الإعفاء والنجاح في `app_settings`، وليست ثابتة في الكود.
 - لا تضع أي مفتاح سري في الكود أو المستودع (فقط `anon key` العام). الأسرار في GitHub Secrets:
-  - GEMINI_API_KEY و GEMINI_ADMIN_API_KEY
+  - GEMINI_API_KEY و GEMINI_API_KEY_2..4 (الطلاب) و GEMINI_ADMIN_API_KEY (اللوحة) و YOUTUBE_API_KEY
   - SUPABASE_ACCESS_TOKEN
   - PUSH_WEBHOOK_SECRET
   - GOOGLE_SERVICES_JSON و FCM_SERVICE_ACCOUNT
@@ -103,6 +104,7 @@ cd apps/mobile && npx expo export -p web --output-dir /tmp/web && (npx serve -s 
 - المتاح: generativelanguage.googleapis.com، و api.github عبر MCP.
 
 **المساعد الذكي (Gemini) — كيف يعمل الآن:**
+- **المفاتيح**: حتى ٤ مفاتيح للطلاب (كل مفتاح يبدأ بنموذج مختلف، بطلب صاحب المشروع، رغم تحذيرنا من شروط Google) + مفتاح للوحة. `generate(..., { pool, keyIndex, spread })`. ملفات Gemini تُحفظ `k<رقم>|uri` (مرتبطة بالمفتاح).
 - النماذج: gemini-2.5 أُوقفت للحسابات الجديدة (404)، و Pro غير مجاني (429)، و Flash كثيراً ما تعطي 503.
   - لذلك توجد سلسلة نماذج تبدأ بـ `gemini-3.8-flash` وتنتهي بالنماذج الخفيفة، والنموذج المشغول يُتخطى لدقائق.
   - التحية والكلام القصير يذهبان مباشرة للنموذج الخفيف بتفكير `minimal` (حوالي ثانية واحدة).
@@ -114,18 +116,17 @@ cd apps/mobile && npx expo export -p web --output-dir /tmp/web && (npx serve -s 
 - التنسيق: Markdown، و`==تظليل==`، وصناديق `>`، و LaTeX (و `\ce{}` للكيمياء).
   - كتل خاصة: ```شعر (الصدر // العجز)، و```قرآن، و```حديث.
   - التحويل إلى HTML يتم **داخل التطبيق** (`src/lib/markdown.ts`)، لأن طباعة PDF في أندرويد تعمل بلا JavaScript.
+- التحية لا تُحسب من رصيد الطالب، وأول سؤال مستقل في محادثة يُحفظ جوابه ٣٠ يوماً (`ai_cache`).
+- المحاضرات المفهرسة: مقاطع `source_type='lecture'` مع `start_sec` (دالة `match_chunks_v2`)، والرمز `[[lecture:ID@ثواني]]` يفتحها عند الدقيقة.
 - السؤال وجوابه يُحفظان بوقتين مختلفين. الوقت نفسه سبّب تكرار أجوبة قديمة، فلا ترجع عن ذلك.
 - لاختبار التعليمات فعلياً: استدعِ Gemini مباشرة من بايثون بنفس الـ SYSTEM (المفتاح يعطيه صاحب المشروع).
 
 **أين وصلنا (التفاصيل في LOG.md):**
 - ✅ كل الإعداد مكتمل: Supabase، تسجيل Google، الأدمن، Gemini، التخزين، الإشعارات، الموقع واللوحة، keepalive.
 - ✅ apk-19 على هاتفه وكل شيء يعمل، وهو يقول: «كلشيء جيد».
-- ⏳ معلّق: يرفع apk-19 على Dropbox، ثم نحدّث `download-config.json` إلى ١٩.
-- ⏳ **التالي — المرحلة ب:**
-  - إدخال المحتوى الأول.
-  - فهرسة المحاضرات بالدقيقة (Gemini يقرأ يوتيوب).
-  - الملازم المصوّرة.
-  - مساعد لوحة التحكم بمفتاح `GEMINI_ADMIN_API_KEY`: يقسّم المحاضرة إلى مواضيع بالدقيقة، والملزمة إلى فصول، والأدمن يراجع قبل الحفظ.
+- ✅ المرحلة ب (الكود): مفاتيح متعددة، إجابات محفوظة، «مساعد المحتوى»، فهرسة المحاضرات بالدقيقة.
+- ⏳ معلّق عند صاحب المشروع: رفع آخر APK على Dropbox (ثم نحدّث `download-config.json`)، مفاتيح Gemini 2..4 و YouTube (الخطوة ١٢)، Oracle للتخزين (هو يضبطه ثم نضيف أسرار S3).
+- ⏳ **التالي**: إدخال المحتوى بـ «مساعد المحتوى» ومتابعة أي خطأ يظهر فيه.
 - ⏳ المرحلة ج: الكتب. **ناقشه أولاً**: هو يرسل الروابط، أم رفع جماعي من اللوحة؟
 - ⏳ بعدها: تجربة مع ٣–٥ زملاء، ثم النشر للصف.
 
@@ -151,7 +152,9 @@ cd apps/mobile && npx expo export -p web --output-dir /tmp/web && (npx serve -s 
   - Firebase Hosting المجاني ٣٦٠ ميغا يومياً، فلا تضع APK عليه. Google Drive يعرض تحذير فيروس، ولهذا Dropbox.
   - ملفات CSS و JS في الموقع تحتاج cache-busting (`?v=sha`)، وهذا موجود في build-hosting.sh.
   - لا تشغّل `pkill -f "serve ..."`، فهو يقتل الطرفية. استخدم منفذاً جديداً.
-  - الأعداد بالعربية: `countOf(n, 'مادة', 'مادتان', 'مواد', 'مادة واحدة')`. لا تكتب «١ فصول».
+  - يوتيوب و jsdelivr و cdnjs محجوبة في السحابة: لا يمكن اختبار سحب القوائم من هنا. Gemini يقرأ فيديو يوتيوب من رابطه (اختُبر: `video_metadata` بأجزاء، الأوقات أحياناً نص "01:00").
+- Supabase Edge Function لها حد وقت: العمليات الطويلة على أجزاء، واللوحة تكرر الطلب (ingest، index_lecture).
+- الأعداد بالعربية: `countOf(n, 'مادة', 'مادتان', 'مواد', 'مادة واحدة')`. لا تكتب «١ فصول».
 
 **أسلوب التعامل معه:**
 - نفّذ **كل** نقطة يطلبها ولا تتجاوز أي واحدة. إذا لم تستطع شيئاً قل ذلك بوضوح ولماذا.

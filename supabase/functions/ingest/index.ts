@@ -3,7 +3,7 @@
 import { PDFDocument } from 'npm:pdf-lib@1.17.1';
 import { handler, HttpError, json } from '../_shared/cors.ts';
 import { admin, getCaller, getSetting } from '../_shared/supabase.ts';
-import { chunkText, embed, generate, GeminiQuotaError, parseJson, uploadFile, LITE_MODELS, modelChain } from '../_shared/gemini.ts';
+import { chunkText, embed, fileRef, generate, GeminiQuotaError, parseJson, uploadFile, LITE_MODELS, modelChain } from '../_shared/gemini.ts';
 import { getObject } from '../_shared/storage.ts';
 
 const BATCH = 10;
@@ -21,14 +21,16 @@ Deno.serve(handler(async (req) => {
 
   let fileUri: string | null = doc.gemini_file_uri;
   let pages: number | null = doc.pages;
-  const expired = !doc.gemini_file_expires_at || new Date(doc.gemini_file_expires_at) < new Date(Date.now() + 3600_000);
+  // الروابط القديمة (قبل تعدد المفاتيح) لا نعرف مفتاحها: نعيد الرفع
+  const expired = !doc.gemini_file_expires_at || new Date(doc.gemini_file_expires_at) < new Date(Date.now() + 3600_000)
+    || !String(fileUri ?? '').startsWith('k');
   if (!fileUri || expired || !pages) {
     const bytes = await getObject(doc.file_key);
     if (!pages) {
       const pdf = await PDFDocument.load(bytes, { ignoreEncryption: true, updateMetadata: false });
       pages = pdf.getPageCount();
     }
-    fileUri = await uploadFile(bytes, 'application/pdf', doc.title);
+    fileUri = await uploadFile(bytes, 'application/pdf', doc.title, 'admin');
     await admin.from('documents').update({
       gemini_file_uri: fileUri,
       gemini_file_expires_at: new Date(Date.now() + 47 * 3600_000).toISOString(),
@@ -46,19 +48,21 @@ Deno.serve(handler(async (req) => {
 
   try {
     const ai = await getSetting<{ lite_model?: string }>('ai');
+    const ref = fileRef(fileUri!);
     const raw = await generate(modelChain(ai.lite_model, LITE_MODELS), [{
       role: 'user',
       parts: [
-        { file_data: { mime_type: 'application/pdf', file_uri: fileUri! } },
+        { file_data: { mime_type: 'application/pdf', file_uri: ref.uri } },
         {
           text: `انسخ نص الصفحات من ${from} إلى ${to} من هذا الملف (ترقيم صفحات ملف PDF وليس المطبوع).
 أعد JSON فقط بالشكل: [{"page": رقم, "text": "النص"}]
 - اكتب المعادلات بـ LaTeX بين $...$.
 - صف الأشكال المهمة باختصار بين [شكل: ...].
-- تجاهل الزخارف وأرقام الهواتف والإعلانات.`,
+- تجاهل الزخارف وأرقام الهواتف والإعلانات.
+- إذا كانت الصفحة صورة ممسوحة (ملزمة مصوّرة) فاقرأ النص من الصورة كما هو.`,
         },
       ],
-    }], { json: true, temperature: 0, maxOutputTokens: 32768 });
+    }], { json: true, temperature: 0, maxOutputTokens: 32768, pool: 'admin', keyIndex: ref.keyIndex });
 
     const pagesText = parseJson<{ page: number; text: string }[]>(raw);
     const rows: { page: number; content: string }[] = [];
@@ -66,7 +70,7 @@ Deno.serve(handler(async (req) => {
       for (const c of chunkText(p.text ?? '')) rows.push({ page: p.page, content: c });
     }
     if (rows.length) {
-      const vectors = await embed(rows.map((r) => r.content), 'RETRIEVAL_DOCUMENT');
+      const vectors = await embed(rows.map((r) => r.content), 'RETRIEVAL_DOCUMENT', 'admin');
       const { error } = await admin.from('content_chunks').insert(rows.map((r, i) => ({
         source_type: 'document',
         source_id: doc.id,

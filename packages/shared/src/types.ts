@@ -115,6 +115,8 @@ export type Attachment =
       thumb?: string;
       /** سطر ثانوي: المادة، الأستاذ، عدد الصفحات… */
       subtitle?: string;
+      /** المحاضرة تُفتح من هذه الثانية (من المساعد) */
+      start?: number;
     }
   /** إجابة من مساعد سعي شاركها الطالب (النص كاملاً داخل المرفق) */
   | { type: 'answer'; title: string; body: string }
@@ -132,7 +134,7 @@ export interface Message {
   edited_at: string | null;
   deleted_at: string | null;
 }
-export interface AiSource { title: string; subject?: string; chapter?: string; page?: number }
+export interface AiSource { title: string; subject?: string; chapter?: string; page?: number; lecture_id?: string; start?: number }
 export interface AiMessage { id: string; chat_id: string; role: 'user' | 'assistant'; content: string; sources: AiSource[] | null; created_at: string }
 
 export const ROLE_LABELS: Record<Role, string> = { student: 'طالب', moderator: 'مشرف', admin: 'الأدمن' };
