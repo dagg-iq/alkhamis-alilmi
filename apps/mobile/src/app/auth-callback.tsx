@@ -14,7 +14,7 @@ export default function AuthCallback() {
   }, [code]);
   return (
     <Screen scroll={false}>
-      <Loading />
+      <Loading spinner />
     </Screen>
   );
 }

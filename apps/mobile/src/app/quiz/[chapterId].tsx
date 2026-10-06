@@ -55,7 +55,7 @@ export default function Quiz() {
     return (
       <Screen>
         <Header title="اختبر نفسك" />
-        <Loading />
+        <Loading spinner />
         <T dim center>يجهّز المساعد الأسئلة… (أول مرة قد تأخذ نصف دقيقة)</T>
       </Screen>
     );

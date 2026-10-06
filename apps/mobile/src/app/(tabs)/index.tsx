@@ -6,6 +6,7 @@ import { router, useFocusEffect } from 'expo-router';
 import { useCallback } from 'react';
 import { Pressable, View } from 'react-native';
 import { Icon } from '@/components/icon';
+import { CountUp } from '@/components/motion';
 import { Avatar, Card, IconButton, ProgressBar, Row, Screen, SectionTitle, T } from '@/components/ui';
 import { useMe } from '@/lib/auth';
 import { loadMyGrades, loadSubjectProgress, loadSubjects, shortSubject } from '@/lib/queries';
@@ -96,7 +97,7 @@ export default function Home() {
         {general?.average != null ? (
           <>
             <Row gap={10} style={{ alignItems: 'baseline' }}>
-              <T display size={60} color={c.heroInk} style={{ lineHeight: 70 }}>{formatScore(general.average)}</T>
+              <CountUp value={general.average}>{(v) => <T display size={60} color={c.heroInk} style={{ lineHeight: 70 }}>{formatScore(v)}</T>}</CountUp>
               <T size={14} color={c.heroInk2}>معدلك الحالي · الهدف {formatScore(rules.generalAvg, 0)}</T>
             </Row>
             <ProgressBar value={general.average / 100} track={c.track} marker={rules.generalAvg / 100} height={8} />

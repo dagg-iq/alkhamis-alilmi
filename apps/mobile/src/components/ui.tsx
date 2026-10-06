@@ -1,14 +1,16 @@
 import { arDigits, initials, radius } from '@saey/shared';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
-import type { ReactNode } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import {
   ActivityIndicator, Pressable, RefreshControl, ScrollView, Text, TextInput, View,
   type PressableProps, type StyleProp, type TextInputProps, type TextStyle, type ViewStyle,
 } from 'react-native';
+import Animated, { Easing, ZoomIn, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { fonts, useTheme } from '@/lib/theme';
 import { Icon, type IconName, VerifiedBadge } from './icon';
+import { PressScale, Skeleton, Stagger, tap } from './motion';
 
 // ---------------------------------------------------------------- النص
 type Weight = 'regular' | 'medium' | 'bold' | 'black';
@@ -90,7 +92,7 @@ export function Screen({
         contentContainerStyle={[pad, inner, { gap: 16 }, style]}
         keyboardShouldPersistTaps="handled"
         refreshControl={onRefresh ? <RefreshCtl refreshing={!!refreshing} onRefresh={onRefresh} /> : undefined}>
-        {children}
+        <Stagger>{children}</Stagger>
       </ScrollView>
       {footer}
     </View>
@@ -137,18 +139,18 @@ export function IconButton({ name, label, onPress, color, filled, size = 44, bad
 }) {
   const { c } = useTheme();
   return (
-    <Pressable
+    <PressScale
       accessibilityRole="button"
       accessibilityLabel={label}
       onPress={onPress}
       hitSlop={6}
-      style={({ pressed }) => ({
+      scaleTo={0.88}
+      style={{
         width: size, height: size, borderRadius: size / 2,
         alignItems: 'center', justifyContent: 'center',
         backgroundColor: filled ? c.accent : c.card,
         borderWidth: filled ? 0 : 1, borderColor: c.line,
-        opacity: pressed ? 0.7 : 1,
-      })}>
+      }}>
       <Icon name={name} size={Math.round(size * 0.48)} color={filled ? '#FFFFFF' : color ?? c.ink} />
       {badge ? (
         <View style={{
@@ -158,7 +160,7 @@ export function IconButton({ name, label, onPress, color, filled, size = 44, bad
           <T size={10} weight="bold" color="#FFFFFF" style={{ lineHeight: 13 }}>{badge > 99 ? '+٩٩' : arDigits(badge)}</T>
         </View>
       ) : null}
-    </Pressable>
+    </PressScale>
   );
 }
 
@@ -182,11 +184,12 @@ export function Button({
     primary: dark ? '#0E0E0F' : '#FFFFFF', secondary: c.ink, ghost: c.accent, danger: dark ? '#F59A93' : '#A82620', ink: c.bg,
   }[variant];
   return (
-    <Pressable
+    <PressScale
       accessibilityRole="button"
       onPress={onPress}
+      haptic
       disabled={disabled || loading}
-      style={({ pressed }) => [{
+      style={[{
         height: small ? 40 : 52,
         paddingHorizontal: small ? 14 : 20,
         borderRadius: radius.pill,
@@ -194,7 +197,7 @@ export function Button({
         borderWidth: variant === 'secondary' ? 1 : 0,
         borderColor: c.line,
         flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-        opacity: disabled ? 0.45 : pressed ? 0.8 : 1,
+        opacity: disabled ? 0.45 : 1,
       }, style]}>
       {loading ? <ActivityIndicator color={fg} /> : (
         <>
@@ -202,7 +205,7 @@ export function Button({
           <T weight="bold" size={small ? 14 : 16} color={fg}>{title}</T>
         </>
       )}
-    </Pressable>
+    </PressScale>
   );
 }
 
@@ -220,9 +223,9 @@ export function Card({ children, style, onPress, tone = 'card' }: {
   };
   if (!onPress) return <View style={[base, style]}>{children}</View>;
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => [base, { opacity: pressed ? 0.85 : 1 }, style]}>
+    <PressScale onPress={onPress} scaleTo={0.975} style={[base, style]}>
       {children}
-    </Pressable>
+    </PressScale>
   );
 }
 
@@ -236,9 +239,9 @@ export function ListItem({ title, subtitle, icon, onPress, right, danger }: {
   const { c } = useTheme();
   const color = danger ? '#C8312B' : c.ink;
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => ({
-      flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 14, opacity: pressed ? 0.6 : 1,
-    })}>
+    <PressScale onPress={onPress} disabled={!onPress} scaleTo={0.98} style={{
+      flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 14,
+    }}>
       {icon ? (
         <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: c.soft, alignItems: 'center', justifyContent: 'center' }}>
           <Icon name={icon} size={20} color={danger ? color : c.accent} />
@@ -249,7 +252,7 @@ export function ListItem({ title, subtitle, icon, onPress, right, danger }: {
         {subtitle ? <T dim size={13}>{subtitle}</T> : null}
       </View>
       {right ?? (onPress ? <Icon name="forward" size={18} color={c.ink3} /> : null)}
-    </Pressable>
+    </PressScale>
   );
 }
 
@@ -278,9 +281,10 @@ export function Chip({ label, active, onPress, color, bg, small }: {
 }) {
   const { c } = useTheme();
   return (
-    <Pressable
-      onPress={onPress}
+    <PressScale
+      onPress={onPress ? () => { tap('select'); onPress(); } : undefined}
       disabled={!onPress}
+      scaleTo={0.92}
       accessibilityRole={onPress ? 'button' : undefined}
       accessibilityState={onPress ? { selected: !!active } : undefined}
       style={{
@@ -293,7 +297,7 @@ export function Chip({ label, active, onPress, color, bg, small }: {
         alignItems: 'center', justifyContent: 'center',
       }}>
       <T size={small ? 12 : 14} weight={active || small ? 'bold' : 'medium'} color={color ?? (active ? c.bg : c.ink)}>{label}</T>
-    </Pressable>
+    </PressScale>
   );
 }
 
@@ -315,16 +319,27 @@ export function Segmented<K extends string>({ options, value, onChange }: {
   const { c } = useTheme();
   return (
     <View style={{ flexDirection: 'row', backgroundColor: c.card, borderRadius: radius.pill, padding: 4, borderWidth: 1, borderColor: c.line }}>
-      {options.map((o) => {
-        const on = o.key === value;
-        return (
-          <Pressable key={o.key} onPress={() => onChange(o.key)} accessibilityRole="tab" accessibilityState={{ selected: on }}
-            style={{ flex: 1, height: 36, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', backgroundColor: on ? c.ink : 'transparent' }}>
-            <T size={14} weight={on ? 'bold' : 'medium'} color={on ? c.bg : c.ink2}>{o.label}</T>
-          </Pressable>
-        );
-      })}
+      {options.map((o) => (
+        <SegmentItem key={o.key} label={o.label} on={o.key === value} onPress={() => { tap('select'); onChange(o.key); }} />
+      ))}
     </View>
+  );
+}
+
+function SegmentItem({ label, on, onPress }: { label: string; on: boolean; onPress: () => void }) {
+  const { c } = useTheme();
+  const v = useSharedValue(on ? 1 : 0);
+  useEffect(() => {
+    v.value = withTiming(on ? 1 : 0, { duration: 260, easing: Easing.out(Easing.cubic) });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [on]);
+  const pill = useAnimatedStyle(() => ({ opacity: v.value, transform: [{ scale: 0.85 + v.value * 0.15 }] }));
+  return (
+    <PressScale onPress={onPress} accessibilityRole="tab" accessibilityState={{ selected: on }} scaleTo={0.95}
+      style={{ flex: 1, height: 36, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' }}>
+      <Animated.View style={[{ position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, borderRadius: radius.pill, backgroundColor: c.ink }, pill]} />
+      <T size={14} weight={on ? 'bold' : 'medium'} color={on ? c.bg : c.ink2}>{label}</T>
+    </PressScale>
   );
 }
 
@@ -393,10 +408,16 @@ export function ProgressBar({ value, color, track, height = 6, marker }: {
   value: number; color?: string; track?: string; height?: number; marker?: number;
 }) {
   const { c } = useTheme();
-  const pct = Math.max(0, Math.min(1, value));
+  const pct = Math.max(0, Math.min(1, Number.isFinite(value) ? value : 0));
+  const w = useSharedValue(0);
+  useEffect(() => {
+    w.value = withTiming(pct, { duration: 900, easing: Easing.out(Easing.cubic) });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pct]);
+  const fill = useAnimatedStyle(() => ({ width: `${w.value * 100}%` }));
   return (
     <View style={{ height, borderRadius: height / 2, backgroundColor: track ?? c.line, overflow: 'visible' }}>
-      <View style={{ position: 'absolute', top: 0, bottom: 0, right: 0, width: `${pct * 100}%`, borderRadius: height / 2, backgroundColor: color ?? c.accent }} />
+      <Animated.View style={[{ position: 'absolute', top: 0, bottom: 0, right: 0, borderRadius: height / 2, backgroundColor: color ?? c.accent }, fill]} />
       {marker !== undefined ? (
         <View style={{ position: 'absolute', top: -4, bottom: -4, right: `${marker * 100}%`, width: 2, backgroundColor: c.heroInk }} />
       ) : null}
@@ -404,8 +425,9 @@ export function ProgressBar({ value, color, track, height = 6, marker }: {
   );
 }
 
-export function Loading() {
+export function Loading({ spinner }: { spinner?: boolean } = {}) {
   const { c } = useTheme();
+  if (!spinner) return <Skeleton />;
   return (
     <View style={{ paddingVertical: 48, alignItems: 'center' }}>
       <ActivityIndicator color={c.accent} />
@@ -437,8 +459,8 @@ export function ErrorBox({ message, onRetry }: { message: string; onRetry?: () =
 export function Fab({ title, icon = 'plus', onPress }: { title: string; icon?: IconName; onPress: () => void } & Partial<PressableProps>) {
   const insets = useSafeAreaInsets();
   return (
-    <View style={{ position: 'absolute', left: 20, bottom: insets.bottom + 20 }}>
+    <Animated.View entering={ZoomIn.springify().damping(14).delay(250)} style={{ position: 'absolute', left: 20, bottom: insets.bottom + 20 }}>
       <Button title={title} icon={icon} onPress={onPress} />
-    </View>
+    </Animated.View>
   );
 }

@@ -84,11 +84,19 @@ export function Intro({ ready, onDone }: { ready: boolean; onDone: () => void })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [animDone, ready]);
 
-  const baseProps = useAnimatedProps(() => ({ x: 100 - base.value, width: base.value }));
-  const b1 = useAnimatedProps(() => ({ y: 104 - h1.value, height: h1.value }));
-  const b2 = useAnimatedProps(() => ({ y: 104 - h2.value, height: h2.value }));
-  const b3 = useAnimatedProps(() => ({ y: 104 - h3.value, height: h3.value }));
-  const dot = useAnimatedProps(() => ({ cy: dotY.value, r: dotR.value }));
+  const baseProps = useAnimatedProps(() => {
+    const w = Math.max(0, base.value);
+    return { x: 100 - w, width: w };
+  });
+  const bar = (h: number) => {
+    'worklet';
+    const v = Math.max(0, h);
+    return { y: 104 - v, height: v };
+  };
+  const b1 = useAnimatedProps(() => bar(h1.value));
+  const b2 = useAnimatedProps(() => bar(h2.value));
+  const b3 = useAnimatedProps(() => bar(h3.value));
+  const dot = useAnimatedProps(() => ({ cy: dotY.value, r: Math.max(0, dotR.value) }));
   const nameStyle = useAnimatedStyle(() => ({
     opacity: nameOpacity.value,
     transform: [{ translateY: nameY.value }, { scale: nameScale.value }],

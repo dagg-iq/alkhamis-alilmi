@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator, Alert, FlatList, KeyboardAvoidingView, Platform, Pressable, ScrollView, TextInput, View,
 } from 'react-native';
+import Animated, { FadeInDown, LinearTransition } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Icon } from '@/components/icon';
 import { Sheet, SheetItem } from '@/components/sheet';
@@ -377,9 +378,14 @@ function Bubble({ m, mine, sender, showName, reply, replySender, imageUrl, react
   const sub = mine ? 'rgba(255,255,255,0.75)' : c.ink2;
   const grouped = Object.entries(reactions.reduce<Record<string, number>>((a, r) => ({ ...a, [r.emoji]: (a[r.emoji] ?? 0) + 1 }), {}));
   const a = m.attachment;
+  // الرسائل الجديدة فقط تدخل بحركة (لا نحرّك السجل القديم عند الفتح أو التمرير)
+  const [fresh] = useState(() => Date.now() - new Date(m.created_at).getTime() < 5000);
 
   return (
-    <View style={{ alignSelf: mine ? 'flex-end' : 'flex-start', maxWidth: '82%', marginTop: showName ? 8 : 0 }}>
+    <Animated.View
+      entering={fresh ? FadeInDown.springify().damping(16).stiffness(180).withInitialValues({ transform: [{ translateY: 24 }] }) : undefined}
+      layout={LinearTransition.duration(200)}
+      style={{ alignSelf: mine ? 'flex-end' : 'flex-start', maxWidth: '82%', marginTop: showName ? 8 : 0 }}>
       {showName && sender ? (
         <View style={{ marginBottom: 2, paddingHorizontal: 6 }}>
           <NameLine name={sender.full_name} verified={sender.is_verified} size={12} />
@@ -432,7 +438,7 @@ function Bubble({ m, mine, sender, showName, reply, replySender, imageUrl, react
           })}
         </Row>
       ) : null}
-    </View>
+    </Animated.View>
   );
 }
 

@@ -6,6 +6,7 @@ import { useCallback } from 'react';
 import { Pressable, View } from 'react-native';
 import { LogoMark } from '@/components/icon';
 import { Card, Empty, ErrorBox, Fab, Header, Loading, Row, Screen, T } from '@/components/ui';
+import { CountUp } from '@/components/motion';
 import { useMe } from '@/lib/auth';
 import { loadMyGrades, loadSubjects, shortSubject } from '@/lib/queries';
 import { useGradingRules } from '@/lib/settings';
@@ -66,7 +67,7 @@ export default function Grades() {
           <Row gap={10} style={{ alignItems: 'stretch' }}>
             <Card tone="hero" style={{ flex: 1, gap: 2 }}>
               <T size={13} color={c.heroInk2}>المعدل الحالي</T>
-              <T display size={34} color={c.heroInk} style={{ lineHeight: 44 }}>{formatScore(general.average)}</T>
+              <CountUp value={general.average}>{(v) => <T display size={34} color={c.heroInk} style={{ lineHeight: 44 }}>{formatScore(v)}</T>}</CountUp>
               <T size={12} color={c.heroInk2}>
                 إعفاء عام: {general.exempt ? (general.final ? 'متحقق' : 'على الطريق') : general.meetsAverage ? 'مادة تحت ' + arDigits(rules.generalMin) : 'تحت ' + arDigits(rules.generalAvg)}
               </T>

@@ -67,7 +67,7 @@ const rpc = {
     page.on('pageerror', (e) => errs.push('PAGEERROR ' + e.message));
     page.on('console', (m) => { if (m.type() === 'error' && !/WebSocket|realtime|Failed to load resource|youtube|net::/.test(m.text())) errs.push('CONSOLE ' + m.text().slice(0, 200)); });
     await page.goto((process.env.BASE || 'http://localhost:4175') + r, { waitUntil: 'networkidle' }).catch((e) => errs.push('NAV ' + e.message));
-    await page.waitForTimeout(1500);
+    await page.waitForTimeout(3500); // بعد انتهاء المقدمة
     const text = (await page.evaluate(() => document.body.innerText)).replace(/\s+/g, ' ').slice(0, 90);
     const name = r.replace(/[\/]/g, '_') || 'home';
     await page.screenshot({ path: `shots/${name}.png` });
