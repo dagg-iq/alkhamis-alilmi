@@ -1,17 +1,18 @@
 import type { AiSource, Subject } from '@saey/shared';
 import { analyzeGrades, arDigits, studentBrief } from '@saey/shared';
 import * as Clipboard from 'expo-clipboard';
-import * as Print from 'expo-print';
 import { router, useLocalSearchParams } from 'expo-router';
-import * as Sharing from 'expo-sharing';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Pressable, ScrollView, TextInput, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardView, PressScale, tap } from '@/components/motion';
 import { Icon, LogoMark, type IconName } from '@/components/icon';
-import { RichText, markdownHtml } from '@/components/rich-text';
+import { ConversationPicker } from '@/components/conversation-picker';
+import { RichText } from '@/components/rich-text';
 import { Chip, IconButton, Row, T, MAX_WIDTH } from '@/components/ui';
 import { useMe } from '@/lib/auth';
+import { conversationTitle } from '@/lib/chat';
+import { markdownPdf, sendAttachment } from '@/lib/pdf';
 import { loadGoal } from '@/lib/goal';
 import { loadMyGrades, loadSubjects, shortSubject } from '@/lib/queries';
 import { useGradingRules } from '@/lib/settings';
@@ -52,8 +53,13 @@ export default function AiChat() {
       brief.current = studentBrief(analyzeGrades(subs, grades, goal ?? 'general', rules));
     }).catch(() => {});
     if (chatId) {
-      supabase.from('ai_messages').select('id, role, content, sources').eq('chat_id', chatId).order('created_at')
-        .then(({ data }) => setMessages((data ?? []) as Msg[]));
+      supabase.from('ai_messages').select('id, role, content, sources, created_at').eq('chat_id', chatId).order('created_at')
+        .then(({ data }) => {
+          // السؤال قبل جوابه حتى لو حُفظا بنفس الوقت (رسائل قديمة)
+          const rows = ((data ?? []) as (Msg & { created_at: string })[])
+            .sort((a, b) => (a.created_at ?? '').localeCompare(b.created_at ?? '') || (a.role === 'user' ? -1 : 1));
+          setMessages(rows);
+        });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -65,12 +71,12 @@ export default function AiChat() {
     setMessages((m) => [...m, { id: `u${Date.now()}`, role: 'user', content: question }]);
     setThinking(true);
     try {
-      const res = await callFunction<{ chatId: string; answer: string; sources: AiSource[]; remaining: number | null }>('ai-chat', {
+      const res = await callFunction<{ chatId: string; answer: string; messageId: string | null; sources: AiSource[]; remaining: number | null }>('ai-chat', {
         chatId, message: question, subjectId, brief: brief.current,
       });
       setChatId(res.chatId);
       setRemaining(res.remaining);
-      setMessages((m) => [...m, { id: `a${Date.now()}`, role: 'assistant', content: res.answer, sources: res.sources }]);
+      setMessages((m) => [...m, { id: res.messageId ?? `a${Date.now()}`, role: 'assistant', content: res.answer, sources: res.sources }]);
     } catch (e) {
       setMessages((m) => [...m, { id: `e${Date.now()}`, role: 'assistant', content: e instanceof Error ? e.message : 'حدث خطأ', error: true }]);
     } finally {
@@ -81,16 +87,61 @@ export default function AiChat() {
 
   const subjectName = subjects.find((x) => x.id === subjectId)?.name ?? '';
 
+  const titleFor = (m: Msg) => {
+    const i = messages.indexOf(m);
+    const question = i > 0 ? messages[i - 1] : null;
+    return question?.role === 'user' ? (question.content.length > 70 ? `${question.content.slice(0, 70)}…` : question.content) : 'مساعد سعي';
+  };
+
+  // تحويل الإجابة إلى PDF: يظهر في المحادثة كمرفق من المساعد «تم التحويل إلى PDF»، ويُفتح داخل التطبيق
+  const [pdfBusy, setPdfBusy] = useState<string | null>(null);
+  const openPdf = async (source: Msg) => {
+    const title = titleFor(source);
+    const f = await markdownPdf(source.content, title, `${me.full_name ? `${me.full_name} · ` : ''}مساعد سعي`);
+    router.push({ pathname: '/pdf', params: { uri: f.uri, title } });
+  };
   const exportPdf = async (m: Msg) => {
-    const question = messages[messages.indexOf(m) - 1];
-    const title = question?.role === 'user' ? (question.content.length > 70 ? `${question.content.slice(0, 70)}…` : question.content) : 'مساعد سعي';
+    if (pdfBusy) return;
+    setPdfBusy(m.id);
     try {
-      const html = markdownHtml(m.content, { color: '#111111', bg: '#FFFFFF', accent: '#2346F5', size: 16, title, footer: `${me.full_name} · مساعد سعي` });
-      const { uri } = await Print.printToFileAsync({ html });
-      await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: title, UTI: 'com.adobe.pdf' });
+      await markdownPdf(m.content, titleFor(m)); // نتأكد أن التحويل نجح قبل الرسالة
+      let noteId = `p${Date.now()}`;
+      if (chatId && /^[0-9a-f-]{36}$/.test(m.id)) {
+        const r = await callFunction<{ id: string }>('ai-chat', { chatId, note: 'pdf', of: m.id }).catch(() => null);
+        if (r?.id) noteId = r.id;
+      }
+      setMessages((list) => [...list, { id: noteId, role: 'assistant', content: `[[pdf:${m.id}]]` }]);
+      tap('success');
+      setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 150);
     } catch (e) {
       Alert.alert('تعذّر إنشاء PDF', e instanceof Error ? e.message : '');
+    } finally {
+      setPdfBusy(null);
     }
+  };
+
+  const [sharing, setSharing] = useState<Msg | null>(null);
+
+  const pdfCard = (of: string) => {
+    const source = messages.find((x) => x.id === of);
+    return (
+      <PressScale onPress={() => source && openPdf(source).catch((e) => Alert.alert('تعذّر فتح PDF', e instanceof Error ? e.message : ''))}
+        accessibilityRole="button" accessibilityLabel="فتح ملف PDF"
+        style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 10, borderRadius: 16, backgroundColor: c.soft, maxWidth: 320 }}>
+        <View style={{ width: 46, height: 54, borderRadius: 10, backgroundColor: c.card, alignItems: 'center', justifyContent: 'center' }}>
+          <Icon name="file" size={24} color={c.accent} />
+          <View style={{ position: 'absolute', bottom: 4, paddingHorizontal: 4, borderRadius: 4, backgroundColor: c.accent }}>
+            <T size={8} weight="bold" color={c.accentInk}>PDF</T>
+          </View>
+        </View>
+        <View style={{ flex: 1, gap: 1 }}>
+          <T size={11} weight="bold" color={c.ink2}>تم التحويل إلى PDF</T>
+          <T weight="bold" size={14} lines={2}>{source ? titleFor(source) : 'ملف PDF'}</T>
+          <T size={12} color={c.ink2}>اضغط للفتح، ثم احفظه أو أرسله</T>
+        </View>
+        <Icon name="forward" size={16} color={c.ink2} />
+      </PressScale>
+    );
   };
 
   return (
@@ -143,11 +194,14 @@ export default function AiChat() {
         ) : (
           <View style={{ gap: 8 }}>
             <View style={{ backgroundColor: item.error ? verdict.risk.bg : c.card, borderRadius: 20, borderWidth: item.error ? 0 : 1, borderColor: c.line, padding: 14 }}>
-              {item.error ? <T color={verdict.risk.ink}>{item.content}</T> : <RichText text={item.content} size={17} />}
+              {item.error ? <T color={verdict.risk.ink}>{item.content}</T> : (
+                <RichText text={item.content} size={17} renderToken={(t) => (t.kind === 'pdf' ? pdfCard(t.of) : null)} />
+              )}
             </View>
-            {!item.error ? (
+            {!item.error && !item.content.startsWith('[[pdf:') ? (
               <Row gap={8}>
-                <AnswerAction icon="file" label="PDF" onPress={() => exportPdf(item)} />
+                <AnswerAction icon="file" label="PDF" busy={pdfBusy === item.id} onPress={() => exportPdf(item)} />
+                <AnswerAction icon="share" label="مشاركة" onPress={() => setSharing(item)} />
                 <AnswerAction icon="copy" label="نسخ" onPress={() => { Clipboard.setStringAsync(item.content); tap('success'); }} />
               </Row>
             ) : null}
@@ -173,8 +227,8 @@ export default function AiChat() {
 
       {messages.length && !thinking ? (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled"
-          style={{ flexGrow: 0, backgroundColor: c.card, borderTopWidth: 1, borderTopColor: c.line }}
-          contentContainerStyle={{ gap: 6, paddingHorizontal: 12, paddingTop: 10 }}>
+          style={{ flexGrow: 0, flexShrink: 0, height: 46, backgroundColor: c.card, borderTopWidth: 1, borderTopColor: c.line }}
+          contentContainerStyle={{ gap: 6, paddingHorizontal: 12, alignItems: 'center', paddingTop: 6 }}>
           {QUICK.map((q) => <Chip small key={q.label} label={q.label} onPress={() => ask(q.prompt(subjectName))} />)}
         </ScrollView>
       ) : null}
@@ -192,16 +246,28 @@ export default function AiChat() {
           <Icon name="send" size={20} color={text.trim() && !thinking ? c.accentInk : c.ink3} strokeWidth={2} />
         </Pressable>
       </Row>
+      <ConversationPicker visible={!!sharing} onClose={() => setSharing(null)} title="مشاركة الإجابة مع"
+        onPick={async (conv) => {
+          if (!sharing) return;
+          try {
+            await sendAttachment(conv.id, me.id, { type: 'answer', title: titleFor(sharing), body: sharing.content.slice(0, 20000) });
+            setSharing(null);
+            tap('success');
+            Alert.alert('أُرسلت', `أُرسلت الإجابة إلى «${conversationTitle(conv)}».`);
+          } catch (e) {
+            Alert.alert('لم تُرسل', e instanceof Error ? e.message : '');
+          }
+        }} />
     </KeyboardView>
   );
 }
 
-function AnswerAction({ icon, label, onPress }: { icon: IconName; label: string; onPress: () => void }) {
+function AnswerAction({ icon, label, onPress, busy }: { icon: IconName; label: string; onPress: () => void; busy?: boolean }) {
   const { c } = useTheme();
   return (
-    <PressScale onPress={onPress} accessibilityRole="button" accessibilityLabel={label === 'PDF' ? 'حفظ الإجابة PDF' : label}
+    <PressScale onPress={onPress} disabled={busy} accessibilityRole="button" accessibilityLabel={label === 'PDF' ? 'تحويل الإجابة إلى PDF' : label}
       style={{ flexDirection: 'row', alignItems: 'center', gap: 6, height: 34, paddingHorizontal: 12, borderRadius: 17, backgroundColor: c.card, borderWidth: 1, borderColor: c.line }}>
-      <Icon name={icon} size={16} color={c.ink2} />
+      {busy ? <ActivityIndicator size="small" color={c.ink2} /> : <Icon name={icon} size={16} color={c.ink2} />}
       <T size={13} weight="bold" color={c.ink2}>{label}</T>
     </PressScale>
   );

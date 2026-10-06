@@ -48,6 +48,11 @@ const PATHS: Record<string, string[]> = {
   info: ['M12 11v5.5', 'M12 7.6v.4'],
   minus: ['M5 12h14'],
   list: ['M9 6h11', 'M9 12h11', 'M9 18h11'],
+  instagram: ['M8 3h8a5 5 0 0 1 5 5v8a5 5 0 0 1-5 5H8a5 5 0 0 1-5-5V8a5 5 0 0 1 5-5z'],
+  telegram: ['M21 4L3 11l6 2 2 6 3-4 5 4z', 'M9 13l8-6'],
+  whatsapp: ['M4 20l1.3-4A8 8 0 1 1 8 18.7z', 'M9 9.5c.5 2 2.5 4 4.5 4.5l1.2-1.2 2 1-.5 1.7c-3.5.3-7.7-3.9-7.4-7.4l1.7-.5 1 2z'],
+  facebook: ['M14 8h3V4h-3a4 4 0 0 0-4 4v3H7v4h3v7h4v-7h3l1-4h-4V8z'],
+  link: ['M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1', 'M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1'],
   sparkles: ['M10 4l1.6 4.4L16 10l-4.4 1.6L10 16l-1.6-4.4L4 10l4.4-1.6z', 'M18 14l.8 2.2L21 17l-2.2.8L18 20l-.8-2.2L15 17l2.2-.8z'],
 };
 
@@ -66,6 +71,7 @@ const CIRCLES: Record<string, [number, number, number][]> = {
   target: [[12, 12, 9], [12, 12, 5], [12, 12, 1.2]],
   info: [[12, 12, 9.5]],
   list: [[4.5, 6, 1], [4.5, 12, 1], [4.5, 18, 1]],
+  instagram: [[12, 12, 4], [17.5, 6.5, 0.6]],
 };
 
 export type IconName = keyof typeof PATHS;
@@ -81,7 +87,7 @@ export function Icon({ name, size = 24, color, strokeWidth = 1.8, fill }: {
       ))}
       {(CIRCLES[name] ?? []).map(([cx, cy, r], i) => (
         <Circle key={`c${i}`} cx={cx} cy={cy} r={r} stroke={color} strokeWidth={strokeWidth}
-          fill={name === 'more' ? color : 'none'} />
+          fill={name === 'more' || r < 1 ? color : 'none'} />
       ))}
     </Svg>
   );

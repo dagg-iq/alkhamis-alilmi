@@ -1,12 +1,14 @@
 import Constants from 'expo-constants';
 import { router } from 'expo-router';
-import { GOALS, type Goal } from '@saey/shared';
+import { GOALS, arDigits, type Goal } from '@saey/shared';
 import { useEffect, useState } from 'react';
 import { Alert, Switch, View } from 'react-native';
 import type { IconName } from '@/components/icon';
 import { Card, Divider, Header, ListItem, Row, Screen, Segmented, T } from '@/components/ui';
 import { useAuth, useMe } from '@/lib/auth';
 import { pushRegistered, registerPush, unregisterPush } from '@/lib/push';
+import { UpdatePrompt } from '@/components/update-sheet';
+import { checkForUpdate, currentBuild, type UpdateInfo } from '@/lib/updater';
 import { useTheme, type ThemeMode } from '@/lib/theme';
 import { setGoal, useGoal } from '@/lib/goal';
 import { readWidgetTheme, type WidgetTheme } from '@/widgets/data';
@@ -33,6 +35,8 @@ export default function Settings() {
   const [push, setPush] = useState(true);
   const goal = useGoal();
   const [wTheme, setWTheme] = useState<WidgetTheme>('system');
+  const [update, setUpdate] = useState<UpdateInfo | null>(null);
+  const [checking, setChecking] = useState(false);
   useEffect(() => {
     readWidgetTheme().then(setWTheme);
     pushRegistered(me.id).then(setPush).catch(() => {});
@@ -95,11 +99,27 @@ export default function Settings() {
       <Card style={{ paddingVertical: 2 }}>
         <ListItem icon="user" title="تعديل ملفي" onPress={() => router.push(`/profile/${me.id}`)} />
         <Divider />
+        <ListItem icon="download" title={checking ? 'يتحقق…' : 'التحقق من التحديثات'} subtitle={currentBuild ? `نسختك ${arDigits(currentBuild)}` : undefined}
+          onPress={async () => {
+            if (checking) return;
+            setChecking(true);
+            try {
+              const u = await checkForUpdate(true);
+              if (u) setUpdate(u);
+              else Alert.alert('لا يوجد تحديث', 'عندك آخر نسخة من سعي.');
+            } catch {
+              Alert.alert('تعذّر التحقق', 'تأكد من الإنترنت وحاول مرة أخرى.');
+            } finally {
+              setChecking(false);
+            }
+          }} />
+        <Divider />
         <ListItem icon="logout" title="تسجيل الخروج" danger onPress={() => Alert.alert('تسجيل الخروج', 'هل تريد الخروج من حسابك؟', [
           { text: 'إلغاء', style: 'cancel' },
           { text: 'خروج', style: 'destructive', onPress: () => { unregisterPush(me.id).finally(signOut); } },
         ])} />
       </Card>
+      <UpdatePrompt info={update} onClose={() => setUpdate(null)} />
       <T dim size={12} center>سعي · الإصدار {Constants.expoConfig?.version ?? '1.0.0'} · إعدادية الشهاب للبنين</T>
     </Screen>
   );

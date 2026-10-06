@@ -11,6 +11,7 @@ import { PressScale, tap } from '@/components/motion';
 import { Sheet } from '@/components/sheet';
 import { Card, Chip, Header, IconButton, ProgressBar, Row, Screen, Segmented, T } from '@/components/ui';
 import { useMe } from '@/lib/auth';
+import { hideLiveTimer, showLiveTimer } from '@/lib/live-timer';
 import { cancelReminder, notificationsAllowed, scheduleAlarm } from '@/lib/push';
 import { loadSubjects, shortSubject } from '@/lib/queries';
 import { must, supabase } from '@/lib/supabase';
@@ -27,6 +28,7 @@ const FOCUS_CHOICES = [25, 45, 50, 60, 90];
 const BREAK_GREEN = '#12805C';
 const MIN_PARTIAL = 5; // أقل مدة (دقائق) تُسجَّل عند إنهاء جلسة تركيز مبكراً
 const LABELS: Record<TimerMode, string> = { focus: 'تركيز', short: 'استراحة قصيرة', long: 'استراحة طويلة' };
+const LIVE: Record<TimerMode, string> = { focus: 'جلسة تركيز', short: 'استراحة قصيرة', long: 'استراحة طويلة' };
 const ALARM: Record<TimerMode, [string, string]> = {
   focus: ['انتهت جلسة التركيز', 'أحسنت! خذ استراحة الآن.'],
   short: ['انتهت الاستراحة', 'هيا نرجع للدراسة.'],
@@ -66,10 +68,18 @@ export default function Timer() {
       .gte('started_at', since.toISOString()).order('started_at', { ascending: false })) as Promise<Session[]>;
   });
 
+  const subjectLabel = (id: string | null) => {
+    const sub = (subjects.data ?? []).find((x: Subject) => x.id === id);
+    return sub ? `${shortSubject(sub.name)} · سعي` : 'سعي';
+  };
+
   const commit = (next: TimerState) => {
     stRef.current = next;
     setSt(next);
     saveTimer(next);
+    // إشعار العد التنازلي في الستارة يتبع حالة المؤقت
+    if (next.endsAt) showLiveTimer(LIVE[next.mode], subjectLabel(next.subjectId), next.endsAt, next.mode === 'focus' ? '#2346F5' : BREAK_GREEN);
+    else hideLiveTimer();
   };
 
   const record = (minutes: number, subjectId: string | null) => {

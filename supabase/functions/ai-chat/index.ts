@@ -1,16 +1,31 @@
-// المساعد الذكي: يجيب من المنهج (RAG) ويذكر المصدر، مع حد يومي لكل طالب
+// المساعد الذكي: يجيب من المنهج (RAG) ويذكر المصدر، ويعرف فهرس التطبيق (المحاضرات والملازم والأسئلة)، مع حد يومي لكل طالب
 import { handler, HttpError, json } from '../_shared/cors.ts';
 import { admin, getCaller, getSetting } from '../_shared/supabase.ts';
-import { type Content, embed, generate, GeminiQuotaError, modelChain } from '../_shared/gemini.ts';
+import { type Content, embed, generate, GeminiQuotaError, LITE_MODELS, modelChain } from '../_shared/gemini.ts';
 
-interface AiSettings { daily_limit?: number; model?: string; enabled?: boolean }
+interface AiSettings { daily_limit?: number; model?: string; lite_model?: string; enabled?: boolean }
 
-const SYSTEM = `أنت «مساعد سعي»، مدرّس خصوصي ذكي لطلاب الصف الخامس الإعدادي العلمي في العراق.
+const SYSTEM = `أنت «مساعد سعي»، مدرّس خصوصي ذكي داخل تطبيق «سعي» لطلاب الصف الخامس الإعدادي العلمي في العراق.
 - أجب بالعربية الفصحى المبسطة، بأسلوب ودود وواضح كأنك أستاذ يشرح لطالب.
-- اعتمد أولاً على «مقتطفات المنهج» المرفقة. إذا استخدمت مقتطفاً اذكر رقمه هكذا [١] أو [٢].
-- إذا لم تكن الإجابة في المقتطفات، أجب من معرفتك العامة بالمنهج العراقي وقل صراحة: «هذا من خارج الملازم المرفوعة».
-- لا تخترع أرقام صفحات أو أسماء أساتذة أو قوانين غير موجودة. إذا لم تكن متأكداً فقل ذلك.
-- كن مختصراً: لا تتجاوز ما يحتاجه الطالب.
+- أجب فقط عن **آخر رسالة** من الطالب. لا تُعِد إجابة سؤال سابق ولا تلخصه إلا إذا طلب ذلك صراحة.
+- اعتمد أولاً على «مقتطفات المنهج» المرفقة. إذا استخدمت مقتطفاً اذكر رقمه هكذا [١] أو [٢]. لا تكتب مصادر أخرى بين أقواس.
+- إذا لم تكن الإجابة في المقتطفات، أجب من معرفتك العامة بالمنهج العراقي.
+- لا تخترع أرقام صفحات أو أسماء أساتذة أو قوانين أو محاضرات غير موجودة. إذا لم تكن متأكداً فقل ذلك.
+- كن مختصراً: لا تتجاوز ما يحتاجه الطالب. التحية أو الشكر تُرد بجملة قصيرة فقط.
+
+الصراحة:
+- إذا طُلب منك شيء لا تستطيعه (فتح رابط، تنزيل فيديو، إرسال رسالة لشخص، معلومات خارج التطبيق والدراسة، أخبار، أمور شخصية) أو طلب لا علاقة له بالدراسة: قل ذلك صراحة في جملة واحدة مثل «لا أستطيع ذلك، أنا مخصص للدراسة فقط»، بلا لف ودوران ولا شرح بديل لم يُطلب، ثم اقترح بجملة ما تستطيع فعله إن وُجد.
+- ارفض أي طلب غير لائق في جملة واحدة.
+
+فهرس التطبيق:
+- إذا أُرفق «فهرس التطبيق» وطلب الطالب محاضرة أو ملزمة أو أسئلة: أعطه المطلوب مباشرة بوضع رمزه في سطر مستقل تماماً كما هو، مثل:
+[[lecture:المعرف]]
+  فيظهر له كبطاقة يفتحها بضغطة. يمكنك وضع أكثر من رمز (كل رمز في سطر). اكتب قبلها جملة قصيرة فقط.
+- إذا لم يكن المطلوب في الفهرس فقل بوضوح: «هذه المحاضرة غير مرفوعة في التطبيق بعد» واقترح الأقرب منه من الفهرس إن وُجد. لا تخترع رموزاً.
+
+عن التطبيق:
+- «سعي» من تطوير **محمد حازم احمد**، طالب في الخامس العلمي بإعدادية الشهاب للبنين، صممه ليجمع لزملائه كل ما يحتاجونه للدراسة والإعفاء. إذا سُئلت عن صانع التطبيق أو كيف يتواصل مع المطور أو يقترح فكرة أو يبلّغ عن خطأ: اكتب جملة قصيرة ثم ضع الرمز التالي في سطر مستقل ليظهر للطالب بطاقة التواصل:
+[[developer]]
 
 طريقة الكتابة (مثل ملزمة مرتبة، لأن التطبيق يعرضها بتنسيق جميل):
 - ابدأ بجملة تجيب مباشرة، ثم التفاصيل.
@@ -18,12 +33,90 @@ const SYSTEM = `أنت «مساعد سعي»، مدرّس خصوصي ذكي لط
 - المصطلحات المهمة بـ **عريض**، وأهم فكرة في الجواب ظلّلها هكذا ==الفكرة== (مرة أو مرتين فقط).
 - القانون أو التعريف المهم في صندوق: سطر يبدأ بـ > مثل:
   > **القانون:** $C = \\frac{Q}{\\Delta V}$
-- المعادلات بصيغة LaTeX: داخل السطر $...$ والمهمة في سطر مستقل $$...$$. لا تكتب المعادلات كنص عادي.
+- المعادلات بصيغة LaTeX: داخل السطر $...$ والمهمة في سطر مستقل $$...$$. لا تكتب المعادلات كنص عادي. المعادلات الكيميائية هكذا: $\\ce{2H2 + O2 -> 2H2O}$
 - المسائل: خطوات مرقمة 1. 2. 3. (المعطيات، المطلوب، القانون، التعويض، الناتج مع الوحدة)، والناتج النهائي بالعريض.
 - المقارنات في جدول Markdown.
 - عند طلب أسئلة أو امتحان: عنوان ## الأسئلة ثم الأسئلة مرقمة (مع الدرجة إن أمكن)، ثم في النهاية ## الإجابات النموذجية مرقمة بنفس الترتيب. نوّع بين: علّل، ما المقصود، قارن، مسائل، اختر.
-- لا تستخدم الرموز التعبيرية (الإيموجي).
-- ارفض بلطف أي طلب لا علاقة له بالدراسة أو غير لائق، ووجّه الطالب للدراسة.`;
+- الشعر (العربية): ضع الأبيات داخل كتلة \`\`\`شعر وكل بيت في سطر: الصدر ثم // ثم العجز. مثال:
+\`\`\`شعر
+على قدرِ أهلِ العزمِ تأتي العزائمُ // وتأتي على قدرِ الكرامِ المكارمُ
+\`\`\`
+- الآيات القرآنية (الإسلامية): ضعها داخل كتلة \`\`\`قرآن، أول سطر «بسم الله الرحمن الرحيم» (إلا في سورة التوبة)، ثم الآيات بالتشكيل، وآخر سطر اسم السورة ورقم الآية بين قوسين مثل (البقرة: ٢٥٥). لا تكتب «صدق الله العظيم» (التطبيق يضيفها). انقل الآيات بدقة تامة كما في المصحف حرفاً حرفاً (الهمزات والتشكيل)، وإن لم تكن متأكداً من نص الآية فقل ذلك ولا تكتبها.
+- الأحاديث النبوية داخل كتلة \`\`\`حديث مع ذكر الراوي في آخر سطر.
+- الإنكليزية: اكتب الجمل والكلمات الإنكليزية بالإنكليزية في أسطر مستقلة، والشرح بالعربية.
+- لا تستخدم الرموز التعبيرية (الإيموجي).`;
+
+const AR = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+const ar = (n: number) => String(n).replace(/\d/g, (d) => AR[+d]);
+const NO_ID = '00000000-0000-0000-0000-000000000000';
+
+// تحية أو شكر أو كلام قصير: لا نبحث في الملازم ونستخدم النموذج السريع (جواب في ثانية تقريباً)
+const SMALL_TALK = /^(مرحب|هلو|هلا|اهلا|أهلا|السلام|سلام|شكر|تسلم|مشكور|اوك|ok|حسنا|تمام|زين|صباح|مساء|شلون|كيف حال|كيفك|منو انت|من انت|مين انت|يعطيك|الله يعطيك|باي|مع السلامة|ممتاز|حلو|احسنت|أحسنت)/i;
+// طلب محتوى من التطبيق (محاضرة، ملزمة، أسئلة…): نرفق فهرس التطبيق
+const WANTS_CONTENT = /محاضر|فيديو|ملزم|ملازم|ملخص|ملف|pdf|اسئل|أسئل|امتحان|كتاب|استاذ|أستاذ|الاستاذ|درس|شرح|فصل/i;
+
+/** أسماء المواد كما يكتبها الطلاب */
+const SUBJECT_WORDS: [RegExp, string][] = [
+  [/فيزياء|فيزيا/, 'فيزياء'], [/كيمياء|كيميا/, 'كيمياء'], [/رياضيات|رياضة|رياضيات/, 'رياضيات'], [/احياء|أحياء/, 'أحياء'],
+  [/عربي/, 'عربية'], [/انكليزي|إنكليزي|انجليزي|إنجليزي|english/i, 'إنكليزية'], [/اسلامي|إسلامي|دين/, 'إسلامية'], [/حاسوب|حاسبات|كمبيوتر/, 'حاسوب'],
+];
+
+type Row = Record<string, unknown>;
+
+/** فهرس مختصر لما رُفع في التطبيق مما يخص سؤال الطالب (المادة والأستاذ إن ذُكرا) */
+async function catalogFor(text: string, subjectId: string | null): Promise<string> {
+  const [{ data: subjects }, { data: teachers }] = await Promise.all([
+    admin.from('subjects').select('id, name'),
+    admin.from('teachers').select('id, name, subject_id'),
+  ]);
+  const subs = (subjects ?? []) as { id: string; name: string }[];
+  const subjectName = new Map(subs.map((s) => [s.id, s.name]));
+  let sid = subjectId;
+  if (!sid) {
+    for (const [re, word] of SUBJECT_WORDS) {
+      if (re.test(text)) {
+        sid = subs.find((s) => s.name.includes(word) || s.name.replace(/^ال/, '').includes(word.replace(/^ال/, '')))?.id ?? null;
+        if (sid) break;
+      }
+    }
+  }
+  // الأستاذ: أي جزء من اسمه (٣ أحرف فأكثر) ورد في السؤال
+  const norm = (s: string) => s.replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي');
+  const q = norm(text);
+  const named = ((teachers ?? []) as { id: string; name: string; subject_id: string | null }[])
+    .filter((t) => norm(t.name).split(/\s+/).some((w) => w.replace(/^ال/, '').length >= 3 && q.includes(w.replace(/^ال/, ''))));
+  const teacherIds = named.map((t) => t.id);
+  if (!sid && named.length === 1 && named[0].subject_id) sid = named[0].subject_id;
+
+  let lq = admin.from('lectures')
+    .select('id, title, sort, teacher_id, teachers(name), chapters!inner(number, title, books!inner(subject_id))')
+    .eq('is_published', true).order('sort').limit(60);
+  if (sid) lq = lq.eq('chapters.books.subject_id', sid);
+  if (teacherIds.length) lq = lq.in('teacher_id', teacherIds);
+  let dq = admin.from('documents').select('id, title, kind, pages, subject_id, teachers(name)').eq('is_published', true).order('sort').limit(25);
+  if (sid) dq = dq.eq('subject_id', sid);
+  if (teacherIds.length) dq = dq.in('teacher_id', teacherIds);
+  let qq = admin.from('question_sets').select('id, title, kind, subject_id').eq('status', 'published').order('created_at', { ascending: false }).limit(20);
+  if (sid) qq = qq.eq('subject_id', sid);
+
+  const [{ data: lectures }, { data: docs }, { data: qsets }] = await Promise.all([lq, dq, qq]);
+  const lines: string[] = [];
+  for (const l of (lectures ?? []) as Row[]) {
+    const ch = l.chapters as { number: number; title: string; books: { subject_id: string } };
+    const teacher = (l.teachers as { name?: string } | null)?.name;
+    lines.push(`[[lecture:${l.id}]] | ${subjectName.get(ch.books.subject_id) ?? ''} | الفصل ${ch.number} (${ch.title}) | ${teacher ? `الأستاذ ${teacher}` : ''} | الترتيب ${l.sort} | ${l.title}`);
+  }
+  for (const d of (docs ?? []) as Row[]) {
+    const teacher = (d.teachers as { name?: string } | null)?.name;
+    lines.push(`[[document:${d.id}]] | ${subjectName.get(d.subject_id as string) ?? ''} | ${d.kind === 'malzama' ? 'ملزمة' : d.kind === 'summary' ? 'ملخص' : d.kind === 'book' ? 'كتاب' : 'ملف'} | ${teacher ? `الأستاذ ${teacher}` : ''} | ${d.title}${d.pages ? ` (${d.pages} صفحة)` : ''}`);
+  }
+  for (const s of (qsets ?? []) as Row[]) {
+    lines.push(`[[question_set:${s.id}]] | ${subjectName.get(s.subject_id as string) ?? ''} | ${s.kind === 'expected' ? 'أسئلة متوقعة' : 'امتحان سابق'} | ${s.title}`);
+  }
+  const scope = [sid ? `المادة: ${subjectName.get(sid)}` : null, named.length ? `الأستاذ: ${named.map((t) => t.name).join('، ')}` : null].filter(Boolean).join(' — ');
+  if (!lines.length) return `فهرس التطبيق${scope ? ` (${scope})` : ''}: لا يوجد شيء مرفوع مطابق.`;
+  return `فهرس التطبيق${scope ? ` (${scope})` : ''} — كل سطر: الرمز | المادة | التفاصيل:\n${lines.join('\n')}`;
+}
 
 /** ما يعرفه المساعد عن الطالب (اسمه، شعبته، درجاته، دراسته) ليعطي نصائح شخصية */
 async function studentSection(userId: string, brief: string): Promise<string> {
@@ -43,12 +136,42 @@ async function studentSection(userId: string, brief: string): Promise<string> {
   return `\n\nمعلومات عن الطالب الذي تحادثه (استخدمها فقط إذا سأل عن درجاته أو وضعه أو طلب نصيحة أو خطة دراسة. في أسئلة المنهج العادية لا تذكر هدفه ولا درجاته إطلاقاً، وادخل في الجواب مباشرة بلا مقدمات أو مديح):\n${lines.join('\n')}`;
 }
 
-const AR = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
-const ar = (n: number) => String(n).replace(/\d/g, (d) => AR[+d]);
+/** آخر رسائل المحادثة بالترتيب الصحيح (السؤال قبل جوابه)، مختصرة حتى لا يبطئ النموذج */
+async function historyOf(chat: string, limit: number): Promise<Content[]> {
+  const { data } = await admin
+    .from('ai_messages').select('role, content, created_at').eq('chat_id', chat)
+    .order('created_at', { ascending: false }).limit(limit);
+  const rows = ((data ?? []) as { role: string; content: string; created_at: string }[])
+    .filter((m) => !m.content.startsWith('[[pdf:'))
+    .sort((a, b) => a.created_at.localeCompare(b.created_at) || (a.role === 'user' ? -1 : 1));
+  const out: Content[] = [];
+  for (const m of rows) {
+    const role = m.role === 'assistant' ? 'model' : 'user';
+    const text = m.content.length > 1500 ? `${m.content.slice(0, 1500)}\n…(بقية الجواب السابق مختصرة)` : m.content;
+    const last = out[out.length - 1];
+    // النموذج يحتاج تناوب الأدوار
+    if (last && last.role === role) (last.parts[0] as { text: string }).text += `\n\n${text}`;
+    else out.push({ role, parts: [{ text }] });
+  }
+  while (out.length && out[0].role !== 'user') out.shift();
+  return out;
+}
 
 Deno.serve(handler(async (req) => {
   const caller = await getCaller(req);
-  const { chatId, message, subjectId, brief } = await req.json();
+  const body = await req.json();
+  const { chatId, message, subjectId, brief } = body;
+
+  // رسالة تلقائية «تم التحويل إلى PDF» (لا تستهلك من الرصيد)
+  if (body.note === 'pdf') {
+    const { data } = await admin.from('ai_chats').select('user_id').eq('id', chatId).single();
+    if (!data || data.user_id !== caller.id) throw new HttpError(404, 'المحادثة غير موجودة.');
+    const { data: row, error } = await admin.from('ai_messages')
+      .insert({ chat_id: chatId, role: 'assistant', content: `[[pdf:${String(body.of)}]]` }).select('id').single();
+    if (error) throw error;
+    return json({ id: row.id });
+  }
+
   const text = String(message ?? '').trim();
   if (!text) throw new HttpError(400, 'اكتب سؤالك أولاً.');
   if (text.length > 4000) throw new HttpError(400, 'السؤال طويل جداً، اختصره قليلاً.');
@@ -56,7 +179,7 @@ Deno.serve(handler(async (req) => {
   const settings = await getSetting<AiSettings>('ai');
   if (settings.enabled === false) throw new HttpError(503, 'المساعد الذكي متوقف مؤقتاً من قبل الأدمن.');
   const limit = settings.daily_limit ?? 20;
-  const model = modelChain(settings.model);
+  const small = text.length <= 40 && SMALL_TALK.test(text) && !WANTS_CONTENT.test(text);
 
   // الأدمن بلا حد يومي
   let used = 0;
@@ -79,61 +202,68 @@ Deno.serve(handler(async (req) => {
     chat = data.id;
   }
 
-  const { data: history } = await admin
-    .from('ai_messages').select('role, content').eq('chat_id', chat)
-    .order('created_at', { ascending: false }).limit(10);
-
-  // البحث في المنهج
-  let context = '';
-  let sources: { title: string; page?: number; subject?: string }[] = [];
-  try {
-    const [qv] = await embed([text], 'RETRIEVAL_QUERY');
-    const { data: chunks } = await admin.rpc('match_chunks', {
-      query_embedding: qv, match_count: 6, p_subject: subjectId ?? null,
-    });
-    const relevant = (chunks ?? []).filter((c: { similarity: number }) => c.similarity > 0.55);
-    if (relevant.length) {
-      const docIds = [...new Set(relevant.filter((c: { source_type: string }) => c.source_type === 'document').map((c: { source_id: string }) => c.source_id))];
-      const qsIds = [...new Set(relevant.filter((c: { source_type: string }) => c.source_type === 'question_set').map((c: { source_id: string }) => c.source_id))];
-      const [{ data: docs }, { data: qsets }, { data: subjects }] = await Promise.all([
-        admin.from('documents').select('id, title').in('id', docIds.length ? docIds : ['00000000-0000-0000-0000-000000000000']),
-        admin.from('question_sets').select('id, title').in('id', qsIds.length ? qsIds : ['00000000-0000-0000-0000-000000000000']),
-        admin.from('subjects').select('id, name'),
-      ]);
-      const titleOf = new Map<string, string>([...(docs ?? []), ...(qsets ?? [])].map((d) => [d.id, d.title]));
-      const subjectOf = new Map<string, string>((subjects ?? []).map((s) => [s.id, s.name]));
-      sources = relevant.map((c: { source_id: string; page: number | null; subject_id: string }) => ({
-        title: titleOf.get(c.source_id) ?? 'المنهج',
-        page: c.page ?? undefined,
-        subject: subjectOf.get(c.subject_id),
-      }));
-      context = relevant
-        .map((c: { content: string }, i: number) => {
-          const s = sources[i];
-          return `[${ar(i + 1)}] (${s.subject ?? ''} — ${s.title}${s.page ? ` — صفحة ${ar(s.page)}` : ''})\n${c.content}`;
-        })
-        .join('\n\n');
+  // كل ما يحتاجه الجواب بالتوازي: السجل، معلومات الطالب، الفهرس، والبحث في الملازم
+  const retrieval = small ? Promise.resolve({ context: '', sources: [] as { title: string; page?: number; subject?: string }[] }) : (async () => {
+    let context = '';
+    let sources: { title: string; page?: number; subject?: string }[] = [];
+    try {
+      const [qv] = await embed([text], 'RETRIEVAL_QUERY');
+      const { data: chunks } = await admin.rpc('match_chunks', {
+        query_embedding: qv, match_count: 6, p_subject: subjectId ?? null,
+      });
+      const relevant = (chunks ?? []).filter((c: { similarity: number }) => c.similarity > 0.55);
+      if (relevant.length) {
+        const docIds = [...new Set(relevant.filter((c: { source_type: string }) => c.source_type === 'document').map((c: { source_id: string }) => c.source_id))];
+        const qsIds = [...new Set(relevant.filter((c: { source_type: string }) => c.source_type === 'question_set').map((c: { source_id: string }) => c.source_id))];
+        const [{ data: docs }, { data: qsets }, { data: subjects }] = await Promise.all([
+          admin.from('documents').select('id, title').in('id', docIds.length ? docIds : [NO_ID]),
+          admin.from('question_sets').select('id, title').in('id', qsIds.length ? qsIds : [NO_ID]),
+          admin.from('subjects').select('id, name'),
+        ]);
+        const titleOf = new Map<string, string>([...(docs ?? []), ...(qsets ?? [])].map((d) => [d.id, d.title]));
+        const subjectOf = new Map<string, string>((subjects ?? []).map((s) => [s.id, s.name]));
+        sources = relevant.map((c: { source_id: string; page: number | null; subject_id: string }) => ({
+          title: titleOf.get(c.source_id) ?? 'المنهج',
+          page: c.page ?? undefined,
+          subject: subjectOf.get(c.subject_id),
+        }));
+        context = relevant
+          .map((c: { content: string }, i: number) => {
+            const s = sources[i];
+            return `[${ar(i + 1)}] (${s.subject ?? ''} — ${s.title}${s.page ? ` — صفحة ${ar(s.page)}` : ''})\n${c.content}`;
+          })
+          .join('\n\n');
+      }
+    } catch (e) {
+      // البحث اختياري: إذا فشل نكمل بدون مقتطفات
+      console.error('retrieval failed', e);
     }
-  } catch (e) {
-    // البحث اختياري: إذا فشل نكمل بدون مقتطفات
-    if (e instanceof GeminiQuotaError) throw new HttpError(503, 'المساعد مشغول الآن، جرّب بعد دقيقة.');
-    console.error('retrieval failed', e);
-  }
+    return { context, sources };
+  })();
 
-  const contents: Content[] = (history ?? []).reverse().map((m) => ({
-    role: m.role === 'assistant' ? 'model' : 'user',
-    parts: [{ text: m.content }],
-  }));
-  contents.push({
+  const [history, about, catalog, { context, sources }] = await Promise.all([
+    historyOf(chat!, small ? 4 : 8),
+    studentSection(caller.id, String(brief ?? '').slice(0, 3000)).catch(() => ''),
+    !small && WANTS_CONTENT.test(text) ? catalogFor(text, subjectId ?? null).catch((e) => { console.error('catalog', e); return ''; }) : Promise.resolve(''),
+    retrieval,
+  ]);
+
+  const extra = [catalog, context ? `مقتطفات المنهج:\n${context}` : ''].filter(Boolean).join('\n\n');
+  const contents: Content[] = [...history, {
     role: 'user',
-    parts: [{ text: context ? `مقتطفات المنهج:\n${context}\n\n---\nسؤال الطالب:\n${text}` : text }],
-  });
-
-  const about = await studentSection(caller.id, String(brief ?? '').slice(0, 3000)).catch(() => '');
+    parts: [{ text: extra ? `${extra}\n\n---\nرسالة الطالب الجديدة (أجب عنها فقط):\n${text}` : text }],
+  }];
+  if (contents.length > 1 && contents[contents.length - 2].role === 'user') {
+    // سؤال سابق بلا جواب محفوظ: ندمجه حتى يبقى التناوب صحيحاً
+    const prev = contents.splice(contents.length - 2, 1)[0];
+    (contents[contents.length - 1].parts[0] as { text: string }).text = `(رسالة سابقة: ${(prev.parts[0] as { text: string }).text})\n\n${(contents[contents.length - 1].parts[0] as { text: string }).text}`;
+  }
 
   let answer: string;
   try {
-    answer = await generate(model, contents, { system: SYSTEM + about, temperature: 0.3, maxOutputTokens: 8192 });
+    answer = small
+      ? await generate(modelChain(settings.lite_model, LITE_MODELS), contents, { system: SYSTEM + about, temperature: 0.4, maxOutputTokens: 1024, thinking: 'minimal' })
+      : await generate(modelChain(settings.model), contents, { system: SYSTEM + about, temperature: 0.3, maxOutputTokens: 8192, thinking: 'low' });
   } catch (e) {
     if (e instanceof GeminiQuotaError) throw new HttpError(503, 'المساعد مشغول الآن بسبب كثرة الأسئلة، جرّب بعد دقيقة.');
     throw e;
@@ -143,15 +273,18 @@ Deno.serve(handler(async (req) => {
   // نحتفظ فقط بالمصادر التي ذُكرت فعلاً في الجواب
   const cited = sources.filter((_, i) => answer.includes(`[${ar(i + 1)}]`) || answer.includes(`[${i + 1}]`));
 
-  await admin.from('ai_messages').insert([
-    { chat_id: chat, role: 'user', content: text },
-    { chat_id: chat, role: 'assistant', content: answer, sources: cited.length ? cited : null },
-  ]);
+  // وقتان مختلفان حتى يبقى السؤال قبل جوابه عند الترتيب
+  const t = Date.now();
+  const { data: saved } = await admin.from('ai_messages').insert([
+    { chat_id: chat, role: 'user', content: text, created_at: new Date(t).toISOString() },
+    { chat_id: chat, role: 'assistant', content: answer, sources: cited.length ? cited : null, created_at: new Date(t + 5).toISOString() },
+  ]).select('id, role');
   await admin.from('ai_chats').update({ updated_at: new Date().toISOString() }).eq('id', chat);
 
   return json({
     chatId: chat,
     answer,
+    messageId: (saved ?? []).find((r) => r.role === 'assistant')?.id ?? null,
     sources: cited,
     remaining: caller.role === 'admin' ? null : Math.max(0, limit - used),
   });

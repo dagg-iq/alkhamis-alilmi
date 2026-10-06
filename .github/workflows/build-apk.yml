@@ -56,9 +56,13 @@ jobs:
         run: npx expo prebuild --platform android --no-install
         env:
           CI: 1
+          # رقم النسخة داخل التطبيق (للتحديث من داخل التطبيق)
+          APK_BUILD: ${{ github.run_number }}
 
       - name: Build release APK
         working-directory: apps/mobile/android
+        env:
+          APK_BUILD: ${{ github.run_number }}
         run: |
           # سطر جديد أولاً: آخر سطر في الملف بلا نهاية سطر، والإلحاق المباشر كان يفسد قيمة watchedDirectories
           printf '\norg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g\n' >> gradle.properties

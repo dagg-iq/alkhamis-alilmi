@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { View } from 'react-native';
+import { Linking, View } from 'react-native';
 import { WebView } from 'react-native-webview';
 
-/** يعرض HTML بارتفاع يتكيف مع المحتوى (الهاتف) */
+/** يعرض HTML بارتفاع يتكيف مع المحتوى (الهاتف)، والروابط تفتح خارج التطبيق */
 export function HtmlView({ html }: { html: string }) {
   const [height, setHeight] = useState(60);
   return (
@@ -13,8 +13,13 @@ export function HtmlView({ html }: { html: string }) {
         style={{ backgroundColor: 'transparent' }}
         scrollEnabled={false}
         onMessage={(e) => {
-          const h = Number(e.nativeEvent.data);
-          if (h > 0) setHeight(h + 4);
+          const d = e.nativeEvent.data;
+          if (d.startsWith('link:')) {
+            Linking.openURL(d.slice(5)).catch(() => {});
+            return;
+          }
+          const h = Number(d);
+          if (h > 0) setHeight(Math.ceil(h) + 4);
         }}
         setSupportMultipleWindows={false}
         javaScriptEnabled

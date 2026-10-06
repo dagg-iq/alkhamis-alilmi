@@ -17,7 +17,7 @@ import { ConversationMark } from '@/components/group-mark';
 import { Sheet, SheetItem } from '@/components/sheet';
 import { Avatar, Field, IconButton, NameLine, Row, T, MAX_WIDTH } from '@/components/ui';
 import { useAuth, useMe } from '@/lib/auth';
-import { ATTACHMENT_LABELS, REACTIONS, conversationTitle, openAttachment, type ConversationRow } from '@/lib/chat';
+import { ATTACHMENT_LABELS, REACTIONS, conversationTitle, type ConversationRow, type CurriculumAttachment } from '@/lib/chat';
 import { compressImage, signedUrls, uploadFile } from '@/lib/files';
 import { must, supabase } from '@/lib/supabase';
 import { fonts, useTheme } from '@/lib/theme';
@@ -492,7 +492,7 @@ function Bubble({ m, mine, sender, showName, reply, replySender, imageUrl, react
                     style={{ width: 240, height: a.width && a.height ? Math.min(320, (240 * a.height) / a.width) : 240, borderRadius: 16 }} />
                 </Pressable>
               ) : <View style={{ width: 240, height: 180, borderRadius: 16, backgroundColor: c.line }} />
-            ) : a ? <AttachmentCard a={a} mine={mine} /> : null}
+            ) : a ? <AttachmentCard a={a} mine={mine} messageId={m.id} /> : null}
             {m.body ? <T size={15} color={fg} selectable>{renderMentions(m.body, mine ? '#FFFFFF' : c.accent)}</T> : null}
           </>
         )}
@@ -527,7 +527,7 @@ function renderMentions(body: string, color: string) {
 function CurriculumPicker({ visible, onClose, onPick }: { visible: boolean; onClose: () => void; onPick: (a: Attachment) => void }) {
   const { c } = useTheme();
   const [search, setSearch] = useState('');
-  const [results, setResults] = useState<Attachment[]>([]);
+  const [results, setResults] = useState<CurriculumAttachment[]>([]);
 
   useEffect(() => {
     if (!visible) return;
@@ -564,7 +564,7 @@ function CurriculumPicker({ visible, onClose, onPick }: { visible: boolean; onCl
       <T display size={22}>إرفاق من المنهج</T>
       <Field placeholder="ابحث عن محاضرة أو ملزمة أو أسئلة" value={search} onChangeText={setSearch} />
       <ScrollView style={{ maxHeight: 340 }} keyboardShouldPersistTaps="handled">
-        {results.length === 0 ? <T dim center style={{ paddingVertical: 20 }}>لا نتائج</T> : results.map((r) => r.type !== 'image' && (
+        {results.length === 0 ? <T dim center style={{ paddingVertical: 20 }}>لا نتائج</T> : results.map((r) => (
           <Pressable key={`${r.type}${r.id}`} onPress={() => onPick(r)} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10 }}>
             <Icon name={r.type === 'lecture' ? 'play' : r.type === 'document' ? 'file' : 'quiz'} size={20} color={c.accent} />
             <View style={{ flex: 1 }}>

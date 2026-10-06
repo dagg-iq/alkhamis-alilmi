@@ -16,7 +16,12 @@ export interface GenerateOptions {
   json?: boolean;
   temperature?: number;
   maxOutputTokens?: number;
+  /** مقدار التفكير قبل الإجابة: minimal للتحية والأسئلة البسيطة (أسرع بكثير) */
+  thinking?: 'minimal' | 'low' | 'medium' | 'high';
 }
+
+// النماذج المشغولة مؤقتاً: نتخطاها مباشرة بدل انتظارها في كل سؤال (تبقى في ذاكرة الدالة ما دامت تعمل)
+const busyUntil = new Map<string, number>();
 
 export class GeminiQuotaError extends Error {}
 
@@ -44,12 +49,18 @@ export async function generate(model: string | string[], contents: Content[], op
     },
   };
   if (opts.system) body.system_instruction = { parts: [{ text: opts.system }] };
+  const config = body.generationConfig as Record<string, unknown>;
 
-  const models = Array.isArray(model) ? model : modelChain(model);
+  const all = Array.isArray(model) ? model : modelChain(model);
+  const now = Date.now();
+  const free = all.filter((m) => (busyUntil.get(m) ?? 0) <= now);
+  const models = free.length ? [...free, ...all.filter((m) => !free.includes(m))] : all;
   let busy = false;
   for (const m of models) {
-    // محاولتان لكل نموذج عند الضغط المؤقت، ثم الانتقال للتالي
+    let thinking = opts.thinking;
     for (let attempt = 0; attempt < 2; attempt++) {
+      if (thinking) config.thinkingConfig = { thinkingLevel: thinking };
+      else delete config.thinkingConfig;
       const res = await fetch(`${API}/v1beta/models/${m}:generateContent`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key() },
@@ -65,13 +76,19 @@ export async function generate(model: string | string[], contents: Content[], op
       const status = res.status;
       const detail = (await res.text()).slice(0, 300);
       if (status === 404) break; // النموذج غير متاح لهذا الحساب
-      if (status === 429 || status === 503 || status === 500) {
+      if (status === 400 && thinking && attempt === 0) {
+        thinking = undefined; // نموذج لا يدعم مستوى التفكير: نعيد بدونه
+        continue;
+      }
+      if (status === 429 || status === 503) {
+        // مشغول: ننتقل للتالي فوراً ونتخطاه لفترة (الحصة اليومية أطول)
         busy = true;
-        if (attempt === 0 && status !== 429) {
-          await new Promise((r) => setTimeout(r, 1200));
-          continue;
-        }
+        busyUntil.set(m, Date.now() + (status === 429 ? 10 : 2) * 60_000);
         break;
+      }
+      if (status === 500 && attempt === 0) {
+        busy = true;
+        continue;
       }
       throw new Error(`Gemini ${m} ${status}: ${detail}`);
     }

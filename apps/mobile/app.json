@@ -26,7 +26,8 @@
         "android.permission.SCHEDULE_EXACT_ALARM",
         "android.permission.USE_EXACT_ALARM",
         "android.permission.VIBRATE",
-        "android.permission.WAKE_LOCK"
+        "android.permission.WAKE_LOCK",
+        "android.permission.REQUEST_INSTALL_PACKAGES"
       ]
     },
     "web": {
@@ -57,7 +58,10 @@
       [
         "expo-notifications",
         {
-          "color": "#2346F5"
+          "color": "#2346F5",
+          "sounds": [
+            "./assets/sounds/saey_alarm.wav"
+          ]
         }
       ],
       [

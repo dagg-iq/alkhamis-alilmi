@@ -10,6 +10,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from '@/lib/auth';
 import { onNotificationTap, registerPush } from '@/lib/push';
+import { UpdateSheet } from '@/components/update-sheet';
 import { isConfigured } from '@/lib/supabase';
 import { AppThemeProvider, fontAssets, useTheme } from '@/lib/theme';
 import { Intro } from '@/components/intro';
@@ -139,6 +140,7 @@ function Navigator() {
       </Stack>
       )}
       {ready ? <MessageBanner myId={approvedId} /> : null}
+      <UpdateSheet enabled={ready && introDone && !!approvedId} />
       {!introDone ? <Intro ready={ready} onDone={() => setIntroDone(true)} /> : null}
     </ThemeProvider>
   );

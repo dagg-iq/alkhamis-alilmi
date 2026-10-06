@@ -115,7 +115,11 @@ export type Attachment =
       thumb?: string;
       /** سطر ثانوي: المادة، الأستاذ، عدد الصفحات… */
       subtitle?: string;
-    };
+    }
+  /** إجابة من مساعد سعي شاركها الطالب (النص كاملاً داخل المرفق) */
+  | { type: 'answer'; title: string; body: string }
+  /** ملف PDF مرفوع في المحادثة */
+  | { type: 'file'; key: string; title: string; size?: number };
 export interface Message {
   id: string;
   conversation_id: string;

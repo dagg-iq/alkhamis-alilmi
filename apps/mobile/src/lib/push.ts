@@ -40,19 +40,24 @@ export async function setupChannels() {
   await N.setNotificationChannelAsync('default', { name: 'الأخبار والتنبيهات', importance: N.AndroidImportance.HIGH });
   await N.setNotificationChannelAsync('chat', { name: 'الرسائل', importance: N.AndroidImportance.HIGH });
   await N.setNotificationChannelAsync('reminders', { name: 'التذكيرات', importance: N.AndroidImportance.HIGH });
-  // قناة المؤقت: صوت المنبّه (يُسمع حتى لو كانت نغمة الإشعارات منخفضة) واهتزاز طويل، وتظهر على شاشة القفل
-  await N.setNotificationChannelAsync('timer-alarm', {
+  // قناة المؤقت: نغمة منبّه سعي (٢٠ ثانية) بصوت المنبّه، واهتزاز طويل، وتظهر على شاشة القفل.
+  // إعدادات القناة لا تتغير بعد إنشائها، لذلك قناة جديدة بدل القديمة التي كانت بصوت الإشعار العادي
+  await N.deleteNotificationChannelAsync('timer-alarm').catch(() => {});
+  await N.setNotificationChannelAsync(TIMER_CHANNEL, {
     name: 'منبّه المؤقت',
     description: 'يرنّ عند انتهاء جلسة الدراسة أو الاستراحة',
     importance: N.AndroidImportance.MAX,
-    sound: 'default',
+    sound: TIMER_SOUND,
     enableVibrate: true,
-    vibrationPattern: [0, 600, 300, 600, 300, 600, 300, 900],
+    vibrationPattern: [0, 800, 400, 800, 400, 800, 400, 800, 400, 1200],
     lockscreenVisibility: N.AndroidNotificationVisibility.PUBLIC,
     bypassDnd: true,
     audioAttributes: { usage: N.AndroidAudioUsage.ALARM, contentType: N.AndroidAudioContentType.SONIFICATION },
   });
 }
+
+const TIMER_CHANNEL = 'timer-alarm-2';
+const TIMER_SOUND = 'saey_alarm.wav';
 
 export type PushResult = 'ok' | 'denied' | 'unsupported' | 'not-configured' | 'error';
 
@@ -130,11 +135,11 @@ export async function scheduleAlarm(title: string, body: string, at: Date): Prom
     if (status !== 'granted') return null;
     return await N.scheduleNotificationAsync({
       content: {
-        title, body, sound: 'default', data: { url: '/timer' },
+        title, body, sound: TIMER_SOUND, data: { url: '/timer' },
         priority: N.AndroidNotificationPriority.MAX,
-        vibrate: [0, 600, 300, 600, 300, 600, 300, 900],
+        vibrate: [0, 800, 400, 800, 400, 800, 400, 800, 400, 1200],
       },
-      trigger: { type: N.SchedulableTriggerInputTypes.DATE, date: at, channelId: 'timer-alarm' },
+      trigger: { type: N.SchedulableTriggerInputTypes.DATE, date: at, channelId: TIMER_CHANNEL },
     });
   } catch {
     return null;

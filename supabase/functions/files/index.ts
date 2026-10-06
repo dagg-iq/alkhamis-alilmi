@@ -7,7 +7,7 @@ type Kind = 'material' | 'chat' | 'scan' | 'cover';
 const PREFIX: Record<Kind, string> = { material: 'materials', chat: 'chat', scan: 'scans', cover: 'covers' };
 const ALLOWED_TYPES: Record<Kind, string[]> = {
   material: ['application/pdf'],
-  chat: ['image/jpeg', 'image/png', 'image/webp'],
+  chat: ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'],
   scan: ['image/jpeg', 'image/png'],
   cover: ['image/jpeg', 'image/png', 'image/webp'],
 };

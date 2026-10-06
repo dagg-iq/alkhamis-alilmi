@@ -23,11 +23,16 @@ export function conversationTitle(c: ConversationRow) {
 
 export const REACTIONS = ['❤️', '👍', '😂', '😮', '🙏'];
 
-/** فتح مرفق من المنهج */
-export function openAttachment(a: Attachment) {
+/** مرفق من المنهج (محاضرة، ملزمة، أسئلة) */
+export type CurriculumAttachment = Extract<Attachment, { type: 'lecture' | 'document' | 'question_set' }>;
+
+/** فتح مرفق: المنهج في شاشته، والإجابة المشاركة وملف PDF داخل التطبيق */
+export function openAttachment(a: Attachment, messageId?: string) {
   if (a.type === 'lecture') router.push(`/lecture/${a.id}`);
   else if (a.type === 'question_set') router.push(`/questions/${a.id}`);
   else if (a.type === 'document') router.push({ pathname: '/document/[id]', params: { id: a.id } });
+  else if (a.type === 'answer' && messageId) router.push({ pathname: '/answer/[id]', params: { id: messageId } });
+  else if (a.type === 'file') router.push({ pathname: '/pdf', params: { key: a.key, title: a.title } });
 }
 
-export const ATTACHMENT_LABELS = { lecture: 'محاضرة', document: 'ملزمة', question_set: 'أسئلة' } as const;
+export const ATTACHMENT_LABELS = { lecture: 'محاضرة', document: 'ملزمة', question_set: 'أسئلة', answer: 'من مساعد سعي', file: 'ملف PDF' } as const;

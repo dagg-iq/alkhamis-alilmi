@@ -1,0 +1,7 @@
+{
+  "name": "saey-timer",
+  "version": "1.0.0",
+  "private": true,
+  "description": "إشعار العد التنازلي لمؤقت سعي (أندرويد)",
+  "main": "index.ts"
+}
