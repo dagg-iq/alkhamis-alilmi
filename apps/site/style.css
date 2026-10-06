@@ -138,7 +138,7 @@ main { overflow: hidden; }
   content: ''; position: absolute; inset-inline-start: 0; top: .55em; width: 18px; height: 18px; border-radius: 50%;
   background: var(--accent) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E") center / 12px no-repeat;
 }
-.grades-phones { display: flex; gap: 18px; justify-content: center; }
+.grades-phones { display: flex; gap: 18px; justify-content: center; align-items: flex-start; }
 .grades-phones .phone { width: 250px; }
 .phone-offset { margin-top: 60px; }
 @media (max-width: 900px) {
@@ -179,11 +179,12 @@ main { overflow: hidden; }
   background: var(--card); border: 1px solid var(--line); border-radius: 36px; padding: 40px;
 }
 .dev-avatar {
-  width: 120px; height: 120px; border-radius: 50%; background: var(--hero); color: var(--hero-ink);
+  width: 132px; height: 132px; flex-shrink: 0; border-radius: 50%; background: var(--hero); color: var(--hero-ink);
   display: flex; align-items: center; justify-content: center; font-family: 'Display', serif; font-weight: 900;
   font-size: 56px; line-height: 1.5; position: relative;
 }
-.dev-avatar::after {
+.dev-avatar img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
+.dev-avatar::after { z-index: 1;
   content: ''; position: absolute; top: 4px; inset-inline-start: 4px; width: 26px; height: 26px; border-radius: 50%;
   background: var(--accent); border: 4px solid var(--card);
 }
@@ -203,3 +204,44 @@ main { overflow: hidden; }
 .footer .brand b { font-size: 22px; }
 
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } .btn { transition: none; } }
+
+/* ---------------------------------------------------------------- الحركة
+ * ظهور ناعم للعناصر عند الوصول إليها، وطفو خفيف للهواتف. كله يُلغى مع «تقليل الحركة».
+ * العناصر مخفية فقط إذا اشتغل JavaScript (html.js) حتى لا تختفي الصفحة بدونه. */
+@keyframes rise { from { opacity: 0; translate: 0 26px; } to { opacity: 1; translate: 0 0; } }
+@keyframes float-a { 0%, 100% { translate: 0 0; } 50% { translate: 0 -12px; } }
+@keyframes float-b { 0%, 100% { translate: 0 0; } 50% { translate: 0 10px; } }
+@keyframes dot-drop { 0% { transform: translateY(-14px); opacity: 0; } 60% { transform: translateY(2px); opacity: 1; } 100% { transform: none; } }
+@keyframes glow { 0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 45%, transparent); } 50% { box-shadow: 0 0 0 12px color-mix(in srgb, var(--accent) 0%, transparent); } }
+
+.js .hero-text > * { opacity: 0; animation: rise .7s cubic-bezier(.2, .7, .2, 1) forwards; }
+.js .hero-text > :nth-child(2) { animation-delay: .08s; }
+.js .hero-text > :nth-child(3) { animation-delay: .16s; }
+.js .hero-text > :nth-child(4) { animation-delay: .24s; }
+.js .hero-text > :nth-child(5) { animation-delay: .32s; }
+.js .hero-phones .phone { opacity: 0; animation: rise .9s .25s cubic-bezier(.2, .7, .2, 1) forwards; }
+.js .hero-phones .phone-back { animation-delay: .4s; }
+.js .hero-phones.ready .phone-front { opacity: 1; animation: float-a 6s ease-in-out infinite; }
+.js .hero-phones.ready .phone-back { opacity: .96; animation: float-b 7s ease-in-out infinite; }
+.brand svg circle { transform-box: fill-box; transform-origin: center; animation: dot-drop .8s .3s cubic-bezier(.3, 1.6, .5, 1) both; }
+.hero .btn-big:not([aria-disabled="true"]) { animation: glow 2.6s 1.2s ease-in-out 3; }
+
+.js .reveal { opacity: 0; translate: 0 28px; transition: opacity .7s cubic-bezier(.2, .7, .2, 1), translate .7s cubic-bezier(.2, .7, .2, 1), transform .25s ease; transition-delay: var(--d, 0s), var(--d, 0s), 0s; }
+.js .reveal.in { opacity: 1; translate: 0 0; }
+.feature, .steps li, .strip > div, .faq details { transition: transform .25s ease, border-color .25s ease, box-shadow .25s ease; }
+.feature:hover, .steps li:hover { transform: translateY(-4px); border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); }
+.gallery .phone { transition: transform .3s ease; }
+/* المعرض يظهر كمجموعة: الصور تصعد بالتتابع عندما يصل إليه الزائر */
+.js .gallery.reveal { opacity: 1; translate: none; }
+.js .gallery.reveal .phone { opacity: 0; translate: 0 28px; transition: opacity .6s ease, translate .6s cubic-bezier(.2, .7, .2, 1), transform .3s ease; }
+.js .gallery.reveal.in .phone { opacity: 1; translate: 0 0; }
+.js .gallery.in .phone:nth-child(2) { transition-delay: .07s, .07s, 0s; }
+.js .gallery.in .phone:nth-child(3) { transition-delay: .14s, .14s, 0s; }
+.js .gallery.in .phone:nth-child(4) { transition-delay: .21s, .21s, 0s; }
+.js .gallery.in .phone:nth-child(n+5) { transition-delay: .28s, .28s, 0s; }
+.gallery .phone:hover { transform: translateY(-6px) scale(1.02); }
+
+@media (prefers-reduced-motion: reduce) {
+  .js .hero-text > *, .js .hero-phones .phone, .js .reveal, .js .gallery .phone { opacity: 1 !important; translate: none !important; animation: none !important; transition: none !important; }
+  .brand svg circle, .hero .btn-big, .js .hero-phones.ready .phone { animation: none !important; }
+}

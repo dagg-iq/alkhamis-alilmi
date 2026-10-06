@@ -29,3 +29,32 @@ fetch('download.json', { cache: 'no-store' })
   });
 
 document.querySelectorAll('[data-year]').forEach((e) => { e.textContent = ar(new Date().getFullYear()); });
+
+// ظهور العناصر عند الوصول إليها، مع تتابع خفيف داخل كل مجموعة
+const groups = ['.strip > div', '.section-head', '.feature', '.grades-text > *', '.grades-phones .phone', '.gallery', '.steps li', '.faq details', '.dev-card', '.cta-center'];
+const items = [];
+groups.forEach((sel) => document.querySelectorAll(sel).forEach((el, i) => {
+  el.classList.add('reveal');
+  el.style.setProperty('--d', `${Math.min(i, 6) * 0.07}s`);
+  items.push(el);
+}));
+if ('IntersectionObserver' in window) {
+  const io = new IntersectionObserver((entries) => entries.forEach((e) => {
+    if (e.isIntersecting) {
+      e.target.classList.add('in');
+      io.unobserve(e.target);
+    }
+  }), { rootMargin: '0px 0px -8% 0px', threshold: 0.08 });
+  items.forEach((el) => io.observe(el));
+} else items.forEach((el) => el.classList.add('in'));
+
+// بعد دخول الهواتف تبدأ بالطفو
+setTimeout(() => document.querySelector('.hero-phones')?.classList.add('ready'), 1300);
+
+// صورة المطوّر (إن وُجدت)؛ وإلا يبقى الحرف
+const img = new Image();
+img.onload = () => {
+  const av = document.querySelector('.dev-avatar');
+  if (av) { av.textContent = ''; img.alt = 'محمد حازم احمد'; av.appendChild(img); }
+};
+img.src = 'developer.jpg';

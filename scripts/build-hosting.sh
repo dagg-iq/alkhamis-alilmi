@@ -10,6 +10,9 @@ mkdir -p hosting
 cp -r apps/site/. hosting/
 cp -r apps/admin/public/fonts hosting/fonts
 cp apps/admin/public/favicon.png hosting/favicon.png
+# الصورة التعريفية للمطوّر (من رابط يحدده صاحب المشروع)؛ إن فشل التنزيل يبقى الحرف
+DEV_PHOTO_URL="${DEV_PHOTO_URL:-https://e.top4top.io/p_3665za6ix1.jpg}"
+curl -fsSL --max-time 30 -o hosting/developer.jpg "$DEV_PHOTO_URL" && echo "✓ صورة المطوّر" || { rm -f hosting/developer.jpg; echo "⚠ لم تُنزّل صورة المطوّر"; }
 ADMIN_BASE=/saey-dashboard/ npm run build -w apps/admin >/dev/null
 cp -r apps/admin/dist hosting/saey-dashboard
 node -e '
