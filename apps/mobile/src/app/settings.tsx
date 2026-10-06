@@ -2,10 +2,26 @@ import Constants from 'expo-constants';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { Alert, Switch, View } from 'react-native';
+import type { IconName } from '@/components/icon';
 import { Card, Divider, Header, ListItem, Row, Screen, Segmented, T } from '@/components/ui';
 import { useAuth, useMe } from '@/lib/auth';
 import { registerPush, unregisterPush } from '@/lib/push';
 import { useTheme, type ThemeMode } from '@/lib/theme';
+import { pinWidget, widgetsSupported } from '@/widgets/sync';
+
+const WIDGETS: { name: string; title: string; body: string; icon: IconName }[] = [
+  { name: 'Exemption', title: 'طريق الإعفاء', body: 'معدلك وكم بقي للإعفاء', icon: 'chart' },
+  { name: 'NextExam', title: 'الامتحان القادم', body: 'عدّ تنازلي لأقرب امتحان', icon: 'calendar' },
+  { name: 'Tasks', title: 'مهامي', body: 'الواجبات والتحضيرات القادمة', icon: 'check' },
+  { name: 'Overview', title: 'لمحة سعي', body: 'المعدل والامتحان والرسائل في سطر', icon: 'home' },
+  { name: 'News', title: 'أخبار المدرسة', body: 'آخر خبر من الإدارة', icon: 'news' },
+  { name: 'Quick', title: 'اختصارات', body: 'اسأل سعي، صوّر سؤال، المؤقت', icon: 'sparkle' },
+];
+
+async function addWidget(name: string) {
+  const ok = await pinWidget(name);
+  if (!ok) Alert.alert('إضافة ويدجت', 'اضغط مطولاً على مكان فارغ في الشاشة الرئيسية ← ويدجت ← سعي، واسحب الويدجت الذي تريده.');
+}
 
 export default function Settings() {
   const { c, mode, setMode } = useTheme();
@@ -40,6 +56,21 @@ export default function Settings() {
           <Switch value={push} onValueChange={togglePush} trackColor={{ true: c.accent, false: c.line }} />
         </Row>
       </Card>
+      {widgetsSupported ? (
+        <View style={{ gap: 8 }}>
+          <T weight="bold" size={14}>ويدجتات الشاشة الرئيسية</T>
+          <Card style={{ paddingVertical: 2 }}>
+            {WIDGETS.map((w, i) => (
+              <View key={w.name}>
+                {i ? <Divider /> : null}
+                <ListItem icon={w.icon} title={w.title} subtitle={w.body} onPress={() => addWidget(w.name)}
+                  right={<T weight="bold" size={13} color={c.accent}>إضافة</T>} />
+              </View>
+            ))}
+          </Card>
+          <T dim size={12}>أو اضغط مطولاً على الشاشة الرئيسية ← ويدجت ← سعي. تتحدث تلقائياً كل نصف ساعة وعند خروجك من التطبيق.</T>
+        </View>
+      ) : null}
       <Card style={{ paddingVertical: 2 }}>
         <ListItem icon="user" title="تعديل ملفي" onPress={() => router.push(`/profile/${me.id}`)} />
         <Divider />

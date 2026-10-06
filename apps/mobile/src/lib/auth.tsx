@@ -111,6 +111,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     signOut: async () => {
       await supabase.auth.signOut();
       setProfile(null);
+      // لا تبقى بيانات الطالب ظاهرة على الشاشة الرئيسية
+      import('@/widgets/sync').then((m) => m.clearWidgets()).catch(() => {});
     },
     refreshProfile: () => loadProfile(session?.user.id),
   }), [ready, session, profile, loadProfile]);

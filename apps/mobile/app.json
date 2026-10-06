@@ -63,7 +63,86 @@
       ],
       "expo-web-browser",
       "expo-sharing",
-      "expo-font"
+      "expo-font",
+      [
+        "react-native-android-widget",
+        {
+          "fonts": [
+            "./assets/fonts/thmanyahsans-Regular.otf",
+            "./assets/fonts/thmanyahsans-Medium.otf",
+            "./assets/fonts/thmanyahsans-Bold.otf",
+            "./assets/fonts/thmanyahserifdisplay-Black.otf"
+          ],
+          "widgets": [
+            {
+              "name": "Exemption",
+              "label": "طريق الإعفاء",
+              "description": "معدلك الحالي وكم بقي للإعفاء",
+              "minWidth": "250dp",
+              "minHeight": "110dp",
+              "targetCellWidth": 4,
+              "targetCellHeight": 2,
+              "updatePeriodMillis": 1800000,
+              "resizeMode": "horizontal|vertical"
+            },
+            {
+              "name": "NextExam",
+              "label": "الامتحان القادم",
+              "description": "عدّ تنازلي لأقرب امتحان",
+              "minWidth": "110dp",
+              "minHeight": "110dp",
+              "targetCellWidth": 2,
+              "targetCellHeight": 2,
+              "updatePeriodMillis": 1800000,
+              "resizeMode": "horizontal|vertical"
+            },
+            {
+              "name": "Tasks",
+              "label": "مهامي",
+              "description": "الواجبات والتحضيرات القادمة",
+              "minWidth": "250dp",
+              "minHeight": "110dp",
+              "targetCellWidth": 4,
+              "targetCellHeight": 2,
+              "updatePeriodMillis": 1800000,
+              "resizeMode": "horizontal|vertical",
+              "maxResizeHeight": "300dp"
+            },
+            {
+              "name": "Overview",
+              "label": "لمحة سعي",
+              "description": "المعدل، الامتحان، الرسائل، الإشعارات",
+              "minWidth": "250dp",
+              "minHeight": "50dp",
+              "targetCellWidth": 4,
+              "targetCellHeight": 1,
+              "updatePeriodMillis": 1800000,
+              "resizeMode": "horizontal"
+            },
+            {
+              "name": "News",
+              "label": "أخبار المدرسة",
+              "description": "آخر خبر من الإدارة",
+              "minWidth": "250dp",
+              "minHeight": "50dp",
+              "targetCellWidth": 4,
+              "targetCellHeight": 1,
+              "updatePeriodMillis": 1800000,
+              "resizeMode": "horizontal|vertical"
+            },
+            {
+              "name": "Quick",
+              "label": "اختصارات سعي",
+              "description": "اسأل سعي، صوّر سؤال، المؤقت، أضف درجة",
+              "minWidth": "250dp",
+              "minHeight": "50dp",
+              "targetCellWidth": 4,
+              "targetCellHeight": 1,
+              "resizeMode": "horizontal"
+            }
+          ]
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

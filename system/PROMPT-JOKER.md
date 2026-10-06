@@ -15,6 +15,7 @@
 packages/shared   منطق الدرجات والإعفاء + الأنواع + ألوان الهوية (اختبارات vitest)
 supabase/         migrations (SQL) + seed + functions (Deno) + tests (RLS على Postgres محلي)
 apps/mobile       Expo SDK 57 + expo-router (src/app) — RTL عربي، خط ثمانية
+                  src/components/motion.tsx (الحركة) · src/components/intro.tsx (المقدمة) · src/widgets/ (ويدجتات أندرويد)
 apps/admin        React + Vite — لوحة التحكم
 system/           التخطيط والقرارات والسجل ← اقرأه أولاً
 ```

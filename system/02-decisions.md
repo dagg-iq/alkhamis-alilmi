@@ -84,3 +84,13 @@
 - **فهرسة الملازم للمساعد**: Gemini File API + نسخ ١٠ صفحات في كل استدعاء + embeddings (768 بُعداً) في pgvector.
 - **الإشعارات**: جدول `notifications` + Database Webhooks ← دالة `push` ← Expo Push.
 - **سجل العمليات**: مشغّل `audit()` يسجل عمليات الأدمن والمشرفين تلقائياً.
+
+## 11. الحركة والويدجتات ✅ (الجلسة ١)
+- **الحركة**: Reanimated 4 فقط (بلا مكتبات إضافية). العناصر الأساسية في `apps/mobile/src/components/motion.tsx`: `PressScale` (نابض اللمس)، `Stagger`/`enter` (دخول متتابع لعناصر كل شاشة تلقائياً عبر `Screen`)، `CountUp`، `Skeleton`، `tap()` (اهتزاز خفيف عبر expo-haptics). الحركة تحترم إعداد «تقليل الحركة» في الهاتف.
+- **المقدمة**: `components/intro.tsx` — شاشة البداية الأصلية فارغة (صورة شفافة) والمقدمة ترسم الشعار ثم الاسم بالكشيدة. الضغط يتخطاها.
+- **الويدجتات**: مكتبة `react-native-android-widget` (أندرويد فقط، لا تعمل في Expo Go). الملفات في `apps/mobile/src/widgets/`:
+  - `data.ts` لقطة بيانات صغيرة تُحفظ في AsyncStorage وتُجلب من Supabase.
+  - `views.tsx` التصاميم (فاتح/غامق)، `registry.tsx` الأسماء، `handler.tsx` يعمل في الخلفية كل ٣٠ دقيقة، `sync.ts` تحديث من داخل التطبيق.
+  - نقطة الدخول `apps/mobile/index.js` تسجّل معالج الويدجت بعد `expo-router/entry`.
+  - أسماء الويدجتات في `app.json` يجب أن تطابق `WIDGET_NAMES`.
+  - عند تسجيل الخروج تُمسح بيانات الطالب من الويدجتات.

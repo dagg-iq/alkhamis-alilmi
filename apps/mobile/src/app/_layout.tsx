@@ -13,6 +13,7 @@ import { isConfigured } from '@/lib/supabase';
 import { AppThemeProvider, fontAssets, useTheme } from '@/lib/theme';
 import { Intro } from '@/components/intro';
 import { NotConfigured } from '@/components/not-configured';
+import { useWidgetSync } from '@/widgets/sync';
 
 // التطبيق عربي بالكامل: من اليمين لليسار
 if (Platform.OS !== 'web') {
@@ -100,6 +101,9 @@ function Navigator() {
   useEffect(() => {
     if (approvedId) registerPush(approvedId);
   }, [approvedId]);
+
+  // ويدجتات الشاشة الرئيسية (أندرويد)
+  useWidgetSync(approvedId);
 
   // فتح الشاشة المناسبة عند الضغط على إشعار
   useEffect(() => {
