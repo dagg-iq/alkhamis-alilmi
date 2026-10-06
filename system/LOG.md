@@ -113,3 +113,4 @@
 - ✅ Gemini (المفتاح بصيغة `AQ.` الجديدة يعمل — اختُبر بطلب مجاني)، ✅ أدمن، ✅ Firebase (مشروع `saeyiq`) وسرّاه، apk-15 أول نسخة مع Firebase.
 - التخزين: Supabase Storage بدل R2 (+ اختبار ذاتي في سير العمل). الموقع التعريفي `apps/site` + لوحة التحكم على `/saey-dashboard/` عبر Firebase Hosting.
 - **معلّق**: مكان ملف APK للتنزيل العام (المستودع خاص، وFirebase المجاني لا يتحمل).
+- ✅ رابط الإضافة في Supabase Redirect URLs. ملف التنزيل العام على Google Drive (apk-15): الموقع يحوّل رابط المشاركة لرابط تنزيل مباشر (`apps/site/download-config.json`). التحديث: «إدارة النسخ» في Drive لنفس الملف.
