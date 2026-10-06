@@ -20,7 +20,21 @@ export interface GenerateOptions {
 
 export class GeminiQuotaError extends Error {}
 
-export async function generate(model: string, contents: Content[], opts: GenerateOptions = {}): Promise<string> {
+/**
+ * سلاسل النماذج: الأقوى أولاً، وإذا كان مشغولاً (503) أو انتهت حصته (429) أو أُوقف (404)
+ * ننتقل للتالي تلقائياً — فلا يرى الطالب «المساعد مشغول» إلا إذا تعطلت كلها.
+ * (gemini-2.5 أُوقفت للحسابات الجديدة، و Pro غير متاح في الطبقة المجانية)
+ */
+export const MAIN_MODELS = ['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite'];
+export const LITE_MODELS = ['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-3.8-flash', 'gemini-3.5-flash'];
+
+/** النموذج من الإعدادات أولاً (يقبل عدة أسماء مفصولة بفواصل)، ثم الافتراضيات */
+export function modelChain(setting: string | undefined | null, defaults: string[] = MAIN_MODELS): string[] {
+  const fromSetting = (setting ?? '').split(',').map((m) => m.trim()).filter((m) => m && !m.startsWith('gemini-2.'));
+  return [...new Set([...fromSetting, ...defaults])];
+}
+
+export async function generate(model: string | string[], contents: Content[], opts: GenerateOptions = {}): Promise<string> {
   const body: Record<string, unknown> = {
     contents,
     generationConfig: {
@@ -31,30 +45,39 @@ export async function generate(model: string, contents: Content[], opts: Generat
   };
   if (opts.system) body.system_instruction = { parts: [{ text: opts.system }] };
 
-  // محاولة ثانية واحدة عند الضغط المؤقت
-  for (let attempt = 0; attempt < 2; attempt++) {
-    const res = await fetch(`${API}/v1beta/models/${model}:generateContent`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key() },
-      body: JSON.stringify(body),
-    });
-    if (res.status === 429) {
-      if (attempt === 0) {
-        await new Promise((r) => setTimeout(r, 2000));
-        continue;
+  const models = Array.isArray(model) ? model : modelChain(model);
+  let busy = false;
+  for (const m of models) {
+    // محاولتان لكل نموذج عند الضغط المؤقت، ثم الانتقال للتالي
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const res = await fetch(`${API}/v1beta/models/${m}:generateContent`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key() },
+        body: JSON.stringify(body),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const parts = data?.candidates?.[0]?.content?.parts ?? [];
+        const text = parts.filter((p: { thought?: boolean }) => !p.thought).map((p: { text?: string }) => p.text ?? '').join('').trim();
+        if (text) return text;
+        break; // جواب فارغ (حظر أو قطع): نجرب نموذجاً آخر
       }
-      throw new GeminiQuotaError('quota');
+      const status = res.status;
+      const detail = (await res.text()).slice(0, 300);
+      if (status === 404) break; // النموذج غير متاح لهذا الحساب
+      if (status === 429 || status === 503 || status === 500) {
+        busy = true;
+        if (attempt === 0 && status !== 429) {
+          await new Promise((r) => setTimeout(r, 1200));
+          continue;
+        }
+        break;
+      }
+      throw new Error(`Gemini ${m} ${status}: ${detail}`);
     }
-    if (res.status === 503 && attempt === 0) {
-      await new Promise((r) => setTimeout(r, 1500));
-      continue;
-    }
-    if (!res.ok) throw new Error(`Gemini ${res.status}: ${await res.text()}`);
-    const data = await res.json();
-    const parts = data?.candidates?.[0]?.content?.parts ?? [];
-    return parts.map((p: { text?: string }) => p.text ?? '').join('').trim();
   }
-  throw new GeminiQuotaError('quota');
+  if (busy) throw new GeminiQuotaError('all models busy');
+  throw new Error('Gemini: no model returned an answer');
 }
 
 const EMBED_MODEL = 'gemini-embedding-001';

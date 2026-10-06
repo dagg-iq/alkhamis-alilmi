@@ -13,7 +13,7 @@ export default function Settings() {
     return Object.fromEntries(rows.map((r) => [r.key, r.value]));
   });
   const [grading, setGrading] = useState(DEFAULT_RULES);
-  const [ai, setAi] = useState<AiSettings>({ daily_limit: 20, model: 'gemini-2.5-flash', lite_model: 'gemini-2.5-flash-lite', enabled: true });
+  const [ai, setAi] = useState<AiSettings>({ daily_limit: 20, model: 'gemini-3.8-flash', lite_model: 'gemini-3.5-flash-lite', enabled: true });
   const [registrationOpen, setRegistrationOpen] = useState(true);
   const [dms, setDms] = useState(true);
 

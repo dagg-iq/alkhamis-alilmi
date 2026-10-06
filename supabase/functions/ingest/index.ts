@@ -3,7 +3,7 @@
 import { PDFDocument } from 'npm:pdf-lib@1.17.1';
 import { handler, HttpError, json } from '../_shared/cors.ts';
 import { admin, getCaller, getSetting } from '../_shared/supabase.ts';
-import { chunkText, embed, generate, GeminiQuotaError, parseJson, uploadFile } from '../_shared/gemini.ts';
+import { chunkText, embed, generate, GeminiQuotaError, parseJson, uploadFile, LITE_MODELS, modelChain } from '../_shared/gemini.ts';
 import { getObject } from '../_shared/storage.ts';
 
 const BATCH = 10;
@@ -46,7 +46,7 @@ Deno.serve(handler(async (req) => {
 
   try {
     const ai = await getSetting<{ lite_model?: string }>('ai');
-    const raw = await generate(ai.lite_model ?? 'gemini-2.5-flash-lite', [{
+    const raw = await generate(modelChain(ai.lite_model, LITE_MODELS), [{
       role: 'user',
       parts: [
         { file_data: { mime_type: 'application/pdf', file_uri: fileUri! } },

@@ -2,7 +2,7 @@
 import { PDFDocument } from 'npm:pdf-lib@1.17.1';
 import { handler, HttpError, json } from '../_shared/cors.ts';
 import { admin, getCaller, getSetting } from '../_shared/supabase.ts';
-import { generate, GeminiQuotaError, toBase64 } from '../_shared/gemini.ts';
+import { generate, GeminiQuotaError, toBase64, modelChain } from '../_shared/gemini.ts';
 import { getObject, putObject } from '../_shared/storage.ts';
 
 const PROMPT = `هذه صور لورقة أسئلة امتحان لطلاب الخامس الإعدادي العلمي في العراق.
@@ -39,7 +39,7 @@ Deno.serve(handler(async (req) => {
   const ai = await getSetting<{ model?: string }>('ai');
   let content = '';
   try {
-    content = await generate(ai.model ?? 'gemini-2.5-flash', [{
+    content = await generate(modelChain(ai.model), [{
       role: 'user',
       parts: [
         ...images.map((b, i) => ({

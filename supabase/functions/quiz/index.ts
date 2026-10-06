@@ -1,7 +1,7 @@
 // اختبار ذاتي لفصل: يُولَّد مرة واحدة ويُحفظ ويُعاد لكل الطلاب
 import { handler, HttpError, json } from '../_shared/cors.ts';
 import { admin, getCaller, getSetting } from '../_shared/supabase.ts';
-import { embed, generate, GeminiQuotaError, parseJson } from '../_shared/gemini.ts';
+import { embed, generate, GeminiQuotaError, parseJson, modelChain } from '../_shared/gemini.ts';
 
 interface Q { question: string; choices: string[]; answer: number; explanation?: string }
 
@@ -40,7 +40,7 @@ Deno.serve(handler(async (req) => {
   const ai = await getSetting<{ model?: string }>('ai');
   let questions: Q[];
   try {
-    const raw = await generate(ai.model ?? 'gemini-2.5-flash', [{
+    const raw = await generate(modelChain(ai.model), [{
       role: 'user',
       parts: [{
         text: `أنشئ ١٠ أسئلة اختيار من متعدد لمادة ${subjectName}، الفصل ${chapter.number}: «${chapter.title}» — منهج الخامس الإعدادي العلمي في العراق.

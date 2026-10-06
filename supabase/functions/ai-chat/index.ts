@@ -1,7 +1,7 @@
 // المساعد الذكي: يجيب من المنهج (RAG) ويذكر المصدر، مع حد يومي لكل طالب
 import { handler, HttpError, json } from '../_shared/cors.ts';
 import { admin, getCaller, getSetting } from '../_shared/supabase.ts';
-import { type Content, embed, generate, GeminiQuotaError } from '../_shared/gemini.ts';
+import { type Content, embed, generate, GeminiQuotaError, modelChain } from '../_shared/gemini.ts';
 
 interface AiSettings { daily_limit?: number; model?: string; enabled?: boolean }
 
@@ -28,7 +28,7 @@ Deno.serve(handler(async (req) => {
   const settings = await getSetting<AiSettings>('ai');
   if (settings.enabled === false) throw new HttpError(503, 'المساعد الذكي متوقف مؤقتاً من قبل الأدمن.');
   const limit = settings.daily_limit ?? 20;
-  const model = settings.model ?? 'gemini-2.5-flash';
+  const model = modelChain(settings.model);
 
   // الأدمن بلا حد يومي
   let used = 0;
