@@ -211,19 +211,19 @@ main { overflow: hidden; }
 @keyframes rise { from { opacity: 0; translate: 0 26px; } to { opacity: 1; translate: 0 0; } }
 @keyframes float-a { 0%, 100% { translate: 0 0; } 50% { translate: 0 -12px; } }
 @keyframes float-b { 0%, 100% { translate: 0 0; } 50% { translate: 0 10px; } }
-@keyframes dot-drop { 0% { transform: translateY(-14px); opacity: 0; } 60% { transform: translateY(2px); opacity: 1; } 100% { transform: none; } }
 @keyframes glow { 0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 45%, transparent); } 50% { box-shadow: 0 0 0 12px color-mix(in srgb, var(--accent) 0%, transparent); } }
 
 .js .hero-text > * { opacity: 0; animation: rise .7s cubic-bezier(.2, .7, .2, 1) forwards; }
-.js .hero-text > :nth-child(2) { animation-delay: .08s; }
-.js .hero-text > :nth-child(3) { animation-delay: .16s; }
-.js .hero-text > :nth-child(4) { animation-delay: .24s; }
-.js .hero-text > :nth-child(5) { animation-delay: .32s; }
-.js .hero-phones .phone { opacity: 0; animation: rise .9s .25s cubic-bezier(.2, .7, .2, 1) forwards; }
-.js .hero-phones .phone-back { animation-delay: .4s; }
+.js .hero-text > .hero-mark { opacity: 1; animation: none; }
+.js .hero-text > :nth-child(2) { animation-delay: .9s; }
+.js .hero-text > :nth-child(3) { animation-delay: 1s; }
+.js .hero-text > :nth-child(4) { animation-delay: 1.1s; }
+.js .hero-text > :nth-child(5) { animation-delay: 1.2s; }
+.js .hero-text > :nth-child(6) { animation-delay: 1.3s; }
+.js .hero-phones .phone { opacity: 0; animation: rise .9s 1.1s cubic-bezier(.2, .7, .2, 1) forwards; }
+.js .hero-phones .phone-back { animation-delay: 1.3s; }
 .js .hero-phones.ready .phone-front { opacity: 1; animation: float-a 6s ease-in-out infinite; }
 .js .hero-phones.ready .phone-back { opacity: .96; animation: float-b 7s ease-in-out infinite; }
-.brand svg circle { transform-box: fill-box; transform-origin: center; animation: dot-drop .8s .3s cubic-bezier(.3, 1.6, .5, 1) both; }
 .hero .btn-big:not([aria-disabled="true"]) { animation: glow 2.6s 1.2s ease-in-out 3; }
 
 .js .reveal { opacity: 0; translate: 0 28px; transition: opacity .7s cubic-bezier(.2, .7, .2, 1), translate .7s cubic-bezier(.2, .7, .2, 1), transform .25s ease; transition-delay: var(--d, 0s), var(--d, 0s), 0s; }
@@ -241,7 +241,41 @@ main { overflow: hidden; }
 .js .gallery.in .phone:nth-child(n+5) { transition-delay: .28s, .28s, 0s; }
 .gallery .phone:hover { transform: translateY(-6px) scale(1.02); }
 
+/* «تقليل الحركة» في الهاتف: لا حركة ولا قفز — يبقى ظهور هادئ بالشفافية فقط */
 @media (prefers-reduced-motion: reduce) {
-  .js .hero-text > *, .js .hero-phones .phone, .js .reveal, .js .gallery .phone { opacity: 1 !important; translate: none !important; animation: none !important; transition: none !important; }
-  .brand svg circle, .hero .btn-big, .js .hero-phones.ready .phone { animation: none !important; }
+  .js .reveal, .js .gallery.reveal .phone { translate: none !important; transition: opacity .5s ease !important; }
+  .js .hero-text > *, .js .hero-phones .phone { animation-name: fade !important; }
+  .js .hero-phones.ready .phone, .hero .btn-big { animation: none !important; }
+  .mark * { animation: none !important; }
 }
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+
+/* ---------------------------------------------------------------- الشعار المتحرك
+ * مثل مقدمة التطبيق: القاعدة تمتد من اليمين، الأسنان الثلاث تصعد بالتتابع (الفصل الأول، نصف السنة،
+ * الفصل الثاني)، ثم نقطة الإعفاء تسقط وترتد. في البداية الكبيرة تقفز النقطة قفزة صغيرة كل بضع ثوانٍ. */
+.mark rect { fill: currentColor; transform-box: fill-box; }
+.mark .m-d { fill: var(--accent); transform-box: fill-box; transform-origin: center bottom; }
+.mark .m-b { transform-origin: right center; animation: m-base .5s cubic-bezier(.3, .8, .3, 1) both; }
+.mark .m-t1, .mark .m-t2, .mark .m-t3 { transform-origin: center bottom; animation: m-tooth .6s cubic-bezier(.3, 1.45, .55, 1) both; }
+.mark .m-t1 { animation-delay: .3s; }
+.mark .m-t2 { animation-delay: .45s; }
+.mark .m-t3 { animation-delay: .6s; }
+.mark .m-d { animation: m-dot .75s .85s cubic-bezier(.3, .9, .4, 1) both; }
+.mark-hero .m-d { animation: m-dot .75s .85s cubic-bezier(.3, .9, .4, 1) both, m-hop 4.5s 3s ease-in-out infinite; }
+.mark-nav .m-b { animation-duration: .4s; }
+.mark-foot * { animation: none !important; }
+@keyframes m-base { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes m-tooth { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+@keyframes m-dot {
+  0% { transform: translateY(-260%) scale(.6); opacity: 0; }
+  55% { transform: translateY(18%) scale(1.08, .86); opacity: 1; }
+  75% { transform: translateY(-22%) scale(.96, 1.04); }
+  100% { transform: none; }
+}
+@keyframes m-hop {
+  0%, 82%, 100% { transform: none; }
+  88% { transform: translateY(-55%) scale(.95, 1.06); }
+  94% { transform: translateY(6%) scale(1.06, .92); }
+}
+.hero-mark { margin-bottom: 4px; color: var(--ink); }
+@media (max-width: 960px) { .hero-mark { display: flex; justify-content: center; } .mark-hero { width: 80px; height: 80px; } }

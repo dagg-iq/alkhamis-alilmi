@@ -17,20 +17,15 @@
   <script>document.documentElement.classList.add('js')</script>
 </head>
 <body>
-  <!-- الرمز: السين بثلاث أسنان صاعدة ونقطة الإعفاء -->
-  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
-    <symbol id="logo" viewBox="0 0 120 120">
-      <rect x="80" y="62" width="20" height="42" rx="10" fill="currentColor" />
-      <rect x="50" y="44" width="20" height="60" rx="10" fill="currentColor" />
-      <rect x="20" y="30" width="20" height="74" rx="10" fill="currentColor" />
-      <rect x="20" y="84" width="80" height="20" rx="10" fill="currentColor" />
-      <circle cx="30" cy="12" r="10" fill="var(--accent)" />
-    </symbol>
-  </svg>
-
   <header class="nav" id="top">
     <a class="brand" href="#top" aria-label="سعي">
-      <svg width="34" height="34"><use href="#logo" /></svg>
+      <svg class="mark mark-nav" width="34" height="34" viewBox="0 0 120 120" aria-hidden="true">
+        <rect class="m-t1" x="80" y="62" width="20" height="42" rx="10" />
+        <rect class="m-t2" x="50" y="44" width="20" height="60" rx="10" />
+        <rect class="m-t3" x="20" y="30" width="20" height="74" rx="10" />
+        <rect class="m-b" x="20" y="84" width="80" height="20" rx="10" />
+        <circle class="m-d" cx="30" cy="12" r="10" />
+      </svg>
       <b>سعي</b>
     </a>
     <nav class="links" aria-label="أقسام الصفحة">
@@ -47,6 +42,15 @@
     <!-- ======================================================== البداية -->
     <section class="hero">
       <div class="hero-text">
+        <div class="hero-mark">
+      <svg class="mark mark-hero" width="96" height="96" viewBox="0 0 120 120" aria-hidden="true">
+        <rect class="m-t1" x="80" y="62" width="20" height="42" rx="10" />
+        <rect class="m-t2" x="50" y="44" width="20" height="60" rx="10" />
+        <rect class="m-t3" x="20" y="30" width="20" height="74" rx="10" />
+        <rect class="m-b" x="20" y="84" width="80" height="20" rx="10" />
+        <circle class="m-d" cx="30" cy="12" r="10" />
+      </svg>
+        </div>
         <span class="eyebrow">لطلاب الخامس العلمي · إعدادية الشهاب للبنين</span>
         <h1>اسعَ <span class="accent">تُعفَ.</span></h1>
         <p class="lead">
@@ -278,7 +282,13 @@
   </main>
 
   <footer class="footer">
-    <div class="brand"><svg width="26" height="26"><use href="#logo" /></svg><b>سعي</b></div>
+    <div class="brand"><svg class="mark mark-foot" width="26" height="26" viewBox="0 0 120 120" aria-hidden="true">
+        <rect class="m-t1" x="80" y="62" width="20" height="42" rx="10" />
+        <rect class="m-t2" x="50" y="44" width="20" height="60" rx="10" />
+        <rect class="m-t3" x="20" y="30" width="20" height="74" rx="10" />
+        <rect class="m-b" x="20" y="84" width="80" height="20" rx="10" />
+        <circle class="m-d" cx="30" cy="12" r="10" />
+      </svg><b>سعي</b></div>
     <p>اسعَ تُعفَ. · صُنع بحب لطلاب إعدادية الشهاب للبنين · <span data-year>٢٠٢٦</span></p>
   </footer>
 

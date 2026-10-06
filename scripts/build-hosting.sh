@@ -9,6 +9,9 @@ rm -rf hosting
 mkdir -p hosting
 cp -r apps/site/. hosting/
 rm -f hosting/download-config.json
+# كل نشر يجبر المتصفح على أخذ ملفات الموقع الجديدة (لا يعرض نسخة قديمة محفوظة)
+V=$(git rev-parse --short HEAD 2>/dev/null || date +%s)
+sed -i "s#href=\"style.css\"#href=\"style.css?v=$V\"#; s#src=\"main.js\"#src=\"main.js?v=$V\"#" hosting/index.html
 cp -r apps/admin/public/fonts hosting/fonts
 cp apps/admin/public/favicon.png hosting/favicon.png
 # الصورة التعريفية للمطوّر (من رابط يحدده صاحب المشروع)؛ إن فشل التنزيل يبقى الحرف

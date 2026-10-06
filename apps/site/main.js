@@ -49,7 +49,7 @@ if ('IntersectionObserver' in window) {
 } else items.forEach((el) => el.classList.add('in'));
 
 // بعد دخول الهواتف تبدأ بالطفو
-setTimeout(() => document.querySelector('.hero-phones')?.classList.add('ready'), 1300);
+setTimeout(() => document.querySelector('.hero-phones')?.classList.add('ready'), 2300);
 
 // صورة المطوّر (إن وُجدت)؛ وإلا يبقى الحرف
 const img = new Image();
