@@ -40,6 +40,18 @@ export async function setupChannels() {
   await N.setNotificationChannelAsync('default', { name: 'الأخبار والتنبيهات', importance: N.AndroidImportance.HIGH });
   await N.setNotificationChannelAsync('chat', { name: 'الرسائل', importance: N.AndroidImportance.HIGH });
   await N.setNotificationChannelAsync('reminders', { name: 'التذكيرات', importance: N.AndroidImportance.HIGH });
+  // قناة المؤقت: صوت المنبّه (يُسمع حتى لو كانت نغمة الإشعارات منخفضة) واهتزاز طويل، وتظهر على شاشة القفل
+  await N.setNotificationChannelAsync('timer-alarm', {
+    name: 'منبّه المؤقت',
+    description: 'يرنّ عند انتهاء جلسة الدراسة أو الاستراحة',
+    importance: N.AndroidImportance.MAX,
+    sound: 'default',
+    enableVibrate: true,
+    vibrationPattern: [0, 600, 300, 600, 300, 600, 300, 900],
+    lockscreenVisibility: N.AndroidNotificationVisibility.PUBLIC,
+    bypassDnd: true,
+    audioAttributes: { usage: N.AndroidAudioUsage.ALARM, contentType: N.AndroidAudioContentType.SONIFICATION },
+  });
 }
 
 export type PushResult = 'ok' | 'denied' | 'unsupported' | 'not-configured' | 'error';
@@ -102,6 +114,39 @@ export async function scheduleReminder(title: string, body: string, at: Date): P
       content: { title, body, sound: 'default' },
       trigger: { type: N.SchedulableTriggerInputTypes.DATE, date: at, channelId: 'reminders' },
     });
+  } catch {
+    return null;
+  }
+}
+
+/** منبّه المؤقت: يرنّ في وقته بالضبط حتى لو كان التطبيق مغلقاً (منبّه دقيق من النظام) */
+export async function scheduleAlarm(title: string, body: string, at: Date): Promise<string | null> {
+  const N = notifications();
+  if (!N || at.getTime() <= Date.now()) return null;
+  try {
+    await setupChannels();
+    let { status } = await N.getPermissionsAsync();
+    if (status !== 'granted') status = (await N.requestPermissionsAsync()).status;
+    if (status !== 'granted') return null;
+    return await N.scheduleNotificationAsync({
+      content: {
+        title, body, sound: 'default', data: { url: '/timer' },
+        priority: N.AndroidNotificationPriority.MAX,
+        vibrate: [0, 600, 300, 600, 300, 600, 300, 900],
+      },
+      trigger: { type: N.SchedulableTriggerInputTypes.DATE, date: at, channelId: 'timer-alarm' },
+    });
+  } catch {
+    return null;
+  }
+}
+
+/** هل يسمح الهاتف بالإشعارات أصلاً؟ (لتنبيه الطالب أن المؤقت لن يرنّ) */
+export async function notificationsAllowed(): Promise<boolean | null> {
+  const N = notifications();
+  if (!N) return null;
+  try {
+    return (await N.getPermissionsAsync()).status === 'granted';
   } catch {
     return null;
   }

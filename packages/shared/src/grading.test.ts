@@ -3,7 +3,7 @@ import {
   DEFAULT_RULES, annualEffort, effortStatus, finalExamNeeded, generalExemption, generalPlan, goalTarget,
   isIndividuallyExempt, neededFor, parseRules, projectedEffort, semester1, subjectNeed, subjectVerdict,
 } from './grading';
-import { analyzeGrades, countOf } from './plan';
+import { analyzeGrades, countOf, studentBrief } from './plan';
 import { arDigits, formatScore, isTripleName, parseNumber, relativeDays, youtubeId } from './format';
 
 const noRound = { ...DEFAULT_RULES, round: 'none' as const };
@@ -224,5 +224,15 @@ describe('التحليل حسب الهدف', () => {
     expect(countOf(2, 'مادة', 'مادتان', 'مواد')).toBe('مادتان');
     expect(countOf(3, 'مادة', 'مادتان', 'مواد')).toBe('٣ مواد');
     expect(countOf(11, 'مادة', 'مادتان', 'مواد')).toBe('١١ مادة');
+  });
+});
+
+describe('studentBrief', () => {
+  it('summarises goal, scores and need per subject', () => {
+    const sum = analyzeGrades([{ id: 'p', name: 'الفيزياء' }, { id: 'c', name: 'الكيمياء' }], { p: { month1: 93, midyear: 88 } }, 'individual');
+    const b = studentBrief(sum);
+    expect(b).toContain('الهدف: الإعفاء من المواد');
+    expect(b).toContain('الفيزياء: الشهر الأول 93، نصف السنة 88');
+    expect(b).toContain('الكيمياء: لا درجات');
   });
 });

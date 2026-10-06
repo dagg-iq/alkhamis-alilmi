@@ -37,8 +37,8 @@ const data = {
   ],
   message_reactions: [{ message_id: 'm2', user_id: UID, emoji: '❤️' }],
   ai_chats: [{ id: 'a1', title: 'سؤال عن المتسعات', updated_at: new Date().toISOString() }],
-  ai_messages: [{ id: 'am1', role: 'user', content: 'ما هي السعة؟', sources: null }, { id: 'am2', role: 'assistant', content: '**السعة** هي نسبة الشحنة المختزنة على أحد لوحي المتسعة إلى فرق الجهد بينهما.\n\n- السعة = الشحنة ÷ فرق الجهد\n- وحدتها **الفاراد**\n- تزداد بزيادة مساحة اللوحين\n- وتقل بزيادة البعد بينهما [١]', sources: [{ title: 'ملزمة الفيزياء — الفصل الأول', page: 3 }] }],
-  ai_usage: [{ count: 3 }], quiz_attempts: [], study_sessions: [], push_tokens: [],
+  ai_messages: [{ id: 'am1', role: 'user', content: 'ما هي السعة؟', sources: null }, { id: 'am3', role: 'user', content: 'لخص لي المتسعات', sources: null }, { id: 'am4', role: 'assistant', content: 'المتسعة جهاز يخزن **الشحنة الكهربائية** والطاقة.\n\n## أهم التعاريف\n- **السعة:** نسبة الشحنة إلى فرق الجهد\n- ==وحدة السعة هي الفاراد==\n\n> **القانون:** السعة = الشحنة ÷ فرق الجهد\n\n## خطوات حل المسألة\n1. اكتب المعطيات\n2. اكتب القانون\n3. عوّض واحسب الناتج **مع الوحدة**', sources: null }, { id: 'am2', role: 'assistant', content: '**السعة** هي نسبة الشحنة المختزنة على أحد لوحي المتسعة إلى فرق الجهد بينهما.\n\n- السعة = الشحنة ÷ فرق الجهد\n- وحدتها **الفاراد**\n- تزداد بزيادة مساحة اللوحين\n- وتقل بزيادة البعد بينهما [١]', sources: [{ title: 'ملزمة الفيزياء — الفصل الأول', page: 3 }] }],
+  ai_usage: [{ count: 3 }], quiz_attempts: [], study_sessions: Array.from({ length: 9 }, (_, i) => ({ started_at: new Date(Date.now() - Math.floor(i / 2) * 86400000 - 3600000).toISOString(), minutes: 25 + (i % 3) * 20, subject_id: i % 3 ? 's0' : 's3' })), push_tokens: [],
 };
 const rpc = {
   my_conversations: [{ id: 'cv1', type: 'section', title: 'شعبة أ', only_staff_can_post: false, last_message_at: new Date().toISOString(), last_body: 'شكراً، سأراجعها الليلة', last_sender: 'علي', unread: 0, muted: false, peer_id: null, peer_name: null, peer_avatar: null, peer_verified: null },
@@ -80,6 +80,11 @@ const rpc = {
     page.on('console', (m) => { if (m.type() === 'error' && !/WebSocket|realtime|Failed to load resource|youtube|net::/.test(m.text())) errs.push('CONSOLE ' + m.text().slice(0, 200)); });
     await page.goto((process.env.BASE || 'http://localhost:4175') + r, { waitUntil: 'networkidle' }).catch((e) => errs.push('NAV ' + e.message));
     await page.waitForTimeout(Number(process.env.WAIT || 4000)); // بعد انتهاء المقدمة
+    // CLICKS="ابدأ,إيقاف مؤقت" — يضغط عناصر حسب وصفها (accessibilityLabel) بالترتيب
+    for (const label of (process.env.CLICKS ? process.env.CLICKS.split(',') : [])) {
+      await page.locator(`[aria-label="${label}"]`).first().click({ timeout: 3000 }).catch((e) => errs.push('CLICK ' + label + ' ' + e.message.slice(0, 80)));
+      await page.waitForTimeout(Number(process.env.CLICK_WAIT || 1500));
+    }
     const text = (await page.evaluate(() => document.body.innerText)).replace(/\s+/g, ' ').slice(0, 90);
     const name = r.replace(/[\/]/g, '_') || 'home';
     await page.screenshot({ path: `shots/${name}.png` });

@@ -113,6 +113,7 @@ function Navigator() {
       if (d.conversation_id) router.push(`/chat/${d.conversation_id}`);
       else if (d.post_id) router.push(`/news/${d.post_id}`);
       else if (d.task_id) router.push('/planner');
+      else if (d.url === '/timer') router.push('/timer');
       else router.push('/notifications');
     });
   }, []);

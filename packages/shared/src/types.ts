@@ -107,7 +107,15 @@ export interface Conversation {
 }
 export type Attachment =
   | { type: 'image'; key: string; width?: number; height?: number }
-  | { type: 'lecture' | 'document' | 'question_set'; id: string; title: string };
+  | {
+      type: 'lecture' | 'document' | 'question_set';
+      id: string;
+      title: string;
+      /** معرّف فيديو يوتيوب (لصورة المحاضرة المصغرة) */
+      thumb?: string;
+      /** سطر ثانوي: المادة، الأستاذ، عدد الصفحات… */
+      subtitle?: string;
+    };
 export interface Message {
   id: string;
   conversation_id: string;

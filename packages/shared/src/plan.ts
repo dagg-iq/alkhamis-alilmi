@@ -4,7 +4,7 @@
  */
 import { arDigits, formatScore } from './format';
 import {
-  DEFAULT_RULES, EFFORT_PERIODS, applyRounding, effortStatus, generalPlan, goalTarget, neededFor,
+  DEFAULT_RULES, EFFORT_PERIODS, PERIOD_LABELS, applyRounding, effortStatus, generalPlan, goalTarget, neededFor,
   type Goal, type GradingRules, type Need, type SubjectScores,
 } from './grading';
 
@@ -199,4 +199,26 @@ export function analyzeGrades(
     headline: hardest && (hardest.need.perExam ?? 0) <= applyRounding(hardest.value ?? 0, rules) ? 'على طريق النجاح' : 'النجاح يحتاج جهداً',
     detail: hardest ? `أصعب مادة ${short(hardest.name)}: تحتاج ${formatScore(hardest.need.perExam)} في ${exams(hardest.need.remaining.length)}.` : '',
   };
+}
+
+/**
+ * ملخص نصي قصير لحالة الطالب الدراسية — يُرسل لمساعد سعي ليعطي نصائح مبنية على درجاته الحقيقية.
+ * (الأرقام عادية لا هندية، لأن النموذج يحسب بها)
+ */
+export function studentBrief(sum: GradeSummary): string {
+  const n = (x: number | null) => (x === null ? '—' : String(Math.round(x * 10) / 10));
+  const lines = [
+    `الهدف: ${GOAL_TITLES[sum.goal]}`,
+    `المعدل الحالي: ${n(sum.average)} (من ${sum.counted} مواد فيها درجات من أصل ${sum.total})`,
+    `الخلاصة: ${sum.headline} — ${sum.detail}`,
+  ];
+  for (const r of sum.rows) {
+    const scores = EFFORT_PERIODS.filter((p) => typeof r.scores[p] === 'number').map((p) => `${PERIOD_LABELS[p]} ${r.scores[p]}`);
+    if (typeof r.scores.final === 'number') scores.push(`النهائي ${r.scores.final}`);
+    const need = r.need.state === 'possible' && r.need.perExam !== null
+      ? `يحتاج ${n(r.need.perExam)} في كل امتحان متبقٍ`
+      : r.need.state === 'achieved' ? 'حقق الهدف' : r.need.state === 'impossible' ? 'الهدف صعب جداً' : 'فات الهدف';
+    lines.push(`- ${r.name}: ${scores.length ? scores.join('، ') : 'لا درجات'} | ${TONE_LABELS[r.tone]} | ${need}`);
+  }
+  return lines.join('\n');
 }

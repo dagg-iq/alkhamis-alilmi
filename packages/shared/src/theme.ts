@@ -18,6 +18,7 @@ export const palette = {
     bubbleMine: '#2346F5',
     bubbleMineInk: '#FFFFFF',
     bubbleOther: '#FFFFFF',
+    highlight: '#FFE58A', // قلم التحديد في إجابات المساعد
   },
   dark: {
     bg: '#0E0E0F',
@@ -37,6 +38,7 @@ export const palette = {
     bubbleMine: '#2346F5',
     bubbleMineInk: '#FFFFFF',
     bubbleOther: '#18181A',
+    highlight: '#5E4B00',
   },
 } as const;
 

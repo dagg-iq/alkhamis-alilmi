@@ -11,10 +11,11 @@ import { T } from './ui';
 export function Sheet({ visible, onClose, children }: { visible: boolean; onClose: () => void; children: ReactNode }) {
   const { c } = useTheme();
   const insets = useSafeAreaInsets();
+  // ملء الشاشة: النافذة تمتد تحت شريطي الحالة والتنقل، فتلتصق اللوحة بحافة الهاتف السفلية
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent navigationBarTranslucent>
       <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.35)' }} onPress={onClose} accessibilityLabel="إغلاق" />
-      <Animated.View entering={SlideInDown.duration(220).easing(Easing.out(Easing.cubic))} style={{ backgroundColor: c.card, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20, paddingBottom: insets.bottom + 20, gap: 4, width: '100%', maxWidth: 640, alignSelf: 'center' }}>
+      <Animated.View entering={SlideInDown.duration(220).easing(Easing.out(Easing.cubic))} style={{ backgroundColor: c.card, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20, paddingBottom: Math.max(insets.bottom, 12) + 16, gap: 4, width: '100%', maxWidth: 640, alignSelf: 'center' }}>
         <View style={{ alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: c.line, marginBottom: 8 }} />
         {children}
       </Animated.View>

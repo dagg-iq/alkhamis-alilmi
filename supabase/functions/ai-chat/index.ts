@@ -10,17 +10,45 @@ const SYSTEM = `أنت «مساعد سعي»، مدرّس خصوصي ذكي لط
 - اعتمد أولاً على «مقتطفات المنهج» المرفقة. إذا استخدمت مقتطفاً اذكر رقمه هكذا [١] أو [٢].
 - إذا لم تكن الإجابة في المقتطفات، أجب من معرفتك العامة بالمنهج العراقي وقل صراحة: «هذا من خارج الملازم المرفوعة».
 - لا تخترع أرقام صفحات أو أسماء أساتذة أو قوانين غير موجودة. إذا لم تكن متأكداً فقل ذلك.
-- اكتب المعادلات بصيغة LaTeX بين $...$ (داخل السطر) أو $$...$$ (سطر مستقل).
-- في المسائل: اكتب المعطيات، ثم القانون، ثم التعويض، ثم الناتج مع الوحدة.
-- كن مختصراً: لا تتجاوز ما يحتاجه الطالب. استخدم نقاطاً وعناوين قصيرة عند الحاجة.
+- كن مختصراً: لا تتجاوز ما يحتاجه الطالب.
+
+طريقة الكتابة (مثل ملزمة مرتبة، لأن التطبيق يعرضها بتنسيق جميل):
+- ابدأ بجملة تجيب مباشرة، ثم التفاصيل.
+- عناوين الأقسام بـ ## (قصيرة). لا تستخدم # وحدها.
+- المصطلحات المهمة بـ **عريض**، وأهم فكرة في الجواب ظلّلها هكذا ==الفكرة== (مرة أو مرتين فقط).
+- القانون أو التعريف المهم في صندوق: سطر يبدأ بـ > مثل:
+  > **القانون:** $C = \\frac{Q}{\\Delta V}$
+- المعادلات بصيغة LaTeX: داخل السطر $...$ والمهمة في سطر مستقل $$...$$. لا تكتب المعادلات كنص عادي.
+- المسائل: خطوات مرقمة 1. 2. 3. (المعطيات، المطلوب، القانون، التعويض، الناتج مع الوحدة)، والناتج النهائي بالعريض.
+- المقارنات في جدول Markdown.
+- عند طلب أسئلة أو امتحان: عنوان ## الأسئلة ثم الأسئلة مرقمة (مع الدرجة إن أمكن)، ثم في النهاية ## الإجابات النموذجية مرقمة بنفس الترتيب. نوّع بين: علّل، ما المقصود، قارن، مسائل، اختر.
+- لا تستخدم الرموز التعبيرية (الإيموجي).
 - ارفض بلطف أي طلب لا علاقة له بالدراسة أو غير لائق، ووجّه الطالب للدراسة.`;
+
+/** ما يعرفه المساعد عن الطالب (اسمه، شعبته، درجاته، دراسته) ليعطي نصائح شخصية */
+async function studentSection(userId: string, brief: string): Promise<string> {
+  const since = new Date(Date.now() - 7 * 86400000).toISOString();
+  const [{ data: p }, { data: study }] = await Promise.all([
+    admin.from('profiles').select('full_name, sections(name)').eq('id', userId).maybeSingle(),
+    admin.from('study_sessions').select('minutes').eq('user_id', userId).gte('started_at', since),
+  ]);
+  const name = (p?.full_name as string | undefined)?.split(' ')[0];
+  const section = (p?.sections as { name?: string } | null)?.name;
+  const minutes = (study ?? []).reduce((a, r) => a + (r.minutes as number), 0);
+  const lines = [
+    name ? `اسم الطالب: ${name}${section ? ` (شعبة ${section})` : ''}` : null,
+    `دراسته بمؤقت سعي في آخر ٧ أيام: ${minutes} دقيقة`,
+    brief ? `درجاته وهدفه:\n${brief}` : 'لم يُدخل درجاته بعد.',
+  ].filter(Boolean);
+  return `\n\nمعلومات عن الطالب الذي تحادثه (استخدمها فقط إذا سأل عن درجاته أو وضعه أو طلب نصيحة أو خطة دراسة. في أسئلة المنهج العادية لا تذكر هدفه ولا درجاته إطلاقاً، وادخل في الجواب مباشرة بلا مقدمات أو مديح):\n${lines.join('\n')}`;
+}
 
 const AR = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
 const ar = (n: number) => String(n).replace(/\d/g, (d) => AR[+d]);
 
 Deno.serve(handler(async (req) => {
   const caller = await getCaller(req);
-  const { chatId, message, subjectId } = await req.json();
+  const { chatId, message, subjectId, brief } = await req.json();
   const text = String(message ?? '').trim();
   if (!text) throw new HttpError(400, 'اكتب سؤالك أولاً.');
   if (text.length > 4000) throw new HttpError(400, 'السؤال طويل جداً، اختصره قليلاً.');
@@ -101,9 +129,11 @@ Deno.serve(handler(async (req) => {
     parts: [{ text: context ? `مقتطفات المنهج:\n${context}\n\n---\nسؤال الطالب:\n${text}` : text }],
   });
 
+  const about = await studentSection(caller.id, String(brief ?? '').slice(0, 3000)).catch(() => '');
+
   let answer: string;
   try {
-    answer = await generate(model, contents, { system: SYSTEM, temperature: 0.3, maxOutputTokens: 2048 });
+    answer = await generate(model, contents, { system: SYSTEM + about, temperature: 0.3, maxOutputTokens: 8192 });
   } catch (e) {
     if (e instanceof GeminiQuotaError) throw new HttpError(503, 'المساعد مشغول الآن بسبب كثرة الأسئلة، جرّب بعد دقيقة.');
     throw e;

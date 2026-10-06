@@ -1,4 +1,4 @@
-import { arDigits, countOf, formatTime, ROLE_LABELS, type Attachment, type Message, type Profile } from '@saey/shared';
+import { PERIOD_LABELS, arDigits, countOf, formatTime, ROLE_LABELS, type Attachment, type Message, type Profile } from '@saey/shared';
 import * as Clipboard from 'expo-clipboard';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
@@ -9,6 +9,8 @@ import {
 } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { AttachmentCard } from '@/components/attachment-card';
+import { ImageViewer } from '@/components/image-viewer';
 import { KeyboardView } from '@/components/motion';
 import { Icon } from '@/components/icon';
 import { ConversationMark } from '@/components/group-mark';
@@ -48,6 +50,7 @@ export default function ChatScreen() {
   const [attachOpen, setAttachOpen] = useState(false);
   const [curriculumOpen, setCurriculumOpen] = useState(false);
   const [sending, setSending] = useState(false);
+  const [viewing, setViewing] = useState<string | null>(null);
   const [pending, setPending] = useState<Set<string>>(() => new Set());
   const pendingRef = useRef(pending);
   pendingRef.current = pending;
@@ -302,6 +305,7 @@ export default function ChatScreen() {
                   reactions={reactions.filter((r) => r.message_id === item.id)}
                   myId={me.id}
                   pending={pending.has(item.id)}
+                  onImage={setViewing}
                   onLongPress={() => !item.deleted_at && !pending.has(item.id) && setActionFor(item)}
                   onReact={(e) => react(item, e)}
                 />
@@ -400,6 +404,7 @@ export default function ChatScreen() {
         title={title} type={conv?.type === 'direct' ? 'group' : conv?.type ?? 'group'} />
       <CurriculumPicker visible={curriculumOpen} onClose={() => setCurriculumOpen(false)}
         onPick={(a) => { setCurriculumOpen(false); send(a); }} />
+      <ImageViewer url={viewing} onClose={() => setViewing(null)} />
     </KeyboardView>
   );
 }
@@ -445,9 +450,10 @@ function MembersSheet({ visible, onClose, members, title, type }: {
   );
 }
 
-function Bubble({ m, mine, sender, showName, reply, replySender, imageUrl, reactions, myId, pending, onLongPress, onReact }: {
+function Bubble({ m, mine, sender, showName, reply, replySender, imageUrl, reactions, myId, pending, onLongPress, onReact, onImage }: {
   m: Message; mine: boolean; sender?: Member; showName: boolean; reply?: Message; replySender?: string;
   imageUrl?: string; reactions: Reaction[]; myId: string; pending?: boolean; onLongPress: () => void; onReact: (e: string) => void;
+  onImage: (url: string) => void;
 }) {
   const { c } = useTheme();
   const bg = mine ? c.bubbleMine : c.bubbleOther;
@@ -481,18 +487,12 @@ function Bubble({ m, mine, sender, showName, reply, replySender, imageUrl, react
             ) : null}
             {a?.type === 'image' ? (
               imageUrl ? (
-                <Image source={{ uri: imageUrl }} contentFit="cover" transition={150}
-                  style={{ width: 240, height: a.width && a.height ? Math.min(320, (240 * a.height) / a.width) : 240, borderRadius: 16 }} />
+                <Pressable onPress={() => onImage(imageUrl)} onLongPress={onLongPress} delayLongPress={250} accessibilityRole="imagebutton" accessibilityLabel="فتح الصورة">
+                  <Image source={{ uri: imageUrl }} contentFit="cover" transition={150}
+                    style={{ width: 240, height: a.width && a.height ? Math.min(320, (240 * a.height) / a.width) : 240, borderRadius: 16 }} />
+                </Pressable>
               ) : <View style={{ width: 240, height: 180, borderRadius: 16, backgroundColor: c.line }} />
-            ) : a ? (
-              <Pressable onPress={() => openAttachment(a)} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: mine ? 'rgba(255,255,255,0.15)' : c.soft, borderRadius: 14, padding: 10 }}>
-                <Icon name={a.type === 'lecture' ? 'play' : a.type === 'document' ? 'file' : 'quiz'} size={20} color={mine ? '#FFFFFF' : c.accent} />
-                <View style={{ flex: 1 }}>
-                  <T size={11} color={sub}>{ATTACHMENT_LABELS[a.type]}</T>
-                  <T weight="bold" size={14} color={fg} lines={2}>{a.title}</T>
-                </View>
-              </Pressable>
-            ) : null}
+            ) : a ? <AttachmentCard a={a} mine={mine} /> : null}
             {m.body ? <T size={15} color={fg} selectable>{renderMentions(m.body, mine ? '#FFFFFF' : c.accent)}</T> : null}
           </>
         )}
@@ -534,14 +534,26 @@ function CurriculumPicker({ visible, onClose, onPick }: { visible: boolean; onCl
     const t = setTimeout(async () => {
       const like = `%${search.trim()}%`;
       const [l, d, qs] = await Promise.all([
-        supabase.from('lectures').select('id, title').ilike('title', like).limit(8),
-        supabase.from('documents').select('id, title').ilike('title', like).limit(8),
-        supabase.from('question_sets').select('id, title').eq('status', 'published').ilike('title', like).limit(8),
+        supabase.from('lectures').select('id, title, youtube_id, teachers(name)').eq('is_published', true).ilike('title', like).limit(8),
+        supabase.from('documents').select('id, title, pages, subjects(name)').eq('is_published', true).ilike('title', like).limit(8),
+        supabase.from('question_sets').select('id, title, period, subjects(name)').eq('status', 'published').ilike('title', like).limit(8),
       ]);
+      type Row = { id: string; title: string; youtube_id?: string; pages?: number | null; period?: string;
+        teachers?: { name: string } | null; subjects?: { name: string } | null };
+      const one = <K,>(v: K | K[] | null | undefined) => (Array.isArray(v) ? v[0] : v) ?? undefined;
       setResults([
-        ...(l.data ?? []).map((x) => ({ type: 'lecture' as const, id: x.id, title: x.title })),
-        ...(d.data ?? []).map((x) => ({ type: 'document' as const, id: x.id, title: x.title })),
-        ...(qs.data ?? []).map((x) => ({ type: 'question_set' as const, id: x.id, title: x.title })),
+        ...((l.data ?? []) as unknown as Row[]).map((x) => ({
+          type: 'lecture' as const, id: x.id, title: x.title, thumb: x.youtube_id,
+          subtitle: one(x.teachers)?.name ? `الأستاذ ${one(x.teachers)!.name}` : undefined,
+        })),
+        ...((d.data ?? []) as unknown as Row[]).map((x) => ({
+          type: 'document' as const, id: x.id, title: x.title,
+          subtitle: [one(x.subjects)?.name, x.pages ? `${arDigits(x.pages)} صفحة` : null].filter(Boolean).join(' · ') || undefined,
+        })),
+        ...((qs.data ?? []) as unknown as Row[]).map((x) => ({
+          type: 'question_set' as const, id: x.id, title: x.title,
+          subtitle: [one(x.subjects)?.name, x.period ? PERIOD_LABELS[x.period as keyof typeof PERIOD_LABELS] : null].filter(Boolean).join(' · ') || undefined,
+        })),
       ]);
     }, 250);
     return () => clearTimeout(t);
@@ -557,7 +569,7 @@ function CurriculumPicker({ visible, onClose, onPick }: { visible: boolean; onCl
             <Icon name={r.type === 'lecture' ? 'play' : r.type === 'document' ? 'file' : 'quiz'} size={20} color={c.accent} />
             <View style={{ flex: 1 }}>
               <T weight="bold" lines={1}>{r.title}</T>
-              <T dim size={12}>{ATTACHMENT_LABELS[r.type]}</T>
+              <T dim size={12}>{ATTACHMENT_LABELS[r.type]}{r.subtitle ? ` · ${r.subtitle}` : ''}</T>
             </View>
           </Pressable>
         ))}

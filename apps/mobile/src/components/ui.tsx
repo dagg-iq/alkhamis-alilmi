@@ -16,8 +16,8 @@ import { KeyboardView, PressScale, Skeleton, tap } from './motion';
 /**
  * الحروف العربية في خطوط ثمانية تنزل تحت السطر أكثر مما يعلنه الخط (يعلن ٠٫٢٥ من الحجم):
  * الياء الأخيرة كما في «سعي» تنزل ٠٫٥٥ في خط العناوين و٠٫٥ في خط النص (قيس بـ fontTools).
- * أندرويد يقص كل ما يخرج عن صندوق النص، فنعطي النص مساحة سفلية إضافية (padding) ونسحب
- * ما بعده بنفس المقدار (margin سالب): التخطيط لا يتغير، والنقاط تُرسم كاملة.
+ * أندرويد يقص كل ما يخرج عن صندوق النص، فنعطي النص مساحة سفلية إضافية (padding) داخل صندوقه.
+ * (جرّبنا سحب ما بعده بـ margin سالب فقُصّت «سعي» في شاشة الترحيب لأن الصف الأب يقص ما يتجاوزه.)
  */
 export function lineHeightFor(size: number, kind: 'display' | 'serif' | 'sans' = 'sans') {
   return Math.ceil(size * (kind === 'display' ? 1.5 : kind === 'serif' ? 1.9 : 1.6));
@@ -67,8 +67,8 @@ export function T({
           fontSize: size,
           // مساحة الياء والجيم تحت السطر (انظر descentPad)
           lineHeight: lineHeightFor(size, kind),
+          // مساحة داخل صندوق النص نفسه (بلا margin سالب): أي حاوية أبوية يمكن أن تقص ما خرج عن حدودها
           paddingBottom: pad,
-          marginBottom: -pad,
           color: color ?? (dim ? c.ink2 : c.ink),
           writingDirection: 'rtl',
           ...(center ? { textAlign: 'center' as const } : null),
