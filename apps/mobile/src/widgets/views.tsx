@@ -109,7 +109,7 @@ export function NextExamWidget({ s, mode }: { s: WidgetSnapshot; mode: Mode }) {
   if (!exam?.due_at) {
     return (
       <FlexWidget {...URI('planner')} style={{ height: 'match_parent', width: 'match_parent', backgroundColor: c.bg, borderRadius: 24, padding: 16, justifyContent: 'center', alignItems: 'center', flexGap: 4 }}>
-        <TextWidget text="🎉" style={{ fontSize: 26 }} />
+        {logo(c.ink, c.accent, 30)}
         <TextWidget text="لا امتحانات قريبة" style={{ fontFamily: F.bold, fontSize: 14, color: c.ink, textAlign: 'center' }} />
       </FlexWidget>
     );

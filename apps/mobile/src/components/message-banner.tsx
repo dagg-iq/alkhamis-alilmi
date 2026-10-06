@@ -43,7 +43,7 @@ export function MessageBanner({ myId }: { myId: string | null }) {
           conversationId: m.conversation_id,
           name: sender?.full_name ?? 'رسالة جديدة',
           avatar: sender?.avatar_url ?? null,
-          body: m.body ?? (m.attachment ? '📎 مرفق' : ''),
+          body: m.body ?? (m.attachment ? 'مرفق' : ''),
         });
         if (hide.current) clearTimeout(hide.current);
         hide.current = setTimeout(() => setBanner(null), 4500);

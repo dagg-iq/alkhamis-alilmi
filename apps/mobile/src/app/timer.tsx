@@ -58,7 +58,7 @@ export default function Timer() {
     const end = Date.now() + remaining * 1000;
     setEndsAt(end);
     setNow(Date.now());
-    reminder.current = await scheduleReminder(mode === 'focus' ? 'انتهت جلسة التركيز 🎉' : 'انتهت الاستراحة', mode === 'focus' ? 'خذ استراحة قصيرة.' : 'هيا نكمل الدراسة!', new Date(end));
+    reminder.current = await scheduleReminder(mode === 'focus' ? 'انتهت جلسة التركيز' : 'انتهت الاستراحة', mode === 'focus' ? 'خذ استراحة قصيرة.' : 'هيا نكمل الدراسة!', new Date(end));
   };
   const pause = () => {
     setLeft(remaining);
