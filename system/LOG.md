@@ -103,3 +103,8 @@
 - تحقق: اختبارات الدرجات ٣٣/٣٣، typecheck، بناء لوحة التحكم، RLS على Postgres (مع migration ١١ مرتين)، deno check، حزمة أندرويد، اختبار دخان لكل الشاشات (٢٦/٢٧ — الباقي iframe يوتيوب على الويب فقط).
 - **لم يُختبر على هاتف حقيقي**: الحركة الفعلية، الويدجتات، الإشعارات (تحتاج أسرار Firebase).
 - **التالي**: صاحب المشروع يجرب APK الجديد، ثم أسرار GitHub (٦) و Firebase (٩). قرار التخزين (R2 أو Supabase Storage) ما زال معلّقاً.
+
+## 2026-10-06 — apk-14 + أول رفع للدوال ✅
+- ✅ بناء `apk-14` (كل تعديلات الجلسة ٢) نجح: Releases ← `apk-14`.
+- ✅ صاحب المشروع أضاف `SUPABASE_ACCESS_TOKEN` و `PUSH_WEBHOOK_SECRET` وشغّل «Deploy Supabase»: رُفعت الدوال السبع، وأُنشئت مشغّلات الإشعارات (migration ١١) وحُفظ الرابط والسر في `private.settings` (تحقق من السجل).
+- **التالي**: `GEMINI_API_KEY` (الخطوة ٤) ← ثم Firebase (`GOOGLE_SERVICES_JSON` + `FCM_SERVICE_ACCOUNT`، الخطوة ٩) ← إعادة تشغيل Deploy Supabase وبناء APK. قرار التخزين ما زال معلّقاً.

@@ -18,7 +18,7 @@
 - [ ] ٣ جعل نفسك أدمن (seed.sql ثم SQL الأدمن في `09-project-config.md`)
 - [ ] ٤ مفتاح Gemini
 - [ ] ٥ Cloudflare R2
-- [ ] ٦ أسرار GitHub + Actions ← Deploy Supabase (بلا حاسوب؛ لا Webhooks يدوية)
+- [x] ٦ أسرار GitHub + Actions ← Deploy Supabase (الدوال مرفوعة؛ تبقى أسرار Gemini و Firebase)
 - [ ] ٧ لوحة التحكم على Netlify
 - [x] ٨ بناء APK (تلقائي عبر GitHub Actions)
 - [ ] ٩ Firebase للإشعارات (سرّا GOOGLE_SERVICES_JSON و FCM_SERVICE_ACCOUNT — بلا حساب Expo)
