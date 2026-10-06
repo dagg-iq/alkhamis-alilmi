@@ -316,7 +316,7 @@ Deno.serve(handler(async (req) => {
   // نحتفظ فقط بالمصادر التي ذُكرت فعلاً في الجواب
   const cited = cached ? cached.sources ?? [] : sources.filter((_, i) => answer.includes(`[${ar(i + 1)}]`) || answer.includes(`[${i + 1}]`));
   if (cacheKey && !cached && answer.length > 40) {
-    await admin.from('ai_cache').upsert({ key: cacheKey, subject_id: subjectId ?? null, question: text, answer, sources: cited.length ? cited : null })
+    await admin.from('ai_cache').upsert({ key: cacheKey, subject_id: subjectId ?? null, question: text, answer, sources: cited.length ? cited : null, created_at: new Date().toISOString(), hits: 0 })
       .then(({ error }) => { if (error) console.error('cache', error.message); });
   }
 

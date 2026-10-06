@@ -141,11 +141,19 @@ export async function generate(model: string | string[], contents: Content[], op
         busy = true;
         continue;
       }
+      if (status >= 500) {
+        // 500/502/504: مشكلة مؤقتة عند Google ← النموذج أو المفتاح التالي
+        busy = true;
+        busyUntil.set(tag(a), Date.now() + 60_000);
+        break;
+      }
       if (status === 400 || status === 401 || status === 403) {
-        // مفتاح غير صالح أو موقوف: لا نوقف كل شيء، نجرب المفتاح التالي
         console.error(`Gemini key ${a.k} ${a.m} ${status}: ${detail}`);
-        if (status === 400) busyUntil.set(tag(a), Date.now() + 30 * 60_000);
-        else badKeyUntil.set(keys[a.k], Date.now() + 30 * 60_000);
+        // نعطّل المفتاح كله فقط إذا كان المفتاح نفسه مرفوضاً — لا بسبب ملف أو فيديو لا يصل إليه
+        if (status === 401 || /API_KEY_INVALID|API key not valid|SERVICE_DISABLED|has been suspended/i.test(detail)) {
+          badKeyUntil.set(keys[a.k], Date.now() + 30 * 60_000);
+        }
+        if (opts.keyIndex !== undefined) throw new Error(`Gemini ${a.m} ${status}: ${detail}`);
         break;
       }
       throw new Error(`Gemini ${a.m} ${status}: ${detail}`);
@@ -169,9 +177,10 @@ export async function embed(texts: string[], taskType: 'RETRIEVAL_DOCUMENT' | 'R
   for (let i = 0; i < texts.length; i += 50) {
     const batch = texts.slice(i, i + 50);
     let res: Response | null = null;
-    for (const k of keys) {
+    const usable = keys.filter((k) => (badKeyUntil.get(k) ?? 0) <= Date.now());
+    for (const k of usable.length ? usable : keys) {
       res = await fetchEmbed(k, batch, taskType);
-      if (res.status !== 429 && res.status !== 403) break;
+      if (![400, 401, 403, 429].includes(res.status) && res.status < 500) break;
     }
     if (!res) throw new Error('no key');
     if (res.status === 429) throw new GeminiQuotaError('quota');

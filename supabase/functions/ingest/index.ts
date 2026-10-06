@@ -3,7 +3,7 @@
 import { PDFDocument } from 'npm:pdf-lib@1.17.1';
 import { handler, HttpError, json } from '../_shared/cors.ts';
 import { admin, getCaller, getSetting } from '../_shared/supabase.ts';
-import { chunkText, embed, fileRef, generate, GeminiQuotaError, parseJson, uploadFile, LITE_MODELS, modelChain } from '../_shared/gemini.ts';
+import { chunkText, embed, fileRef, generate, poolKeys, GeminiQuotaError, parseJson, uploadFile, LITE_MODELS, modelChain } from '../_shared/gemini.ts';
 import { getObject } from '../_shared/storage.ts';
 
 const BATCH = 10;
@@ -23,7 +23,8 @@ Deno.serve(handler(async (req) => {
   let pages: number | null = doc.pages;
   // الروابط القديمة (قبل تعدد المفاتيح) لا نعرف مفتاحها: نعيد الرفع
   const expired = !doc.gemini_file_expires_at || new Date(doc.gemini_file_expires_at) < new Date(Date.now() + 3600_000)
-    || !String(fileUri ?? '').startsWith('k');
+    || !String(fileUri ?? '').startsWith('k')
+    || fileRef(String(fileUri)).keyIndex >= poolKeys('admin').length; // تغيّرت المفاتيح منذ الرفع
   if (!fileUri || expired || !pages) {
     const bytes = await getObject(doc.file_key);
     if (!pages) {

@@ -218,10 +218,18 @@ function LecturesTab({ data: d, reload }: { data: Data; reload: () => Promise<vo
                         </select>
                       </td>
                       <td data-label="الفصل">
-                        <select className="input" style={{ minWidth: 140 }} value={r.chapter} onChange={(e) => patch(i, { chapter: e.target.value })}>
+                        <select className="input" style={{ minWidth: 140 }} value={r.chapter} onChange={(e) => {
+                          if (e.target.value !== '__new') return patch(i, { chapter: e.target.value });
+                          // فصل غير موجود: نكتب رقمه وعنوانه ويُنشأ عند الإضافة
+                          const num = Number(prompt('رقم الفصل الجديد؟', '1'));
+                          if (!num) return;
+                          const title = prompt('عنوان الفصل؟', '') ?? '';
+                          setRows((rs) => rs.map((x, k) => (k === i || (x.subject_id === r.subject_id && !x.chapter) ? { ...x, chapter: `${NEW}${num}:${title}` } : x)));
+                        }}>
                           {r.chapter.startsWith(NEW) ? <option value={r.chapter}>جديد: الفصل {r.chapter.slice(NEW.length).replace(':', ' — ')}</option> : null}
                           {!chs.length && !r.chapter.startsWith(NEW) ? <option value="">— لا فصول —</option> : null}
                           {chs.map((c) => <option key={c.id} value={c.id}>الفصل {c.number} {c.title}</option>)}
+                          <option value="__new">+ فصل جديد…</option>
                         </select>
                       </td>
                       <td data-label="الأستاذ">
@@ -323,11 +331,11 @@ function FilesTab({ data: d, reload }: { data: Data; reload: () => Promise<void>
   const ready = rows.filter((r) => r.include && r.key).length;
   return (
     <>
-      <label className="card" style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center', padding: 28, borderStyle: 'dashed', cursor: 'pointer' }}
-        onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); pick(e.dataTransfer.files); }}>
+      <label className="card" style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center', padding: 28, borderStyle: 'dashed', cursor: busy ? 'wait' : 'pointer', opacity: busy ? 0.6 : 1 }}
+        onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); if (!busy) pick(e.dataTransfer.files); }}>
         <b>اسحب ملفات PDF هنا أو اضغط للاختيار</b>
         <span className="small dim">عدة ملفات معاً. الحد ٥٠ ميغا للملف. الملازم المصوّرة تُقرأ صفحاتها بالصور.</span>
-        <input type="file" accept="application/pdf" multiple style={{ display: 'none' }} onChange={(e) => { pick(e.target.files); e.target.value = ''; }} />
+        <input type="file" accept="application/pdf" multiple disabled={busy} style={{ display: 'none' }} onChange={(e) => { pick(e.target.files); e.target.value = ''; }} />
       </label>
       {step ? <p className="small dim">{step}</p> : null}
 
@@ -345,7 +353,7 @@ function FilesTab({ data: d, reload }: { data: Data; reload: () => Promise<void>
                       <div className="small dim">{(r.size / 1048576).toFixed(1)} ميغا{r.pages ? ` · ${r.pages} صفحة` : ''}{r.scanned ? ' · مصوّرة' : ''}</div>
                       <div className="small dim">{r.status}</div>
                     </td>
-                    <td data-label="العنوان"><input className="input" value={r.title} onChange={(e) => patch(i, { title: e.target.value })} /></td>
+                    <td data-label="العنوان"><input className="input" style={{ minWidth: 200 }} value={r.title} onChange={(e) => patch(i, { title: e.target.value })} /></td>
                     <td data-label="المادة">
                       <select className="input" style={{ minWidth: 140 }} value={r.subject_id} onChange={(e) => patch(i, { subject_id: e.target.value, chapter_id: '' })}>
                         {d.subjects.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}

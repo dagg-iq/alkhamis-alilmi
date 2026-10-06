@@ -116,7 +116,7 @@ async function rssVideos(query: string): Promise<Video[]> {
 
 /** قائمة الرفع لقناة (@handle أو /channel/ID) */
 async function channelUploads(url: string): Promise<string> {
-  const handle = url.match(/youtube\.com\/@([\w.-]+)/)?.[1];
+  const handle = (() => { const h = url.match(/youtube\.com\/@([^/?#\s]+)/)?.[1]; try { return h ? decodeURIComponent(h) : undefined; } catch { return h; } })();
   const id = url.match(/\/channel\/(UC[\w-]+)/)?.[1];
   if (Deno.env.get('YOUTUBE_API_KEY')) {
     const d = await ytApi('channels', { part: 'contentDetails', ...(id ? { id } : { forHandle: `@${handle}` }) });
@@ -240,7 +240,8 @@ ${batch.map((v, k) => `${k + 1}. id=${v.youtube_id} | ${v.title}${v.channel ? ` 
 لا تخترع معرفات. استخدم المعرفات كما هي فقط.`,
           }],
         }]);
-        items.push(...parseJson<unknown[]>(raw));
+        const p = parseJson<unknown>(raw) as unknown[] | Record<string, unknown>;
+        items.push(...(Array.isArray(p) ? p : ((p.items ?? p.videos ?? Object.values(p).find(Array.isArray) ?? []) as unknown[])));
       }
       return json({ items });
     }
@@ -303,18 +304,23 @@ ${batch.map((v, k) => `${k + 1}. id=${v.youtube_id} | ${v.title}${v.channel ? ` 
       const topics = list
         .map((t) => ({ ...t, start: toSeconds(t?.start) }))
         .filter((t) => t.title && t.start !== null)
-        .map((t) => ({ ...t, start: Math.max(from, Math.min(Math.round(t.start!), duration ?? to)) }));
+        .map((t) => ({ ...t, start: Math.round(t.start!) }));
+      // أحياناً يعيد النموذج الوقت من بداية الجزء لا من بداية الفيديو
+      if (segment > 0 && topics.length && topics.every((t) => t.start < SEGMENT)) for (const t of topics) t.start += from;
+      for (const t of topics) t.start = Math.max(from, Math.min(t.start, duration ?? to));
 
       if (topics.length) {
-        await admin.from('lecture_topics').insert(topics.map((t, k) => ({
+        const { error: e1 } = await admin.from('lecture_topics').insert(topics.map((t, k) => ({
           lecture_id: lec.id, start_sec: t.start, title: String(t.title).slice(0, 200), summary: t.summary?.slice(0, 600) ?? null, sort: segment * 1000 + k,
         })));
+        if (e1) throw new Error(e1.message);
         const texts = topics.map((t) => `${lec.title} — ${t.title}\n${t.summary ?? ''}\n${t.details ?? ''}`.slice(0, 3000));
         const vectors = await embed(texts, 'RETRIEVAL_DOCUMENT', 'admin');
-        await admin.from('content_chunks').insert(topics.map((t, k) => ({
+        const { error: e2 } = await admin.from('content_chunks').insert(topics.map((t, k) => ({
           source_type: 'lecture', source_id: lec.id, subject_id: subjectId, chapter_id: lec.chapter_id,
           start_sec: t.start, content: texts[k], embedding: vectors[k],
         })));
+        if (e2) throw new Error(e2.message);
       }
       // ننتهي عند: نهاية المدة المعروفة، أو قول النموذج إن الفيديو انتهى، أو جزء بلا مواضيع (بلا مدة)، أو حد أمان ساعتين
       const done = (duration ? to >= duration : ended || !topics.length) || segment >= 11; // ١٢ جزءاً = ساعتان
@@ -350,8 +356,9 @@ ${cur.text}
 لا تخترع معرفات.`,
           },
         ],
-      }], 2048);
-      return json({ ...parseJson<Record<string, unknown>>(raw), pages });
+      }], 8192);
+      const parsed = parseJson<unknown>(raw);
+      return json({ ...(Array.isArray(parsed) ? parsed[0] : parsed) as Record<string, unknown>, pages });
     }
 
     throw new HttpError(400, 'عملية غير معروفة.');

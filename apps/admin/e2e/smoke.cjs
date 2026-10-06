@@ -40,6 +40,10 @@ const data = {
         if (v.startsWith('eq.') && !['select', 'order', 'limit'].includes(k)) body = body.filter((row) => !(k in row) || String(row[k]) === v.slice(3));
       }
     }
+    if (url.pathname.endsWith('/functions/v1/files')) {
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ key: 'materials/test.pdf', url: 'https://yjxhprmtyuqnbgraocar.supabase.co/storage/v1/fake-put' }) });
+    }
+    if (url.pathname.includes('/storage/v1/fake-put')) return route.fulfill({ status: 200, body: '' });
     if (url.pathname.endsWith('/functions/v1/content-ai')) {
       const b = JSON.parse(req.postData() || '{}');
       const vids = [
@@ -48,6 +52,7 @@ const data = {
         { youtube_id: 'aaaaaaaaaa3', title: 'المتسعات محاضرة 1', duration_sec: 1900, channel: 'الاستاذ احمد', exists: true },
       ];
       const out = b.action === 'videos' ? { videos: vids }
+        : b.action === 'classify_document' ? { subject_id: 's0', kind: 'malzama', chapter_id: 'c1', teacher_id: null, new_teacher: 'أحمد السوداني', title: 'ملزمة الفيزياء — الفصل الأول', scanned: true, pages: 48 }
         : b.action === 'classify_lectures' ? { items: [
           { youtube_id: 'dQw4w9WgXcQ', subject_id: 's0', chapter_id: 'c1', teacher_id: null, new_teacher: 'احمد السوداني', lecture_number: 3, title: 'المحاضرة ٣ — ربط التوالي', skip: false },
           { youtube_id: 'aaaaaaaaaa2', subject_id: 's0', chapter_id: null, new_chapter: { number: 2, title: 'الحث' }, skip: true, title: 'اشترك' },
@@ -69,6 +74,11 @@ const data = {
     if (process.env.FILL) {
       const [sel, ...val] = process.env.FILL.split('=');
       await page.fill(sel, val.join('='));
+    }
+    if (process.env.TAB) await page.getByRole('tab', { name: process.env.TAB }).click();
+    if (process.env.UPLOAD) {
+      await page.setInputFiles('input[type=file]', process.env.UPLOAD.split(','));
+      await page.waitForTimeout(2500);
     }
     if (process.env.CLICK) {
       await page.getByRole('button', { name: process.env.CLICK }).click();
