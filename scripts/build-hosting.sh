@@ -20,13 +20,19 @@ curl -fsSL --max-time 30 -o hosting/developer.jpg "$DEV_PHOTO_URL" && echo "✓ 
 ADMIN_BASE=/saey-dashboard/ npm run build -w apps/admin >/dev/null
 cp -r apps/admin/dist hosting/saey-dashboard
 node -e '
-// رابط التنزيل: متغير DOWNLOAD_URL إن وُجد، وإلا رابط Google Drive من apps/site/download-config.json
+// رابط التنزيل: متغير DOWNLOAD_URL إن وُجد، وإلا رابط Dropbox (أو Drive) من apps/site/download-config.json
 const fs = require("fs");
 const cfg = JSON.parse(fs.readFileSync("apps/site/download-config.json", "utf8"));
 let url = process.env.DOWNLOAD_URL || "";
-if (!url && cfg.drive_link) {
-  // رابط المشاركة ← رابط تنزيل مباشر (confirm=t يتخطى صفحة تحذير الملفات الكبيرة)
-  const id = (cfg.drive_link.match(/\/d\/([\w-]+)/) || cfg.drive_link.match(/[?&]id=([\w-]+)/) || [])[1];
+const link = cfg.link || cfg.drive_link || "";
+if (!url && /dropbox\.com/.test(link)) {
+  // Dropbox: dl=1 ← تنزيل مباشر بلا صفحة وسيطة
+  const u = new URL(link);
+  u.searchParams.set("dl", "1");
+  url = u.toString();
+} else if (!url && link) {
+  // Google Drive (يعرض صفحة تحذير للملفات الكبيرة — Dropbox أفضل)
+  const id = (link.match(/\/d\/([\w-]+)/) || link.match(/[?&]id=([\w-]+)/) || [])[1];
   if (id) url = `https://drive.usercontent.google.com/download?id=${id}&export=download&confirm=t`;
 }
 const d = { url, version: process.env.DOWNLOAD_VERSION || cfg.version || "", size_mb: process.env.DOWNLOAD_SIZE_MB || cfg.size_mb || "", date: new Date().toISOString() };
