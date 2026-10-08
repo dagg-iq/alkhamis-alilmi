@@ -15,7 +15,8 @@ function studentKeys(): string[] {
 export function poolKeys(pool: Pool = 'student'): string[] {
   const students = studentKeys();
   const adminKey = Deno.env.get('GEMINI_ADMIN_API_KEY');
-  const keys = pool === 'admin' ? (adminKey ? [adminKey] : students) : students;
+  // اللوحة: مفتاحها أولاً، ومفاتيح الطلاب احتياطاً فقط إذا تعطل (حتى لا يتوقف العمل)
+  const keys = pool === 'admin' ? (adminKey ? [adminKey, ...students.filter((k) => k !== adminKey)] : students) : students;
   if (!keys.length) throw new Error('GEMINI_API_KEY is not set');
   return keys;
 }
@@ -66,9 +67,14 @@ export function modelChain(setting: string | undefined | null, defaults: string[
  * ترتيب المحاولات: كل مفتاح يبدأ بنموذج مختلف (مفتاح ١ ← النموذج ١، مفتاح ٢ ← النموذج ٢…)،
  * ثم تدور الجولة التالية. المشغول (503/429) يُتخطى لدقائق.
  */
-function attempts(keys: string[], models: string[], spread: boolean, pinned?: number): { k: number; m: string }[] {
+function attempts(keys: string[], models: string[], spread: boolean, pinned?: number, keyMajor = false): { k: number; m: string }[] {
   const ks = pinned !== undefined ? [pinned] : keys.map((_, i) => i);
   const out: { k: number; m: string }[] = [];
+  if (keyMajor) {
+    // كل النماذج على المفتاح الأول، ثم الذي بعده
+    for (const k of ks) for (const m of models) out.push({ k, m });
+    return out;
+  }
   if (!spread) {
     // الأسرع أولاً على كل المفاتيح (للتحية والأسئلة القصيرة)
     for (const m of models) for (const k of ks) out.push({ k, m });
@@ -98,7 +104,8 @@ export async function generate(model: string | string[], contents: Content[], op
 
   const keys = poolKeys(opts.pool);
   const models = Array.isArray(model) ? model : modelChain(model);
-  const all = attempts(keys, models, opts.spread ?? true, opts.keyIndex);
+  const all = attempts(keys, models, opts.spread ?? true, opts.keyIndex, opts.pool === 'admin');
+  const failures: string[] = [];
   const now = Date.now();
   const tag = (a: { k: number; m: string }) => `${opts.pool ?? 'student'}:${a.k}:${a.m}`;
   const free = all.filter((a) => (busyUntil.get(tag(a)) ?? 0) <= now);
@@ -126,6 +133,7 @@ export async function generate(model: string | string[], contents: Content[], op
       }
       const status = res.status;
       const detail = (await res.text()).slice(0, 300);
+      failures.push(`key${a.k + 1}/${a.m}: ${status} ${(detail.match(/"message":\s*"([^"]{0,120})/)?.[1] ?? '').trim()}`);
       if (status === 404) { missing.add(tag(a)); break; }
       if (status === 400 && thinking && attempt === 0) {
         thinking = undefined; // نموذج لا يدعم مستوى التفكير: نعيد بدونه
@@ -160,7 +168,7 @@ export async function generate(model: string | string[], contents: Content[], op
     }
   }
   if (busy) throw new GeminiQuotaError('all models busy');
-  throw new Error('Gemini: no model returned an answer');
+  throw new Error(`Gemini لم يُجب. ${[...new Set(failures)].slice(0, 6).join(' | ') || 'جواب فارغ'}`);
 }
 
 const EMBED_MODEL = 'gemini-embedding-001';

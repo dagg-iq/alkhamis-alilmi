@@ -52,6 +52,10 @@ const data = {
         { youtube_id: 'aaaaaaaaaa3', title: 'المتسعات محاضرة 1', duration_sec: 1900, channel: 'الاستاذ احمد', exists: true },
       ];
       const out = b.action === 'videos' ? { videos: vids }
+        : b.action === 'check_keys' ? { results: [
+          { name: 'GEMINI_ADMIN_API_KEY', ok: false, detail: '403: Method doesn\'t allow unregistered callers' },
+          { name: 'GEMINI_API_KEY', ok: true, detail: 'يعمل' }, { name: 'GEMINI_API_KEY_2', ok: false, detail: 'يعمل لكن حصته انتهت مؤقتاً' },
+          { name: 'YOUTUBE_API_KEY', ok: true, detail: 'يعمل' }] }
         : b.action === 'classify_document' ? { subject_id: 's0', kind: 'malzama', chapter_id: 'c1', teacher_id: null, new_teacher: 'أحمد السوداني', title: 'ملزمة الفيزياء — الفصل الأول', scanned: true, pages: 48 }
         : b.action === 'classify_lectures' ? { items: [
           { youtube_id: 'dQw4w9WgXcQ', subject_id: 's0', chapter_id: 'c1', teacher_id: null, new_teacher: 'احمد السوداني', lecture_number: 3, title: 'المحاضرة ٣ — ربط التوالي', skip: false },

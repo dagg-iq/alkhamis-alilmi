@@ -361,6 +361,34 @@ ${cur.text}
       return json({ ...(Array.isArray(parsed) ? parsed[0] : parsed) as Record<string, unknown>, pages });
     }
 
+    // ٥) فحص المفاتيح: أيها يعمل وأيها مرفوض ولماذا
+    if (body.action === 'check_keys') {
+      const vars = ['GEMINI_ADMIN_API_KEY', 'GEMINI_API_KEY', 'GEMINI_API_KEY_2', 'GEMINI_API_KEY_3', 'GEMINI_API_KEY_4'];
+      const results: { name: string; ok: boolean; detail: string }[] = [];
+      for (const v of vars) {
+        const key = Deno.env.get(v);
+        if (!key) { results.push({ name: v, ok: false, detail: 'غير مضاف' }); continue; }
+        const res = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
+          body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: 'قل: تم' }] }], generationConfig: { maxOutputTokens: 20 } }),
+        });
+        const t = await res.text();
+        results.push({
+          name: v, ok: res.ok,
+          detail: res.ok ? 'يعمل' : res.status === 429 ? 'يعمل لكن حصته انتهت مؤقتاً' : `${res.status}: ${(t.match(/"message":\s*"([^"]{0,160})/)?.[1] ?? t.slice(0, 160))}`,
+        });
+      }
+      const yk = Deno.env.get('YOUTUBE_API_KEY');
+      if (!yk) results.push({ name: 'YOUTUBE_API_KEY', ok: false, detail: 'غير مضاف' });
+      else {
+        const res = await fetch(`${YT}/videos?part=contentDetails&id=dQw4w9WgXcQ&key=${yk}`);
+        const t = await res.text();
+        results.push({ name: 'YOUTUBE_API_KEY', ok: res.ok, detail: res.ok ? 'يعمل' : `${res.status}: ${(t.match(/"message":\s*"([^"]{0,160})/)?.[1] ?? t.slice(0, 160))}` });
+      }
+      return json({ results });
+    }
+
     throw new HttpError(400, 'عملية غير معروفة.');
   } catch (e) {
     if (e instanceof GeminiQuotaError) {
@@ -372,6 +400,9 @@ ${cur.text}
     if (body.action === 'index_lecture' && body.lectureId && !(e instanceof HttpError)) {
       await admin.from('lectures').update({ index_status: 'error', index_error: String((e as Error).message ?? e).slice(0, 300) }).eq('id', body.lectureId);
     }
-    throw e;
+    if (e instanceof HttpError) throw e;
+    // للمشرفين فقط: نعرض السبب الحقيقي بدل «خطأ غير متوقع»
+    console.error(e);
+    throw new HttpError(500, `خطأ في ${String(body.action)}: ${String((e as Error)?.message ?? e).slice(0, 400)}`);
   }
 }));

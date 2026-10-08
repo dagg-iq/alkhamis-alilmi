@@ -1,6 +1,6 @@
 import { DOCUMENT_KIND_LABELS, type Book, type Chapter, type DocumentKind, type Subject, type Teacher } from '@saey/shared';
 import { useState } from 'react';
-import { Empty, Field, Tabs, useAction, useToast } from '../components/ui';
+import { Empty, Field, Modal, Tabs, useAction, useToast } from '../components/ui';
 import { ensureChapter, ensureTeachers, indexLecture, ingestDocument } from '../lib/content-ai';
 import { useLoad } from '../lib/hooks';
 import { callFunction, must, supabase, uploadFile } from '../lib/supabase';
@@ -51,6 +51,7 @@ export default function Assistant() {
     <>
       <div className="head">
         <h1>مساعد المحتوى</h1>
+        <KeyCheck />
       </div>
       <p className="dim">الصق رابطاً أو اسحب ملفات، والذكاء الاصطناعي يرتّبها لك. راجع الجدول ثم اضغط «إضافة». يعمل بمفتاح لوحة التحكم ولا يأخذ من حصة الطلاب.</p>
       <Tabs options={[{ key: 'lectures', label: 'محاضرات يوتيوب' }, { key: 'files', label: 'ملازم وكتب PDF' }]} value={tab} onChange={setTab} />
@@ -60,6 +61,37 @@ export default function Assistant() {
 }
 
 type Data = { subjects: Subject[]; books: Book[]; chapters: Chapter[]; teachers: Teacher[] };
+
+const KEY_LABELS: Record<string, string> = {
+  GEMINI_ADMIN_API_KEY: 'مفتاح لوحة التحكم', GEMINI_API_KEY: 'مفتاح الطلاب ١', GEMINI_API_KEY_2: 'مفتاح الطلاب ٢',
+  GEMINI_API_KEY_3: 'مفتاح الطلاب ٣', GEMINI_API_KEY_4: 'مفتاح الطلاب ٤', YOUTUBE_API_KEY: 'مفتاح YouTube',
+};
+
+/** يجرب كل مفتاح بطلب صغير ويعرض أيها يعمل ولماذا رُفض غيره */
+function KeyCheck() {
+  const { run, busy } = useAction();
+  const [results, setResults] = useState<{ name: string; ok: boolean; detail: string }[] | null>(null);
+  return (
+    <>
+      <button className="btn" disabled={busy} onClick={() => run(async () => {
+        const r = await callFunction<{ results: { name: string; ok: boolean; detail: string }[] }>('content-ai', { action: 'check_keys' });
+        setResults(r.results);
+      })}>{busy ? 'يفحص…' : 'فحص المفاتيح'}</button>
+      {results ? (
+        <Modal title="حالة المفاتيح" onClose={() => setResults(null)}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {results.map((r) => (
+              <div key={r.name} className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+                <b>{KEY_LABELS[r.name] ?? r.name}</b>
+                <span className={`pill ${r.ok ? 'ok' : r.detail === 'غير مضاف' ? '' : r.detail.includes('حصته') ? 'warn' : 'bad'}`} style={{ whiteSpace: 'normal', textAlign: 'start' }} dir="auto">{r.detail}</span>
+              </div>
+            ))}
+          </div>
+        </Modal>
+      ) : null}
+    </>
+  );
+}
 
 function useCurriculum(d: Data) {
   const chaptersOf = (sid: string) => d.chapters.filter((c) => d.books.some((b) => b.id === c.book_id && b.subject_id === sid));
