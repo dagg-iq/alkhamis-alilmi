@@ -97,7 +97,15 @@ export default function Lectures() {
           <div key={ch.id} className="card" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <div className="row" style={{ justifyContent: 'space-between' }}>
               <h3>{bookName(ch.book_id)}الفصل {ch.number}{ch.title ? ` — ${ch.title}` : ''}</h3>
-              <button className="btn sm" onClick={() => setAdding({ chapterId: ch.id, teacherId: '', urls: '' })}>+ محاضرة</button>
+              <div className="row">
+                {list.length ? (
+                  <button className="btn sm" disabled={list.some((l) => indexing[l.id])} onClick={async () => {
+                    if (!confirm(`فهرسة ${list.length} محاضرة بالدقيقة؟ (دقيقة أو أكثر لكل محاضرة)`)) return;
+                    for (const l of list) await index(l);
+                  }}>فهرسة الفصل كله</button>
+                ) : null}
+                <button className="btn sm" onClick={() => setAdding({ chapterId: ch.id, teacherId: '', urls: '' })}>+ محاضرة</button>
+              </div>
             </div>
             {list.length === 0 ? <p className="small dim">لا توجد محاضرات.</p> : (
               <table>

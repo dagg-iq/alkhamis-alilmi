@@ -271,6 +271,14 @@ ${batch.map((v, k) => `${k + 1}. id=${v.youtube_id} | ${v.title}${v.channel ? ` 
       };
       if (duration && from >= duration) return await finish();
 
+      // سياق الجزء السابق: حتى لا يُعدّ استمرار الشرح عند بداية الجزء موضوعاً جديداً («إكمال…»)
+      let previous = '';
+      if (segment > 0) {
+        const { data: prev } = await admin.from('lecture_topics').select('start_sec, title, summary')
+          .eq('lecture_id', lec.id).order('start_sec', { ascending: false }).limit(3);
+        previous = (prev ?? []).reverse().map((t) => `- ${t.start_sec}s: ${t.title} — ${t.summary ?? ''}`).join('\n');
+      }
+
       let raw: string;
       try {
         raw = await generate(modelChain((await getSetting<{ model?: string }>('ai')).model, MAIN_MODELS), [{
@@ -282,10 +290,11 @@ ${batch.map((v, k) => `${k + 1}. id=${v.youtube_id} | ${v.title}${v.channel ? ` 
             } as never,
             {
               text: `هذا جزء من محاضرة «${lec.title}» لطلاب الخامس العلمي في العراق، من الثانية ${from} إلى ${to}.
-قسّم هذا الجزء إلى مواضيع حسب ما يشرحه الأستاذ فعلاً. أعد JSON بالشكل:
+${previous ? `آخر المواضيع قبل هذا الجزء (من الأجزاء السابقة):\n${previous}\nإذا كان أول هذا الجزء استمراراً لآخر موضوع منها فلا تجعله موضوعاً جديداً: ضع شرحه في "continuation" فقط، وابدأ "topics" من أول موضوع جديد فعلاً.\n` : ''}قسّم هذا الجزء إلى مواضيع حسب ما يشرحه الأستاذ فعلاً (موضوع لكل فكرة أو مثال أو سؤال مستقل). أعد JSON بالشكل:
 {"topics": [{"start": وقت بداية الموضوع بالثواني من بداية الفيديو كاملاً (ليس من بداية الجزء),
   "title": "عنوان قصير", "summary": "جملة أو جملتان تشرحان ما يقوله",
   "details": "الشرح بتفصيل كملاحظات طالب: التعاريف والقوانين ($LaTeX$) والأمثلة والتعليلات كما وردت"}],
+ "continuation": "شرح بقية الموضوع السابق في أول الجزء (بنفس أسلوب details) أو null",
  "ended": true إذا انتهى الفيديو داخل هذا الجزء وإلا false}
 لا تخترع ما لم يُقل. تجاهل المقدمات والإعلانات وطلبات الاشتراك.`,
             },
@@ -298,7 +307,8 @@ ${batch.map((v, k) => `${k + 1}. id=${v.youtube_id} | ${v.title}${v.channel ? ` 
       }
       const parsed = parseJson<unknown>(raw);
       const obj = (Array.isArray(parsed) && parsed.length === 1 && (parsed[0] as { topics?: unknown }).topics ? parsed[0] : parsed) as
-        { topics?: unknown[]; ended?: boolean } | unknown[];
+        { topics?: unknown[]; ended?: boolean; continuation?: string | null } | unknown[];
+      const continuation = !Array.isArray(obj) && typeof obj.continuation === 'string' ? obj.continuation.trim() : '';
       const list = (Array.isArray(obj) ? obj : obj.topics ?? []) as { start: number | string; title: string; summary?: string; details?: string }[];
       const ended = !Array.isArray(obj) && obj.ended === true;
       const topics = list
@@ -308,6 +318,22 @@ ${batch.map((v, k) => `${k + 1}. id=${v.youtube_id} | ${v.title}${v.channel ? ` 
       // أحياناً يعيد النموذج الوقت من بداية الجزء لا من بداية الفيديو
       if (segment > 0 && topics.length && topics.every((t) => t.start < SEGMENT)) for (const t of topics) t.start += from;
       for (const t of topics) t.start = Math.max(from, Math.min(t.start, duration ?? to));
+
+      // استمرار الموضوع السابق: يُضاف للبحث (يجده المساعد) بلا موضوع جديد في القائمة
+      if (continuation.length > 40) {
+        const { data: last } = await admin.from('lecture_topics').select('title').eq('lecture_id', lec.id).order('start_sec', { ascending: false }).limit(1).maybeSingle();
+        const text = `${lec.title} — ${last?.title ?? 'تكملة'} (تكملة)\n${continuation}`.slice(0, 3000);
+        const [v] = await embed([text], 'RETRIEVAL_DOCUMENT', 'admin');
+        const { error } = await admin.from('content_chunks').insert({
+          source_type: 'lecture', source_id: lec.id, subject_id: subjectId, chapter_id: lec.chapter_id, start_sec: from, content: text, embedding: v,
+        });
+        if (error) throw new Error(error.message);
+      }
+      // احتياط: موضوع في أول ثوانٍ من الجزء عنوانه «إكمال/تكملة» = استمرار، لا نكرره في القائمة
+      if (segment > 0 && topics.length > 1 && topics[0].start - from < 45 && /^(إكمال|اكمال|تكملة|متابعة|استكمال|يكمل|يُكمل)/.test(String(topics[0].title))) {
+        topics[1].details = `${topics[0].details ?? ''}\n${topics[1].details ?? ''}`;
+        topics.shift();
+      }
 
       if (topics.length) {
         const { error: e1 } = await admin.from('lecture_topics').insert(topics.map((t, k) => ({
@@ -323,7 +349,7 @@ ${batch.map((v, k) => `${k + 1}. id=${v.youtube_id} | ${v.title}${v.channel ? ` 
         if (e2) throw new Error(e2.message);
       }
       // ننتهي عند: نهاية المدة المعروفة، أو قول النموذج إن الفيديو انتهى، أو جزء بلا مواضيع (بلا مدة)، أو حد أمان ساعتين
-      const done = (duration ? to >= duration : ended || !topics.length) || segment >= 11; // ١٢ جزءاً = ساعتان
+      const done = (duration ? to >= duration : ended || (!topics.length && !continuation)) || segment >= 11; // ١٢ جزءاً = ساعتان
       if (done) await admin.from('lectures').update({ index_status: 'done', index_error: null, indexed_at: new Date().toISOString() }).eq('id', lec.id);
       return json({ done, segment, next: done ? null : segment + 1, segments: duration ? Math.ceil(duration / SEGMENT) : null, topics: topics.length });
     }
