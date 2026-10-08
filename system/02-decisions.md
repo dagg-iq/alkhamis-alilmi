@@ -143,3 +143,8 @@
 - **قوائم يوتيوب**: مفتاح YouTube Data API إن وُجد، وإلا قراءة صفحة القائمة (أقل ثباتاً).
 - **التخزين**: صاحب المشروع سيضبط Oracle Object Storage بنفسه لاحقاً (S3 متوافق — الكود جاهز عبر `S3_ENDPOINT`, `S3_REGION` والمفاتيح).
 - **migrations من ١٢ فما بعد** تُطبَّق تلقائياً في كل نشر (Deploy Supabase) لأنها آمنة لإعادة التشغيل. `match_chunks_v2` بدل تعديل الدالة القديمة.
+
+## 17. التحديث التلقائي ✅ (الجلسة ٣)
+- بدل رفع APK يدوياً على Dropbox: كل بناء ينشر `saey.apk` في مستودع GitHub **عام** `dagg-iq/saey-releases` (المستودع الأساسي يبقى خاصاً، فروابط نسخه لا تعمل للطلاب).
+- البناء نفسه يكتب الرابط والرقم في `apps/site/download-config.json` (commit من saey-bot) ويشغّل Deploy Site، فيظهر «تحديث جديد متاح» بلا أي خطوة يدوية.
+- المفتاح `RELEASES_TOKEN` (fine-grained، Contents فقط، على `saey-releases` فقط) في GitHub Secrets. بدونه يبقى البناء كما كان (Releases الخاصة فقط).

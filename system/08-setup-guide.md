@@ -187,13 +187,26 @@ npm run mobile:start
   - `SUPABASE_URL`
   - `SUPABASE_ANON_KEY`
 
-## ١١. إصدار نسخة جديدة للطلاب (بعد كل APK)
-كل نسخة من apk-19 فما بعد تعرض للطالب «تحديث جديد متاح» وتُثبَّت فوق القديمة (البيانات تبقى). الخطوات:
-1. GitHub ← **Releases** ← آخر `apk-<رقم>` ← حمّل `saey.apk`.
-2. Dropbox ← ارفعه **بنفس الاسم** `saey.apk` في نفس المكان ← اختر **Replace** (الرابط يبقى نفسه).
-3. قل للمساعد «رفعت apk-<رقم>» ← يحدّث `version` في `apps/site/download-config.json` إلى نفس الرقم ويرفعه
-   (سير عمل Deploy Site ينشر `download.json`، فيظهر التحديث للطلاب خلال دقائق).
-> لا تنسَ الخطوة ٣: بدونها لا يعرف التطبيق أن هناك نسخة جديدة.
+## ١١. إصدار نسخة جديدة للطلاب — تلقائي (مرة واحدة فقط)
+بعد هذا الإعداد: كل بناء APK يُنشر وحده في مستودع عام، والموقع يتحدث وحده، والتطبيق (من apk-19 فما بعد) يعرض «تحديث جديد متاح».
+**أ) مستودع عام للنسخ:**
+1. GitHub ← زر **+** أعلى اليمين ← **New repository**.
+2. Repository name: `saey-releases` ← اختر **Public** ← ضع علامة على **Add a README file** ← **Create repository**.
+
+**ب) مفتاح يسمح بالنشر فيه:**
+1. صورتك أعلى اليمين ← **Settings** ← أسفل القائمة اليسرى **Developer settings** ← **Personal access tokens ← Fine-grained tokens** ← **Generate new token**.
+2. Token name: `saey-releases` · Expiration: **No expiration** (أو أطول مدة متاحة).
+3. Repository access: **Only select repositories** ← اختر `saey-releases` فقط.
+4. Permissions ← Repository permissions ← **Contents** ← **Read and write** ← **Generate token** ← انسخه (يظهر مرة واحدة).
+5. مستودع المشروع (الخاص) ← **Settings ← Secrets and variables ← Actions ← New repository secret**:
+   الاسم `RELEASES_TOKEN` والقيمة المفتاح.
+
+**ج) جرّب:** Actions ← **Build APK** ← Run workflow. بعد انتهائه (~٢٥ دقيقة):
+- `saey-releases` ← Releases فيه `apk-<رقم>`.
+- الموقع يعرض الرقم الجديد بعد دقائق، والتطبيق يعرض «تحديث جديد متاح».
+> إن اسم المستودع غير `saey-releases` أو صاحبه غير `dagg-iq`: أضف متغيراً (Variables لا Secrets) باسم `RELEASES_REPO` قيمته `اسمك/اسم-المستودع`.
+> إن كان عندك متغير `DOWNLOAD_URL` في Variables احذفه، فهو يغطي على الرابط التلقائي.
+> Dropbox لم يعد مطلوباً.
 
 ---
 

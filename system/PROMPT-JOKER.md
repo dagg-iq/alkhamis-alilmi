@@ -22,7 +22,7 @@
 - لوحة التحكم: `https://saeyiq.web.app/saey-dashboard/`
 - مشروع Firebase اسمه `saeyiq`، ونفس المشروع للإشعارات.
 - Supabase: المرجع `yjxhprmtyuqnbgraocar` (القيم العامة في `system/09-project-config.md`).
-- ملف التنزيل العام على Dropbox، والرابط في `apps/site/download-config.json`.
+- ملفات التنزيل في المستودع العام `dagg-iq/saey-releases` (Releases)، والرابط الحالي في `apps/site/download-config.json` (يكتبه البناء تلقائياً).
 
 **المستودع:** `github.com/dagg-iq/alkhamis-alilmi` (خاص)
 ```
@@ -46,7 +46,7 @@ system/             التخطيط والقرارات والسجل ← اقرأ�
 **قبل أي عمل، اقرأ بهذا الترتيب:**
 1. `system/LOG.md`: آخر ما حدث والخطوة التالية.
 2. `system/TASKS.md`: المراحل وحالتها، وقسم «الآن» فيه المعلّق.
-3. `system/02-decisions.md`: القرارات. لا تغيّر قراراً عليه ✅ دون نقاش. القرارات ١٤ و١٥ و١٦ هي الأحدث.
+3. `system/02-decisions.md`: القرارات. لا تغيّر قراراً عليه ✅ دون نقاش. القرارات ١٤ إلى ١٧ هي الأحدث.
 4. `system/05-brand.md`: الهوية (ألوان، خطوط، قواعد التصميم). التزم بها حرفياً.
 5. حسب المهمة: `06-database.md`، `07-screens.md`، `08-setup-guide.md`، `03-research-iraq.md`، `04-open-questions.md`.
 
@@ -54,7 +54,7 @@ system/             التخطيط والقرارات والسجل ← اقرأ�
 
 | سير العمل | متى يعمل | ماذا يفعل |
 |---|---|---|
-| `build-apk.yml` | عند تغيير `apps/mobile` أو `packages/shared` | يبني APK في حوالي ٢٠–٢٥ دقيقة، وينشره في Releases باسم `apk-<رقم>`. الرقم = versionCode = `APK_BUILD` |
+| `build-apk.yml` | عند تغيير `apps/mobile` أو `packages/shared` | يبني APK في حوالي ٢٠–٢٥ دقيقة، وينشره في Releases باسم `apk-<رقم>` (الرقم = versionCode = `APK_BUILD`). مع السر `RELEASES_TOKEN`: ينشره أيضاً في `saey-releases` العام، ويكتب `download-config.json` بنفسه، ويشغّل Deploy Site |
 | `deploy-supabase.yml` | عند تغيير `supabase/functions` أو `supabase/migrations` | يضبط الأسرار، ويرفع الدوال، **ويطبّق migrations ١٢ فما بعد**، ويربط الإشعارات، ويختبر التخزين |
 | `deploy-site.yml` | تلقائياً | ينشر الموقع واللوحة على Firebase Hosting |
 | `ci.yml` | تلقائياً | الاختبارات |
@@ -65,10 +65,10 @@ system/             التخطيط والقرارات والسجل ← اقرأ�
 - إذا فشل، اقرأ السجل وأصلحه قبل أن تخبره أن النسخة جاهزة.
 - تحقق أن الشيء الجديد دخل البناء فعلاً. مثال: الوحدة الأصلية تظهر في قائمة «Using expo modules».
 
-**إصدار نسخة للطلاب (مهم):**
-1. هو يرفع `saey.apk` على Dropbox بنفس الاسم ويختار Replace، ثم يقول لك «رفعت apk-N».
-2. أنت تغيّر `version` في `apps/site/download-config.json` إلى N وتدفع التغيير.
-3. الموقع يعرض الرقم الجديد، والتطبيق (من apk-19 فما بعد) يعرض «تحديث جديد متاح» ويُثبَّت فوق القديم.
+**إصدار نسخة للطلاب (تلقائي):**
+- كل بناء ناجح ← نسخة في `saey-releases` ← commit من «saey-bot» يغيّر `download-config.json` ← Deploy Site ← التطبيق يعرض «تحديث جديد متاح».
+- لأن البناء يدفع commit على الفرع: نفّذ `git pull` قبل أن تدفع بعد أي بناء.
+- إن لم يظهر التحديث: افحص خطوة «Point the site's download button» في سجل البناء، ثم `https://saeyiq.web.app/download.json`.
 
 **أوامر التحقق قبل أي commit:**
 ```bash
@@ -92,6 +92,8 @@ cd apps/mobile && npx expo export -p web --output-dir /tmp/web && (npx serve -s 
   - PUSH_WEBHOOK_SECRET
   - GOOGLE_SERVICES_JSON و FCM_SERVICE_ACCOUNT
   - SUPABASE_URL و SUPABASE_ANON_KEY
+  - RELEASES_TOKEN (نشر النسخ في saey-releases)
+  - لاحقاً لـ Oracle: S3_ENDPOINT و S3_REGION و R2_ACCESS_KEY_ID و R2_SECRET_ACCESS_KEY و R2_BUCKET
 - الواجهة عربية بالكامل من اليمين لليسار، والأرقام عربية مشرقية (`arDigits`)، بلا إيموجي في الواجهة.
 - في Expo لا تثق بذاكرتك عن الـ APIs. تحقق من أنواع الحزمة المثبتة في `node_modules/<pkg>/build/*.d.ts`.
 - `npx expo install` لا يعمل في السحابة. استخدم `npm install -w apps/mobile <pkg>@~57.x`.
@@ -100,8 +102,9 @@ cd apps/mobile && npx expo export -p web --output-dir /tmp/web && (npx serve -s 
 **Git و GitHub:**
 - اعمل وادفع دائماً على `claude/repository-name-arabic-iegosv`، وهو الفرع الافتراضي. لا تنشئ Pull Request إلا إذا طلب.
 - أدوات GitHub (MCP) تعرف المستودع باسم `dagg-iq/-----` (الاسم القديم).
-- الشبكة في السحابة تحجب: supabase.co، web.app، dropbox، top4top، cdn.jsdelivr، cdnjs، وتحميل ملفات Actions.
-- المتاح: generativelanguage.googleapis.com، و api.github عبر MCP.
+- الشبكة في السحابة تحجب: supabase.co، api.supabase.com، web.app، youtube.com، dropbox، top4top، cdn.jsdelivr، cdnjs، وتحميل ملفات Actions.
+- المتاح: generativelanguage.googleapis.com، و www.googleapis.com (YouTube API)، و api.github عبر MCP.
+- لقراءة قاعدة البيانات: شغّل سير العمل `inspect-index.yml` (قراءة فقط) واقرأ سجله عبر MCP.
 
 **المساعد الذكي (Gemini) — كيف يعمل الآن:**
 - **المفاتيح**: حتى ٤ مفاتيح للطلاب (كل مفتاح يبدأ بنموذج مختلف، بطلب صاحب المشروع، رغم تحذيرنا من شروط Google) + مفتاح للوحة. `generate(..., { pool, keyIndex, spread })`. ملفات Gemini تُحفظ `k<رقم>|uri` (مرتبطة بالمفتاح).
@@ -122,13 +125,29 @@ cd apps/mobile && npx expo export -p web --output-dir /tmp/web && (npx serve -s 
 - لاختبار التعليمات فعلياً: استدعِ Gemini مباشرة من بايثون بنفس الـ SYSTEM (المفتاح يعطيه صاحب المشروع).
 
 **أين وصلنا (التفاصيل في LOG.md):**
-- ✅ كل الإعداد مكتمل: Supabase، تسجيل Google، الأدمن، Gemini، التخزين، الإشعارات، الموقع واللوحة، keepalive.
-- ✅ apk-19 على هاتفه وكل شيء يعمل، وهو يقول: «كلشيء جيد».
-- ✅ المرحلة ب (الكود): مفاتيح متعددة، إجابات محفوظة، «مساعد المحتوى»، فهرسة المحاضرات بالدقيقة.
-- ⏳ معلّق عند صاحب المشروع: رفع آخر APK على Dropbox (ثم نحدّث `download-config.json`)، مفاتيح Gemini 2..4 و YouTube (الخطوة ١٢)، Oracle للتخزين (هو يضبطه ثم نضيف أسرار S3).
-- ⏳ **التالي**: إدخال المحتوى بـ «مساعد المحتوى» ومتابعة أي خطأ يظهر فيه.
+- ✅ كل الإعداد مكتمل: Supabase، تسجيل Google، الأدمن، Gemini (٥ مفاتيح + YouTube، كلها نجحت في «فحص المفاتيح»)، التخزين، الإشعارات، الموقع واللوحة، keepalive.
+- ✅ apk-19 على هاتفه («كلشيء جيد»)، و apk-20 بُني (مواضيع المحاضرة + فتحها عند الدقيقة) ولم يُجرَّب على الهاتف بعد.
+- ✅ «مساعد المحتوى» يعمل فعلياً: أضاف ٥ محاضرات رياضيات (عباس الدراجي، الفصل ١) وفهرسها (٥٤ موضوعاً، جودة جيدة). ثم حسّنا حدود الأجزاء (لا تكرار «إكمال»).
+- ✅ الكود: التحديث التلقائي (`saey-releases`). ⏳ ينتظر أن ينشئ المستودع والسر `RELEASES_TOKEN` (الخطوة ١١ في دليل الإعداد) ثم يشغّل Build APK.
+- ⏳ عند صاحب المشروع:
+  1. الخطوة ١١ (التحديث التلقائي) ثم تجربة التحديث من داخل التطبيق.
+  2. إعادة فهرسة الفصل ١ بزر «فهرسة الفصل كله» (الحدود المحسّنة).
+  3. تجربة النسخة الجديدة على الهاتف: المواضيع، المساعد يفتح المحاضرة عند الدقيقة، PDF، المشاركة، المنبّه، العدّاد في الستارة.
+  4. إدخال باقي المحتوى بـ «مساعد المحتوى».
+- ⏳ **Oracle (هو يضبطه لاحقاً)**: يعطيك ٥ قيم ← تضعها أسراراً (لا في الكود) ← Deploy Supabase:
+  - `S3_ENDPOINT` = `https://<namespace>.compat.objectstorage.<region>.oraclecloud.com`
+  - `S3_REGION` = مثل `me-jeddah-1`
+  - `R2_ACCESS_KEY_ID` و `R2_SECRET_ACCESS_KEY` = Customer Secret Key (Profile ← Customer secret keys)
+  - `R2_BUCKET` = اسم الـ bucket (Private)
+  - الكود جاهز (`_shared/storage.ts`، عنوان path-style: endpoint/bucket/key). اختبار التخزين في سير العمل يختبر Supabase Storage فقط: أضف اختبار S3 عند التفعيل، وجرّب رفع ملف فعلياً. الملفات القديمة تبقى في Supabase (نقلها قرار لاحق).
 - ⏳ المرحلة ج: الكتب. **ناقشه أولاً**: هو يرسل الروابط، أم رفع جماعي من اللوحة؟
-- ⏳ بعدها: تجربة مع ٣–٥ زملاء، ثم النشر للصف.
+- ⏳ بعدها: تجربة مع ٣–٥ زملاء، ثم النشر للصف. (اختياري قبل النشر: مفتاح توقيع خاص، فالحالي عام.)
+
+**كيف يقرأ الذكاء الاصطناعي الملفات (للمساعد في التطبيق):**
+- الملازم PDF: المشرف يرفعها في «مساعد المحتوى» (تبويب الملفات) ← تُرفع لـ Gemini بمفتاح اللوحة ← دالة `ingest` تقرأ ١٠ صفحات في كل طلب (المصوّرة تُقرأ كصور) ← مقاطع + embeddings في `content_chunks` (`source_type='document'`).
+- المحاضرات: `content-ai` → `index_lecture` يشاهد يوتيوب بأجزاء ١٠ دقائق ← `lecture_topics` + مقاطع `source_type='lecture'` مع `start_sec`.
+- سؤال الطالب ← `ai-chat` يبحث بـ `match_chunks_v2` (حسب المادة) ← يضع أقرب المقاطع في السياق + فهرس التطبيق ← الجواب مع بطاقات `[[lecture:ID@ثواني]]` و `[[document:ID]]`.
+- ملف PDF يرسله الطالب في المحادثة: يُرفع عبر دالة `files` ويُرسل للنموذج مع السؤال (لا يُفهرس).
 
 **دروس تعلمناها (لا تكررها):**
 - **المترجم والخطوط:**

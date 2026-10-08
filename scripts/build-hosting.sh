@@ -34,6 +34,8 @@ if (!url && /dropbox\.com/.test(link)) {
   // Google Drive (يعرض صفحة تحذير للملفات الكبيرة — Dropbox أفضل)
   const id = (link.match(/\/d\/([\w-]+)/) || link.match(/[?&]id=([\w-]+)/) || [])[1];
   if (id) url = `https://drive.usercontent.google.com/download?id=${id}&export=download&confirm=t`;
+  // رابط مباشر (مثل GitHub Releases) يُستخدم كما هو
+  else if (/^https:\/\//.test(link)) url = link;
 }
 const d = { url, version: process.env.DOWNLOAD_VERSION || cfg.version || "", size_mb: process.env.DOWNLOAD_SIZE_MB || cfg.size_mb || "", date: new Date().toISOString() };
 fs.writeFileSync("hosting/download.json", JSON.stringify(d));

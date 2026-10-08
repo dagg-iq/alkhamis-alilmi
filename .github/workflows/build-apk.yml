@@ -12,6 +12,8 @@ on:
 
 permissions:
   contents: write
+  # لتشغيل نشر الموقع بعد تحديث رابط التنزيل
+  actions: write
 
 concurrency:
   group: build-apk-${{ github.ref }}
@@ -22,6 +24,10 @@ jobs:
   apk:
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    env:
+      # المستودع العام للنسخ (التحديث التلقائي): يُفعَّل عند وجود السر RELEASES_TOKEN
+      RELEASES_REPO: ${{ vars.RELEASES_REPO || 'dagg-iq/saey-releases' }}
+      HAS_RELEASES_TOKEN: ${{ secrets.RELEASES_TOKEN != '' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -99,3 +105,46 @@ jobs:
             الفرع: ${{ github.ref_name }} — الكود: ${{ github.sha }}
           prerelease: true
           files: out/saey.apk
+
+      # ── التحديث التلقائي: نسخة في المستودع العام + رابطها في الموقع ──
+      - name: Publish to public releases repo
+        if: env.HAS_RELEASES_TOKEN == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          repository: ${{ env.RELEASES_REPO }}
+          token: ${{ secrets.RELEASES_TOKEN }}
+          tag_name: apk-${{ github.run_number }}
+          name: سعي — نسخة ${{ github.run_number }}
+          body: ملف APK لتطبيق سعي (أندرويد). حمّل saey.apk وثبّته على الهاتف.
+          make_latest: true
+          files: out/saey.apk
+
+      - name: Point the site's download button at the new version
+        if: env.HAS_RELEASES_TOKEN == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          N: ${{ github.run_number }}
+        run: |
+          SIZE=$(( ($(stat -c %s out/saey.apk) + 524288) / 1048576 ))
+          URL="https://github.com/$RELEASES_REPO/releases/download/apk-$N/saey.apk"
+          # نتأكد أن الملف صار متاحاً للعامة قبل تغيير الرابط
+          for i in 1 2 3 4 5 6; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' -L -r 0-0 "$URL" || true)
+            [ "$code" = "206" ] || [ "$code" = "200" ] && break
+            echo "الملف غير متاح بعد ($code)… انتظار"; sleep 10
+          done
+          [ "$code" = "206" ] || [ "$code" = "200" ] || { echo "::error::الملف غير متاح للعامة: $URL (هل المستودع Public؟)"; exit 1; }
+          git config user.name "saey-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          for i in 1 2 3 4; do
+            git fetch origin "$GITHUB_REF_NAME" && git reset --hard "origin/$GITHUB_REF_NAME"
+            printf '{\n  "link": "%s",\n  "version": "%s",\n  "size_mb": "%s"\n}\n' "$URL" "$N" "$SIZE" > apps/site/download-config.json
+            git add apps/site/download-config.json
+            git diff --cached --quiet && break
+            git commit -m "نسخة التطبيق $N: رابط التنزيل والتحديث"
+            git push origin "HEAD:$GITHUB_REF_NAME" && break
+            sleep $((i * 3))
+          done
+          # الدفع بـ GITHUB_TOKEN لا يشغّل سير عمل آخر، فنشغّل نشر الموقع يدوياً
+          gh workflow run deploy-site.yml --ref "$GITHUB_REF_NAME"
+          echo "✓ الموقع سيعرض النسخة $N ($SIZE MB): $URL"
