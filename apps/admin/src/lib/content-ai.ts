@@ -14,15 +14,34 @@ export async function indexLecture(lectureId: string, onProgress?: (done: number
   }
 }
 
-/** فهرسة ملزمة للمساعد: ١٠ صفحات في كل طلب حتى النهاية */
-export async function ingestDocument(documentId: string, onProgress?: (done: number, total: number) => void) {
-  let first = true;
+/** يبني فهرس الفصول والمواضيع من الصفحات المقروءة */
+export async function buildDocumentOutline(documentId: string) {
+  return callFunction<{ done: boolean; chapters: number; topics: number }>('ingest', { documentId, action: 'outline' });
+}
+
+/** يحسب متجهات عناوين الفهرس المعدَّلة يدوياً (للربط بين الكتاب والملازم) */
+export async function embedDocumentOutline(documentId: string) {
+  return callFunction<{ done: boolean; embedded: number }>('ingest', { documentId, action: 'embed_outline' });
+}
+
+/**
+ * فهرسة كتاب أو ملزمة للمساعد: قراءة ٦ صفحات في كل طلب حتى النهاية، ثم بناء فهرس الفصول والمواضيع.
+ * stage: 'pages' أثناء القراءة، 'outline' أثناء بناء الفهرس.
+ */
+export async function ingestDocument(
+  documentId: string,
+  onProgress?: (done: number, total: number, stage: 'pages' | 'outline') => void,
+  restart = false,
+) {
+  let first = restart;
   for (;;) {
     const r = await callFunction<{ done: boolean; ingested: number; pages: number }>('ingest', { documentId, restart: first });
     first = false;
-    onProgress?.(r.ingested, r.pages);
-    if (r.done) return;
+    onProgress?.(r.ingested, r.pages, 'pages');
+    if (r.done) break;
   }
+  onProgress?.(1, 1, 'outline');
+  return buildDocumentOutline(documentId);
 }
 
 /** أساتذة جدد بالاسم (إن لم يوجدوا) ← خريطة الاسم إلى المعرّف */

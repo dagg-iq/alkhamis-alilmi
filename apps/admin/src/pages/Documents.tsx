@@ -5,7 +5,9 @@ import { useState } from 'react';
 import { askConfirm } from '../components/dialog';
 import { Empty, Field, Modal, check, useAction, useToast } from '../components/ui';
 import { useLoad } from '../lib/hooks';
-import { callFunction, must, signedUrl, supabase, uploadFile } from '../lib/supabase';
+import { OutlineEditor } from '../components/OutlineEditor';
+import { ingestDocument } from '../lib/content-ai';
+import { must, signedUrl, supabase, uploadFile } from '../lib/supabase';
 
 interface Draft { file: File | null; subject_id: string; chapter_id: string; teacher_id: string; kind: DocumentKind; title: string }
 
@@ -16,6 +18,7 @@ export default function Documents() {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [upload, setUpload] = useState<number | null>(null);
   const [ingesting, setIngesting] = useState<Record<string, string>>({});
+  const [outlineOf, setOutlineOf] = useState<DocumentRow | null>(null);
 
   const q = useLoad(async () => {
     const [subjects, books, chapters, teachers, docs] = await Promise.all([
@@ -51,18 +54,12 @@ export default function Documents() {
     await q.reload();
   }, 'رُفعت الملزمة').finally(() => setUpload(null));
 
-  // فهرسة الملزمة للمساعد الذكي: ١٠ صفحات في كل طلب حتى النهاية
+  // فهرسة الملزمة: قراءة كل الصفحات ثم بناء فهرس الفصول والمواضيع
   const ingest = async (doc: DocumentRow, restart = false) => {
-    let first = true;
     try {
-      for (;;) {
-        setIngesting((s) => ({ ...s, [doc.id]: 'جارٍ…' }));
-        const res = await callFunction<{ done: boolean; ingested: number; pages: number }>('ingest', { documentId: doc.id, restart: restart && first });
-        first = false;
-        setIngesting((s) => ({ ...s, [doc.id]: `${res.ingested}/${res.pages}` }));
-        if (res.done) break;
-      }
-      toast('اكتملت الفهرسة — المساعد يعرف هذه الملزمة الآن');
+      setIngesting((s) => ({ ...s, [doc.id]: 'جارٍ…' }));
+      const out = await ingestDocument(doc.id, (n, total, stage) => setIngesting((s) => ({ ...s, [doc.id]: stage === 'outline' ? 'يبني الفهرس…' : `${n}/${total}` })), restart);
+      toast(`اكتملت الفهرسة: ${out.chapters} فصل و${out.topics} موضوع — المساعد والفهرس جاهزان`);
     } catch (e) {
       toast(e instanceof Error ? e.message : 'فشلت الفهرسة', true);
     } finally {
@@ -108,7 +105,7 @@ export default function Documents() {
                   <td className="num small">{doc.size_bytes ? `${(doc.size_bytes / 1048576).toFixed(1)} MB` : '—'}{doc.pages ? ` · ${doc.pages} ص` : ''}</td>
                   <td>
                     {ingesting[doc.id] ? <span className="pill accent">يفهرس {ingesting[doc.id]}</span>
-                      : doc.ingest_status === 'done' ? <span className="pill ok">مفهرسة</span>
+                      : doc.ingest_status === 'done' ? (doc.outline_status === 'done' ? <span className="pill ok">مفهرسة + فهرس</span> : <span className="pill warn" title={doc.outline_error ?? ''}>مقروءة — الفهرس غير جاهز</span>)
                         : doc.ingest_status === 'error' ? <span className="pill bad" title={doc.ingest_error ?? ''}>خطأ — أعد المحاولة</span>
                           : doc.ingest_status === 'running' ? <span className="pill warn">ناقصة ({doc.ingested_pages}/{doc.pages ?? '?'})</span>
                             : <span className="pill">غير مفهرسة</span>}
@@ -117,7 +114,8 @@ export default function Documents() {
                     <div className="row" style={{ justifyContent: 'flex-end', flexWrap: 'nowrap' }}>
                       <button className="btn sm" onClick={() => run(async () => { window.open(await signedUrl(doc.file_key), '_blank'); })}>فتح</button>
                       {!ingesting[doc.id] && doc.ingest_status !== 'done' ? <button className="btn primary sm" onClick={() => ingest(doc)}>{doc.ingest_status === 'none' ? 'فهرسة' : 'إكمال'}</button> : null}
-                      {!ingesting[doc.id] && doc.ingest_status === 'done' ? <button className="btn ghost sm" onClick={() => ingest(doc, true)}>إعادة</button> : null}
+                      {doc.ingest_status === 'done' ? <button className="btn sm primary" onClick={() => setOutlineOf(doc)}>الفهرس</button> : null}
+                      {!ingesting[doc.id] && doc.ingest_status === 'done' ? <button className="btn ghost sm" onClick={async () => (await askConfirm('إعادة قراءة كل صفحات الملف من جديد؟ (تستهلك من رصيد Gemini)')) && ingest(doc, true)}>إعادة القراءة</button> : null}
                       <button className="btn sm" onClick={() => run(async () => { await check(supabase.from('documents').update({ is_published: !doc.is_published }).eq('id', doc.id)); await q.reload(); })}>
                         {doc.is_published ? 'إخفاء' : 'نشر'}
                       </button>
@@ -130,7 +128,9 @@ export default function Documents() {
           </table>
         </div>
       )}
-      <p className="small dim">«الفهرسة» تجعل المساعد الذكي يقرأ الملزمة ويجيب منها مع ذكر الصفحة. تستهلك من رصيد Gemini المجاني (طلب لكل ١٠ صفحات تقريباً).</p>
+      <p className="small dim">«الفهرسة» تجعل المساعد الذكي يقرأ الملف ويجيب منه مع ذكر الصفحة، وتبني فهرس الفصول والمواضيع الذي يفتح منه الطالب أي فصل أو موضوع مباشرة. تستهلك من رصيد Gemini (طلب لكل ٦ صفحات تقريباً + طلب للفهرس). زر «الفهرس» يراجع ويعدّل الفصول والمواضيع.</p>
+
+      {outlineOf ? <OutlineEditor doc={outlineOf} onClose={() => { setOutlineOf(null); q.reload(); }} /> : null}
 
       {draft ? (
         <Modal title="رفع ملزمة" onClose={() => !busy && setDraft(null)}>

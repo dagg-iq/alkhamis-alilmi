@@ -57,6 +57,8 @@ export interface DocumentRow {
   ingested_pages: number;
   ingest_status: 'none' | 'running' | 'done' | 'error';
   ingest_error: string | null;
+  outline_status?: 'none' | 'running' | 'done' | 'error';
+  outline_error?: string | null;
 }
 export interface QuestionSet {
   id: string;
@@ -117,7 +119,7 @@ export type Attachment =
       thumb?: string;
       /** سطر ثانوي: المادة، الأستاذ، عدد الصفحات… */
       subtitle?: string;
-      /** المحاضرة تُفتح من هذه الثانية (من المساعد) */
+      /** المحاضرة تُفتح من هذه الثانية، والملزمة من هذه الصفحة (من المساعد) */
       start?: number;
     }
   /** إجابة من مساعد سعي شاركها الطالب (النص كاملاً داخل المرفق) */
@@ -136,7 +138,7 @@ export interface Message {
   edited_at: string | null;
   deleted_at: string | null;
 }
-export interface AiSource { title: string; subject?: string; chapter?: string; page?: number; lecture_id?: string; start?: number }
+export interface AiSource { title: string; subject?: string; chapter?: string; page?: number; printed?: string; document_id?: string; lecture_id?: string; start?: number }
 export interface AiMessage { id: string; chat_id: string; role: 'user' | 'assistant'; content: string; sources: AiSource[] | null; created_at: string }
 
 export const ROLE_LABELS: Record<Role, string> = { student: 'طالب', moderator: 'مشرف', admin: 'الأدمن' };

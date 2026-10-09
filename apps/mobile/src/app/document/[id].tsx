@@ -5,8 +5,10 @@ import { View } from 'react-native';
 import { Alert } from '@/lib/dialog';
 import { Icon } from '@/components/icon';
 import { Button, ErrorBox, ProgressBar, Header, Loading, Screen, T } from '@/components/ui';
+import { OutlineList } from '@/components/outline-list';
 import { PdfThumb } from '@/components/pdf-thumb';
 import { downloadMaterial, isDownloaded, openPdf, removeDownload, sharePdf, signedUrl } from '@/lib/files';
+import { loadOutline } from '@/lib/outline';
 import { must, supabase } from '@/lib/supabase';
 import { useTheme } from '@/lib/theme';
 import { useLoad } from '@/lib/use-load';
@@ -18,6 +20,8 @@ export default function DocumentScreen() {
   const [prog, setProg] = useState<{ got: number; total: number } | null>(null);
   const [, force] = useState(0);
   const q = useLoad(async () => must(supabase.from('documents').select('*, subjects(name)').eq('id', id).single()) as Promise<DocumentRow & { subjects: { name: string } }>, [id]);
+
+  const outline = useLoad(() => loadOutline(id), [id]);
 
   // معاينة الصفحة الأولى: من الملف المحفوظ إن وُجد، وإلا من رابط مؤقت (يحمّل الصفحة الأولى فقط)
   const key = q.data?.file_key;
@@ -64,6 +68,19 @@ export default function DocumentScreen() {
       ) : null}
       <Button title="مشاركة" variant="secondary" icon="share" loading={busy === 'share'} onPress={() => run('share', () => sharePdf(d.file_key, d.title))} />
       {saved ? <Button title="حذف من الهاتف" variant="ghost" onPress={() => { removeDownload(d.file_key); force((n) => n + 1); }} /> : null}
+      <View style={{ gap: 10, marginTop: 8 }}>
+        <T display size={22}>الفصول والمواضيع</T>
+        {outline.data?.length ? (
+          <>
+            <T dim size={12}>اضغط على فصل ليُفتح مباشرة، أو على موضوع ليُفتح داخل فصله. زر الرابط بجانب الموضوع يعرض نفس الموضوع في الكتب والملازم الأخرى.</T>
+            <OutlineList nodes={outline.data}
+              onChapter={(c) => run('open', () => openPdf(d.file_key, d.title, { docId: d.id, from: c.start_page, to: c.end_page ?? undefined, page: c.start_page }))}
+              onTopic={(t, c) => run('open', () => openPdf(d.file_key, d.title, { docId: d.id, from: c.start_page, to: c.end_page ?? undefined, page: t.start_page }))} />
+          </>
+        ) : (
+          <T dim size={13}>{d.outline_status === 'running' ? 'يجري بناء الفهرس…' : d.ingest_status === 'done' ? 'الفهرس غير جاهز بعد. سيظهر هنا قريباً.' : 'لم يُفهرس هذا الملف بعد. افتحه كاملاً من الأزرار أعلاه.'}</T>
+        )}
+      </View>
       <T dim size={12} center>{saved ? 'محفوظ على هاتفك — يُفتح داخل التطبيق بدون إنترنت' : 'بعد التحميل يُفتح داخل التطبيق بدون إنترنت'}</T>
     </Screen>
   );

@@ -10,7 +10,7 @@ import { Alert } from '@/lib/dialog';
 import { Icon } from '@/components/icon';
 import { Card, ChipRow, Empty, ErrorBox, Header, IconButton, Loading, ProgressBar, Row, Screen, Segmented, T } from '@/components/ui';
 import { useMe } from '@/lib/auth';
-import { isDownloaded, openPdf } from '@/lib/files';
+import { isDownloaded } from '@/lib/files';
 import { must, supabase } from '@/lib/supabase';
 import { useTheme } from '@/lib/theme';
 import { useLoad } from '@/lib/use-load';
@@ -30,7 +30,6 @@ export default function SubjectScreen() {
   const [tab, setTab] = useState<Tab>('lectures');
   const [bookId, setBookId] = useState<string | null>(null);
   const [open, setOpen] = useState<Record<string, boolean>>({});
-  const [opening, setOpening] = useState<string | null>(null);
 
   const q = useLoad(async () => {
     const [subject, books, teachers, docs, qsets] = await Promise.all([
@@ -86,17 +85,6 @@ export default function SubjectScreen() {
     q.reload();
   };
 
-  const openDoc = async (doc: DocumentRow) => {
-    setOpening(doc.id);
-    try {
-      await openPdf(doc.file_key, doc.title);
-      q.reload();
-    } catch (e) {
-      Alert.alert('تعذّر فتح الملف', e instanceof Error ? e.message : '');
-    } finally {
-      setOpening(null);
-    }
-  };
 
   if (q.loading) return <Screen><Header /><Loading /></Screen>;
   if (q.error || !d) return <Screen><Header /><ErrorBox message={q.error ?? ''} onRetry={q.reload} /></Screen>;
@@ -178,7 +166,7 @@ export default function SubjectScreen() {
           <View key={g.title} style={{ gap: 8 }}>
             <T dim weight="bold" size={13}>{g.title}</T>
             {g.docs.map((doc) => (
-              <Card key={doc.id} onPress={() => openDoc(doc)} style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              <Card key={doc.id} onPress={() => router.push(`/document/${doc.id}`)} style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
                 <View style={{ width: 44, height: 52, borderRadius: 10, backgroundColor: c.soft, alignItems: 'center', justifyContent: 'center' }}>
                   <Icon name="file" size={22} color={c.accent} />
                 </View>
@@ -191,8 +179,7 @@ export default function SubjectScreen() {
                     {doc.size_bytes ? ` · ${arDigits((doc.size_bytes / 1048576).toFixed(1))} م.ب` : ''}
                   </T>
                 </View>
-                {opening === doc.id ? <T dim size={12}>يُحمّل…</T>
-                  : isDownloaded(doc.file_key) ? <Icon name="check" size={18} color={c.accent} />
+                {isDownloaded(doc.file_key) ? <Icon name="check" size={18} color={c.accent} />
                     : <Icon name="download" size={20} color={c.ink2} />}
               </Card>
             ))}

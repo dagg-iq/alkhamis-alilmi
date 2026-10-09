@@ -1,7 +1,9 @@
 // المساعد الذكي: يجيب من المنهج (RAG) ويذكر المصدر، ويعرف فهرس التطبيق (المحاضرات والملازم والأسئلة)، مع حد يومي لكل طالب
 import { handler, HttpError, json } from '../_shared/cors.ts';
 import { admin, getCaller, getSetting } from '../_shared/supabase.ts';
-import { type Content, embed, generate, GeminiQuotaError, LITE_MODELS, modelChain } from '../_shared/gemini.ts';
+import { type Content, generate, GeminiQuotaError, LITE_MODELS, modelChain } from '../_shared/gemini.ts';
+import { parseChapterRef, parsePageRef } from '../_shared/outline.ts';
+import { retrieveItems, type ViewerContext } from './retrieve.ts';
 
 interface AiSettings { daily_limit?: number; model?: string; lite_model?: string; enabled?: boolean; thinking_hard?: Level; thinking_explain?: Level }
 type Level = 'minimal' | 'low' | 'medium' | 'high'
@@ -40,6 +42,15 @@ const SYSTEM = `أنت «سعي AI»، مدرّس خصوصي ذكي داخل ت�
 عن التطبيق:
 - «سعي» من تطوير **محمد حازم احمد**، طالب في الخامس العلمي بإعدادية الشهاب للبنين، صممه ليجمع لزملائه كل ما يحتاجونه للدراسة والإعفاء. إذا سُئلت عن صانع التطبيق أو كيف يتواصل مع المطور أو يقترح فكرة أو يبلّغ عن خطأ: اكتب جملة قصيرة ثم ضع الرمز التالي في سطر مستقل ليظهر للطالب بطاقة التواصل:
 [[developer]]
+
+الكتب والملازم والصفحات (مهم جداً):
+- كل مقتطف يحمل بين قوسين: اسم الكتاب أو الملزمة، ورقم الصفحة، والفصل والموضوع. اذكرها في جوابك بدقة هكذا: «(ملزمة X، صفحة ٥٢، الفصل الثاني: ...)». لا تذكر صفحة أو فصلاً لم يرد في المقتطفات، ولا تخمّن رقماً.
+- المقتطف المعلَّم [الصفحة أو الفصل المطلوب] هو ما طلبه الطالب بالضبط: اعتمد عليه أولاً وأجب منه بالكامل.
+- إذا كان الرقم المطبوع يختلف عن رقم صفحة الملف فاذكر الاثنين كما ورد في المقتطف.
+- عندما يطلب الطالب شرح فصل أو موضوع أو صفحة: اشرح **بوفاء وتفصيل** كما يشرح أفضل أستاذ: تعريفات الكتاب، القوانين مع معنى كل رمز ووحدته، الأمثلة المحلولة خطوة بخطوة، الملاحظات التي تأتي في الامتحان، ثم خلاصة قصيرة. رتّب الشرح بحسب ترتيب الصفحات، وضع رقم الصفحة بجانب كل فقرة أو عنوان فرعي مأخوذ منها («صفحة ٥٢»).
+- ضع رمز [[document:المعرف@رقم_الصفحة]] (يظهر في المقتطف) في سطر مستقل بعد الفقرة التي اعتمدت فيها على تلك الصفحة، ليفتحها الطالب في الكتاب مباشرة.
+- إذا طلب موضوعاً موجوداً في كتاب وملزمة معاً فاذكر صفحته في كل منهما من المقتطفات.
+- إذا لم تجد في المقتطفات ما يجيب فقل بوضوح إن الملف أو الصفحة غير مفهرس أو غير موجود، واعرض ما تعرفه من المنهج مع التنبيه أنه ليس من الملزمة.
 
 طريقة الكتابة (مثل ملزمة مرتبة، لأن التطبيق يعرضها بتنسيق جميل):
 - ابدأ بجملة تجيب مباشرة، ثم التفاصيل.
@@ -82,7 +93,7 @@ const CACHE_V = 'v2';
 const IDENTITY = /(من|منو|مين|شنو)\s*(انت|أنت|صنعك|طورك|برمجك|اللي صنعك)|(اي|أي|شنو)\s*(نموذج|ذكاء|شركه|شركة)[^؟?]{0,25}\s(انت|أنت)|(انت|أنت)\s*(من\s*)?(gemini|جيميني|جوجل|غوغل|chatgpt|شات)|who are you|what model/i;
 const LEAK = /gemini|جيميني|جيمناي|google|جوجل|غوغل|openai|chatgpt|anthropic|claude/i;
 const IDENTITY_ANSWER = 'أنا **سعي AI**، المساعد الذكي لتطبيق «سعي». أشرح لك المنهج وأحل معك الأسئلة وأساعدك تنظم دراستك للوصول إلى الإعفاء. صممني محمد حازم احمد مع التطبيق لزملائه في الخامس العلمي.';
-type Source = { title: string; page?: number; subject?: string; lecture_id?: string; start?: number };
+type Source = { title: string; page?: number; printed?: string; subject?: string; document_id?: string; lecture_id?: string; start?: number };
 
 /** نفس السؤال بصيغ إملائية مختلفة ← نفس المفتاح */
 function normalize(s: string) {
@@ -203,6 +214,11 @@ Deno.serve(handler(async (req) => {
   const caller = await getCaller(req);
   const body = await req.json();
   const { chatId, message, subjectId, brief } = body;
+  // الطالب يسأل من داخل عارض ملزمة: الملف والصفحة أو الفصل الذي يقرأه الآن
+  const rc = body.context as { documentId?: unknown; page?: unknown; from?: unknown; to?: unknown } | undefined;
+  const viewerCtx: ViewerContext | undefined = rc && typeof rc.documentId === 'string' && /^[0-9a-f-]{36}$/i.test(rc.documentId)
+    ? { documentId: rc.documentId, page: Number(rc.page) > 0 ? Math.round(Number(rc.page)) : undefined, from: Number(rc.from) > 0 ? Math.round(Number(rc.from)) : undefined, to: Number(rc.to) > 0 ? Math.round(Number(rc.to)) : undefined }
+    : undefined;
 
   // رسالة تلقائية «تم التحويل إلى PDF» (لا تستهلك من الرصيد)
   if (body.note === 'pdf') {
@@ -225,7 +241,9 @@ Deno.serve(handler(async (req) => {
   const small = identityQ || (text.length <= 40 && SMALL_TALK.test(text) && !WANTS_CONTENT.test(text));
 
   // سؤال مستقل في محادثة جديدة وليس عن الطالب نفسه ← قد يكون جوابه محفوظاً (يوم الامتحان يتكرر نفس السؤال)
-  const cacheable = !chatId && !small && text.length >= 12 && !PERSONAL.test(text) && !WANTS_CONTENT_STRICT.test(text);
+  // أسئلة الصفحة والفصل وما يُسأل من داخل العارض تعتمد على ملف بعينه فلا تُحفظ للآخرين
+  const docBound = !!viewerCtx || parsePageRef(text) !== null || parseChapterRef(text) !== null;
+  const cacheable = !chatId && !small && text.length >= 12 && !PERSONAL.test(text) && !WANTS_CONTENT_STRICT.test(text) && !docBound;
   const cacheKey = cacheable ? await hashKey(`${CACHE_V}|${normalize(text)}|${subjectId ?? ''}`) : null;
   let cached: { answer: string; sources: Source[] | null } | null = null;
   if (cacheKey) {
@@ -263,43 +281,26 @@ Deno.serve(handler(async (req) => {
     let context = '';
     let sources: Source[] = [];
     try {
-      const [qv] = await embed([text], 'RETRIEVAL_QUERY');
-      const args = { query_embedding: qv, match_count: 8, p_subject: subjectId ?? null };
-      // الدالة الجديدة تعيد وقت المقطع في المحاضرة (والقديمة احتياطاً قبل تطبيق migration ١٢)
-      let { data: chunks, error: rpcError } = await admin.rpc('match_chunks_v2', args);
-      if (rpcError) ({ data: chunks } = await admin.rpc('match_chunks', args));
-      const relevant = (chunks ?? []).filter((c: { similarity: number }) => c.similarity > 0.55);
-      if (relevant.length) {
-        const docIds = [...new Set(relevant.filter((c: { source_type: string }) => c.source_type === 'document').map((c: { source_id: string }) => c.source_id))];
-        const qsIds = [...new Set(relevant.filter((c: { source_type: string }) => c.source_type === 'question_set').map((c: { source_id: string }) => c.source_id))];
-        const lecIds = [...new Set(relevant.filter((c: { source_type: string }) => c.source_type === 'lecture').map((c: { source_id: string }) => c.source_id))];
-        const [{ data: docs }, { data: qsets }, { data: lecs }, { data: subjects }] = await Promise.all([
-          admin.from('documents').select('id, title').in('id', docIds.length ? docIds : [NO_ID]),
-          admin.from('question_sets').select('id, title').in('id', qsIds.length ? qsIds : [NO_ID]),
-          admin.from('lectures').select('id, title, teachers(name)').in('id', lecIds.length ? lecIds : [NO_ID]),
-          admin.from('subjects').select('id, name'),
-        ]);
-        const titleOf = new Map<string, string>([...(docs ?? []), ...(qsets ?? [])].map((d) => [d.id, d.title]));
-        for (const l of (lecs ?? []) as { id: string; title: string; teachers: { name?: string } | null }[]) {
-          titleOf.set(l.id, `محاضرة ${l.title}${l.teachers?.name ? ` (الأستاذ ${l.teachers.name})` : ''}`);
+      const items = await retrieveItems(text, subjectId ?? null, viewerCtx);
+      sources = items.map((it) => ({
+        title: it.title,
+        page: it.kind === 'lecture' ? undefined : it.page,
+        subject: it.subject,
+        ...(it.printed ? { printed: it.printed } : {}),
+        ...(it.documentId ? { document_id: it.documentId } : {}),
+        ...(it.kind === 'lecture' ? { lecture_id: it.lectureId, start: it.start ?? 0 } : {}),
+      }));
+      context = items.map((it, i) => {
+        let where = '';
+        if (it.kind === 'lecture') where = ` — الدقيقة ${clock(it.start ?? 0)} — لفتحها عند هذه الدقيقة ضع [[lecture:${it.lectureId}@${it.start ?? 0}]]`;
+        else if (it.page) {
+          where = ` — ${it.printed && it.printed !== String(it.page) ? `صفحة ${ar(it.page)} من الملف (المطبوعة ${it.printed})` : `صفحة ${ar(it.page)}`}`;
+          if (it.chapter) where += ` — الفصل: ${it.chapter}`;
+          if (it.topic) where += ` — الموضوع: ${it.topic}`;
+          if (it.documentId) where += ` — لفتح الصفحة ضع [[document:${it.documentId}@${it.page}]]`;
         }
-        const subjectOf = new Map<string, string>((subjects ?? []).map((s) => [s.id, s.name]));
-        sources = relevant.map((c: { source_type: string; source_id: string; page: number | null; start_sec?: number | null; subject_id: string }) => ({
-          title: titleOf.get(c.source_id) ?? 'المنهج',
-          page: c.source_type === 'lecture' ? undefined : c.page ?? undefined,
-          subject: subjectOf.get(c.subject_id),
-          ...(c.source_type === 'lecture' ? { lecture_id: c.source_id, start: c.start_sec ?? 0 } : {}),
-        }));
-        context = relevant
-          .map((c: { content: string }, i: number) => {
-            const s = sources[i];
-            const where = s.lecture_id !== undefined
-              ? ` — الدقيقة ${clock(s.start ?? 0)} — لفتحها عند هذه الدقيقة ضع [[lecture:${s.lecture_id}@${s.start ?? 0}]]`
-              : s.page ? ` — صفحة ${ar(s.page)}` : '';
-            return `[${ar(i + 1)}] (${s.subject ?? ''} — ${s.title}${where})\n${c.content}`;
-          })
-          .join('\n\n');
-      }
+        return `[${ar(i + 1)}] (${it.subject ?? ''} — ${it.title}${where})${it.direct ? ' [الصفحة أو الفصل المطلوب]' : ''}\n${it.text}`;
+      }).join('\n\n');
     } catch (e) {
       // البحث اختياري: إذا فشل نكمل بدون مقتطفات
       console.error('retrieval failed', e);
@@ -325,7 +326,7 @@ Deno.serve(handler(async (req) => {
     (contents[contents.length - 1].parts[0] as { text: string }).text = `(رسالة سابقة: ${(prev.parts[0] as { text: string }).text})\n\n${(contents[contents.length - 1].parts[0] as { text: string }).text}`;
   }
 
-  const level: Level = HARD.test(text) ? (settings.thinking_hard ?? 'high') : EXPLAIN.test(text) ? (settings.thinking_explain ?? 'medium') : 'low';
+  const level: Level = HARD.test(text) ? (settings.thinking_hard ?? 'high') : (EXPLAIN.test(text) || docBound) ? (settings.thinking_explain ?? 'medium') : 'low';
   let answer: string;
   try {
     answer = identityQ ? IDENTITY_ANSWER : cached ? cached.answer : small
@@ -333,7 +334,7 @@ Deno.serve(handler(async (req) => {
       : await generate(modelChain(settings.model), contents, {
         system: SYSTEM + about, temperature: 0.3,
         // التفكير يُحسب من حد الإخراج، فنوسّع الحد للطلبات الصعبة
-        maxOutputTokens: level === 'high' ? 24576 : 8192,
+        maxOutputTokens: level === 'high' || docBound ? 24576 : 8192,
         thinking: level,
       });
   } catch (e) {

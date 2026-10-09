@@ -11,13 +11,27 @@ export interface PageImage { dataUrl: string; width: number; height: number }
 export interface PdfViewHandle {
   /** كل صفحات الملف كصور JPEG (data URL) بعرض معيّن مع أبعادها */
   exportImages: (width?: number, quality?: number) => Promise<PageImage[]>;
+  /** انتقال سلس إلى صفحة ضمن النطاق المعروض */
+  scrollToPage: (page: number) => void;
+}
+
+export interface PdfViewProps {
+  base64?: string;
+  url?: string;
+  /** نطاق الصفحات المعروض (افتراضياً الملف كله) */
+  from?: number;
+  to?: number;
+  /** صفحة يُمرَّر إليها عند الفتح */
+  goto?: number;
+  /** الصفحة الظاهرة الآن */
+  onPage?: (page: number) => void;
 }
 
 /**
  * عارض PDF داخل التطبيق (pdf.js مضمّن فيعمل بلا إنترنت): الصفحات تُرسم عند الوصول إليها،
- * والتكبير بإصبعين. يقبل ملفاً محلياً (base64) أو رابطاً.
+ * والتكبير بإصبعين. يقبل ملفاً محلياً (base64) أو رابطاً، ونطاق صفحات (فصل) وصفحة يبدأ منها.
  */
-export const PdfView = forwardRef<PdfViewHandle, { base64?: string; url?: string }>(function PdfView({ base64, url }, handle) {
+export const PdfView = forwardRef<PdfViewHandle, PdfViewProps>(function PdfView({ base64, url, from, to, goto, onPage }, handle) {
   const { c, dark } = useTheme();
   const ref = useRef<WebView>(null);
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
@@ -32,11 +46,12 @@ export const PdfView = forwardRef<PdfViewHandle, { base64?: string; url?: string
       exporting.current = { images: [], resolve, reject };
       ref.current?.injectJavaScript(`window.exportImages(${width},${quality});true;`);
     }),
+    scrollToPage: (page) => { ref.current?.injectJavaScript(`window.scrollToPage(${Math.round(page)});true;`); },
   }), [state]);
 
   const start = () => {
     const src = base64 ? { data: base64 } : { url };
-    ref.current?.injectJavaScript(`window.openPdf(${JSON.stringify(src)});true;`);
+    ref.current?.injectJavaScript(`window.openPdf(${JSON.stringify(src)},${JSON.stringify({ from, to, goto })});true;`);
   };
 
   return (
@@ -50,6 +65,7 @@ export const PdfView = forwardRef<PdfViewHandle, { base64?: string; url?: string
           const d = e.nativeEvent.data;
           if (d === 'ready') setState('ready');
           else if (d.startsWith('pages:')) setPages(Number(d.slice(6)));
+          else if (d.startsWith('page:')) onPage?.(Number(d.slice(5)));
           else if (d.startsWith('img:')) {
             const m = d.match(/^img:(\d+):(\d+):(\d+)x(\d+):(.*)$/s);
             if (m && exporting.current) exporting.current.images[Number(m[1]) - 1] = { dataUrl: m[5], width: Number(m[3]), height: Number(m[4]) };
@@ -73,7 +89,7 @@ export const PdfView = forwardRef<PdfViewHandle, { base64?: string; url?: string
       ) : null}
       {pages > 0 && state === 'ready' ? (
         <View style={{ position: 'absolute', bottom: 12, alignSelf: 'center', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 999, backgroundColor: 'rgba(0,0,0,0.6)' }} pointerEvents="none">
-          <T size={12} color="#FFFFFF">{arDigits(pages)} صفحة</T>
+          <T size={12} color="#FFFFFF">{arDigits(to && from ? to - from + 1 : pages)} صفحة</T>
         </View>
       ) : null}
     </View>

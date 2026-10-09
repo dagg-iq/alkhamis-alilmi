@@ -23,6 +23,13 @@ const data = {
   grades: [{ id: 'g1', user_id: UID, subject_id: 's0', period: 'month1', score: 93, note: null }, { id: 'g2', user_id: UID, subject_id: 's0', period: 'midyear', score: 88, note: null }, { id: 'g3', user_id: UID, subject_id: 's1', period: 'month1', score: 70, note: null },
     { id: 'g4', user_id: UID, subject_id: 's3', period: 'month1', score: 98, note: null }, { id: 'g5', user_id: UID, subject_id: 's3', period: 'month2', score: 95, note: null },
     { id: 'g6', user_id: UID, subject_id: 's4', period: 'month1', score: 85, note: null }, { id: 'g7', user_id: UID, subject_id: 's5', period: 'month1', score: 45, note: null }],
+  document_outline: [
+    { id: 'o1', document_id: 'd1', parent_id: null, level: 1, title: 'الفصل الأول: الكهربائية الساكنة', start_page: 1, end_page: 15, sort: 0 },
+    { id: 'o2', document_id: 'd1', parent_id: 'o1', level: 2, title: 'قانون كولوم', start_page: 3, end_page: 7, sort: 1 },
+    { id: 'o3', document_id: 'd1', parent_id: 'o1', level: 2, title: 'المجال الكهربائي', start_page: 8, end_page: 15, sort: 2 },
+    { id: 'o4', document_id: 'd1', parent_id: null, level: 1, title: 'الفصل الثاني: المتسعات', start_page: 16, end_page: 40, sort: 3 },
+    { id: 'o5', document_id: 'd1', parent_id: 'o4', level: 2, title: 'ربط المتسعات', start_page: 22, end_page: 40, sort: 4 },
+  ],
   schedules: [
     { id: 'sc1', title: 'جدول الحصص — شعبة أ', subtitle: 'الفصل الدراسي الأول', kind: 'weekly', section_id: 'sec1', is_published: true, sort: 0, created_at: t, updated_at: t },
     { id: 'sc2', title: 'امتحانات الشهر الأول', subtitle: 'الفصل الأول', kind: 'exam', section_id: null, is_published: true, sort: 1, created_at: t, updated_at: t },
@@ -57,6 +64,7 @@ const rpc = {
     { id: 'cv3', type: 'school', title: 'المدرسة', only_staff_can_post: false, last_message_at: new Date().toISOString(), last_body: 'غداً عطلة رسمية بمناسبة المولد النبوي', last_sender: 'الإدارة', unread: 2, muted: false, peer_id: null, peer_name: null, peer_avatar: null, peer_verified: null }],
   my_study_week: Array.from({ length: 7 }, (_, i) => ({ day: new Date(Date.now() - (6 - i) * 86400000).toISOString().slice(0, 10), minutes: i * 10 })),
   mark_read: null,
+  related_topics: [{ document_id: 'd2', document_title: 'ملزمة الأستاذ أحمد', document_kind: 'malzama', outline_id: 'o9', title: 'السعة الكهربائية', start_page: 7, end_page: 12, similarity: 0.81 }],
 };
 
 (async () => {

@@ -152,7 +152,7 @@ function LinkedItem({ type, id, start }: { type: Linked['type']; id: string; sta
       } else if (type === 'document') {
         const { data } = await supabase.from('documents').select('id, title, pages, subjects(name)').eq('id', id).maybeSingle();
         const d = data as { title: string; pages: number | null; subjects: { name: string } | null } | null;
-        if (d) a = { type, id, title: d.title, subtitle: [d.subjects?.name, d.pages ? `${arNum(String(d.pages))} صفحة` : null].filter(Boolean).join(' · ') };
+        if (d) a = { type, id, title: d.title, start, subtitle: [start ? `افتح عند صفحة ${arNum(String(start))}` : null, d.subjects?.name, !start && d.pages ? `${arNum(String(d.pages))} صفحة` : null].filter(Boolean).join(' · ') };
       } else {
         const { data } = await supabase.from('question_sets').select('id, title, subjects(name)').eq('id', id).maybeSingle();
         const d = data as { title: string; subjects: { name: string } | null } | null;

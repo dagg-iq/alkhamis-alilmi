@@ -1,5 +1,6 @@
 import type { Attachment } from '@saey/shared';
 import { router } from 'expo-router';
+import { openDocumentAt } from './outline';
 
 export interface ConversationRow {
   id: string;
@@ -30,7 +31,8 @@ export type CurriculumAttachment = Extract<Attachment, { type: 'lecture' | 'docu
 export function openAttachment(a: Attachment, messageId?: string) {
   if (a.type === 'lecture') router.push(a.start ? { pathname: '/lecture/[id]', params: { id: a.id, t: String(a.start) } } : `/lecture/${a.id}`);
   else if (a.type === 'question_set') router.push(`/questions/${a.id}`);
-  else if (a.type === 'document') router.push({ pathname: '/document/[id]', params: { id: a.id } });
+  // الملزمة من المساعد قد تحمل رقم صفحة (start): تُفتح عندها مباشرة في العارض، وإلا شاشتها بفهرسها
+  else if (a.type === 'document') { if (a.start) openDocumentAt(a.id, { page: a.start }).catch(() => router.push({ pathname: '/document/[id]', params: { id: a.id } })); else router.push({ pathname: '/document/[id]', params: { id: a.id } }); }
   else if (a.type === 'answer' && messageId) router.push({ pathname: '/answer/[id]', params: { id: messageId } });
   else if (a.type === 'file') router.push({ pathname: '/pdf', params: { key: a.key, title: a.title } });
 }

@@ -3,10 +3,11 @@ import { PDFJS_MAIN, PDFJS_WORKER } from './pdfjs-source';
 /**
  * صفحة HTML تعرض PDF بـ pdf.js (مضمّنة في التطبيق فتعمل بلا إنترنت، والعامل يعمل في الخيط الرئيسي).
  * الدوال التي يستدعيها التطبيق عبر injectJavaScript:
- *   openPdf({data|url})            ← عرض كل الصفحات
+ *   openPdf({data|url}, {from,to,goto}) ← عرض الصفحات (نطاق اختياري) والتمرير إلى صفحة
+ *   scrollToPage(n)                ← الانتقال إلى صفحة ضمن النطاق
  *   exportImages(scale, quality)   ← يرسل كل صفحة صورة JPEG: img:<رقم>:<العدد>:<العرض>x<الارتفاع>:<dataURL> ثم imgdone
  *   thumb({data|url}, width)       ← يرسم الصفحة الأولى فقط: thumb:<dataURL>
- * ويرسل للتطبيق: pages:<n> | ready | error:<msg>
+ * ويرسل للتطبيق: pages:<n> | ready | page:<n> (الصفحة الظاهرة) | error:<msg>
  */
 export function pdfViewerHtml(dark: boolean): string {
   return `<!doctype html><html><head><meta charset="utf-8">
@@ -17,26 +18,36 @@ export function pdfViewerHtml(dark: boolean): string {
 <script>pdfjsLib.GlobalWorkerOptions.workerSrc='about:blank';</script>
 <style>body{margin:0;background:${dark ? '#0E0E0F' : '#E9E9E4'};padding:8px 0 24px}
 .pg{margin:0 auto 10px;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.15);position:relative}
-canvas{display:block;width:100%;height:100%}</style></head><body><div id="pages"></div>
+canvas{display:block;width:100%;height:100%}
+.tag{position:absolute;top:6px;left:6px;z-index:2;min-width:26px;padding:1px 7px;border-radius:12px;background:rgba(0,0,0,.55);color:#fff;font:600 11px sans-serif;text-align:center}</style></head><body><div id="pages"></div>
 <script>
 function post(m){window.ReactNativeWebView&&window.ReactNativeWebView.postMessage(m);}
 function bytes(s){var b=atob(s),a=new Uint8Array(b.length);for(var i=0;i<b.length;i++)a[i]=b.charCodeAt(i);return a;}
 function load(src){return pdfjsLib.getDocument(src.data?{data:bytes(src.data)}:{url:src.url}).promise;}
 var DOC=null;
-window.openPdf=function(src){
+window.openPdf=function(src,opts){
+  opts=opts||{};
   if(typeof pdfjsLib==='undefined'){post('error:lib');return;}
   load(src).then(function(pdf){
     DOC=pdf;
     post('pages:'+pdf.numPages);
+    var from=Math.max(1,Math.min(pdf.numPages,opts.from||1)),to=Math.max(from,Math.min(pdf.numPages,opts.to||pdf.numPages));
     var W=Math.min(window.innerWidth-16,900),box=document.getElementById('pages');
+    box.innerHTML='';
     var io=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting&&!e.target.dataset.done){e.target.dataset.done=1;draw(pdf,+e.target.dataset.n,e.target);}});},{rootMargin:'800px 0px'});
-    pdf.getPage(1).then(function(p1){
+    // الصفحة الظاهرة الآن (للعدّاد في التطبيق): الأقرب لمنتصف الشاشة
+    var cur=0,pio=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){var n=+e.target.dataset.n;if(n!==cur){cur=n;post('page:'+n);}}});},{rootMargin:'-45% 0px -45% 0px'});
+    pdf.getPage(from).then(function(p1){
       var r=p1.getViewport({scale:1});
-      for(var n=1;n<=pdf.numPages;n++){var d=document.createElement('div');d.className='pg';d.dataset.n=n;d.style.width=W+'px';d.style.height=(W*r.height/r.width)+'px';box.appendChild(d);io.observe(d);}
+      for(var n=from;n<=to;n++){var d=document.createElement('div');d.className='pg';d.dataset.n=n;d.style.width=W+'px';d.style.height=(W*r.height/r.width)+'px';
+        var tag=document.createElement('span');tag.className='tag';tag.textContent=n;d.appendChild(tag);box.appendChild(d);io.observe(d);pio.observe(d);}
       post('ready');
+      var g=opts.goto&&opts.goto>=from&&opts.goto<=to?opts.goto:from;
+      requestAnimationFrame(function(){window.scrollToPage(g,true);});
     });
   }).catch(function(e){post('error:'+e.message);});
 };
+window.scrollToPage=function(n,instant){var el=document.querySelector('.pg[data-n="'+n+'"]');if(el){el.scrollIntoView({block:'start',behavior:instant?'auto':'smooth'});}};
 function draw(pdf,n,el){pdf.getPage(n).then(function(p){
   var v0=p.getViewport({scale:1}),dpr=Math.min(window.devicePixelRatio||1,2.5),W=parseFloat(el.style.width),v=p.getViewport({scale:W/v0.width*dpr});
   var cv=document.createElement('canvas');cv.width=v.width;cv.height=v.height;el.style.height=(W*v0.height/v0.width)+'px';el.appendChild(cv);

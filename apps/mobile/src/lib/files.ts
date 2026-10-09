@@ -97,10 +97,24 @@ export function removeDownload(key: string) {
   if (local.exists) local.delete();
 }
 
-/** يفتح PDF داخل التطبيق نفسه (ويحمّله أولاً إن لم يكن محفوظاً) */
-export async function openPdf(key: string, title?: string) {
+export interface OpenOptions {
+  /** معرّف الملزمة (لعرض فهرسها داخل العارض) */
+  docId?: string;
+  /** نطاق صفحات (فصل) والصفحة التي يبدأ منها */
+  from?: number;
+  to?: number;
+  page?: number;
+}
+
+/** يفتح PDF داخل التطبيق نفسه (ويحمّله أولاً إن لم يكن محفوظاً)، اختيارياً على فصل أو صفحة */
+export async function openPdf(key: string, title?: string, opts: OpenOptions = {}) {
   const file = await downloadMaterial(key);
-  router.push({ pathname: '/pdf', params: { uri: file.uri, title: title ?? 'ملف PDF' } });
+  const params: Record<string, string> = { uri: file.uri, title: title ?? 'ملف PDF' };
+  if (opts.docId) params.doc = opts.docId;
+  if (opts.from) params.from = String(opts.from);
+  if (opts.to) params.to = String(opts.to);
+  if (opts.page) params.page = String(opts.page);
+  router.push({ pathname: '/pdf', params });
 }
 
 export async function sharePdf(key: string, title?: string) {

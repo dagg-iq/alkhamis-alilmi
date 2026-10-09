@@ -13,6 +13,7 @@ import { RichText, clock } from '@/components/rich-text';
 import { Chip, IconButton, Row, T, MAX_WIDTH } from '@/components/ui';
 import { useMe } from '@/lib/auth';
 import { conversationTitle } from '@/lib/chat';
+import { openDocumentAt } from '@/lib/outline';
 import { markdownPdf, sendAttachment } from '@/lib/pdf';
 import { loadGoal } from '@/lib/goal';
 import { loadMyGrades, loadSubjects, shortSubject } from '@/lib/queries';
@@ -30,8 +31,16 @@ const QUICK: { icon: IconName; label: string; prompt: (subject: string) => strin
   { icon: 'target', label: 'انصحني حسب درجاتي', prompt: () => 'شوف درجاتي وهدفي، وقل لي بصراحة وضعي، وأي مادة أركز عليها هذا الأسبوع، واعمل لي خطة دراسة قصيرة.' },
 ];
 
+/** طلبات جاهزة عند السؤال من داخل ملزمة/كتاب (الصفحة أو الفصل الحالي) */
+const DOC_QUICK: { icon: IconName; label: string; prompt: (hasRange: boolean) => string }[] = [
+  { icon: 'file', label: 'اشرح هذه الصفحة', prompt: () => 'اشرح لي هذه الصفحة بالتفصيل الوافي، نقطة نقطة، مع ذكر رقم الصفحة.' },
+  { icon: 'book', label: 'اشرح الفصل', prompt: (r) => (r ? 'اشرح لي هذا الفصل كاملاً بالتفصيل بحسب ترتيب صفحاته، مع رقم الصفحة بجانب كل فقرة.' : 'اشرح لي هذا الفصل كاملاً بالتفصيل.') },
+  { icon: 'list', label: 'لخّص الفصل', prompt: () => 'لخّص لي هذا الفصل في ملزمة مركزة: التعاريف والقوانين والتعليلات، مع أرقام الصفحات.' },
+  { icon: 'quiz', label: 'أسئلة من الفصل', prompt: () => 'اعمل لي أسئلة امتحانية متنوعة من هذا الفصل مع الإجابات النموذجية، واذكر صفحة كل إجابة في الكتاب.' },
+];
+
 export default function AiChat() {
-  const params = useLocalSearchParams<{ id: string; subjectId?: string; prompt?: string }>();
+  const params = useLocalSearchParams<{ id: string; subjectId?: string; prompt?: string; doc?: string; docPage?: string; from?: string; to?: string; docTitle?: string }>();
   const { c, verdict } = useTheme();
   const me = useMe();
   const rules = useGradingRules();
@@ -43,6 +52,9 @@ export default function AiChat() {
   const [text, setText] = useState(params.prompt ?? '');
   const [subjectId, setSubjectId] = useState<string | null>(params.subjectId || null);
   const [subjects, setSubjects] = useState<Subject[]>([]);
+  // السؤال من داخل عارض ملزمة: الملف والصفحة أو الفصل الذي يقرؤه الآن
+  const [docCtx, setDocCtx] = useState<{ documentId: string; page?: number; from?: number; to?: number; title?: string } | null>(
+    params.doc ? { documentId: params.doc, page: params.docPage ? Number(params.docPage) : undefined, from: params.from ? Number(params.from) : undefined, to: params.to ? Number(params.to) : undefined, title: params.docTitle } : null);
   const [thinking, setThinking] = useState(false);
   const [remaining, setRemaining] = useState<number | null>(null);
   const listRef = useRef<FlatList<Msg>>(null);
@@ -74,6 +86,7 @@ export default function AiChat() {
     try {
       const res = await callFunction<{ chatId: string; answer: string; messageId: string | null; sources: AiSource[]; remaining?: number | null }>('ai-chat', {
         chatId, message: question, subjectId, brief: brief.current,
+        ...(docCtx ? { context: { documentId: docCtx.documentId, page: docCtx.page, from: docCtx.from, to: docCtx.to } } : {}),
       });
       setChatId(res.chatId);
       if (res.remaining !== undefined) setRemaining(res.remaining);
@@ -176,7 +189,7 @@ export default function AiChat() {
               <T dim center size={14}>مسألة، قانون، تعريف، تلخيص، أو أسئلة امتحانية.{'\n'}أعرف درجاتك وهدفك، فاسألني عن خطتك أيضاً.</T>
             </View>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
-              {QUICK.map((q) => (
+              {(docCtx ? DOC_QUICK.map((q) => ({ ...q, prompt: () => q.prompt(!!docCtx.from) })) : QUICK).map((q) => (
                 <PressScale key={q.label} onPress={() => ask(q.prompt(subjectName))} haptic accessibilityRole="button"
                   style={{ flexGrow: 1, flexBasis: '45%', backgroundColor: c.card, borderRadius: 18, borderWidth: 1, borderColor: c.line, padding: 14, gap: 8 }}>
                   <View style={{ width: 36, height: 36, borderRadius: 12, backgroundColor: c.soft, alignItems: 'center', justifyContent: 'center' }}>
@@ -209,12 +222,15 @@ export default function AiChat() {
             {item.sources?.length ? (
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
                 {item.sources.map((s, i) => (
-                  <Pressable key={i} disabled={!s.lecture_id}
-                    onPress={() => s.lecture_id && router.push({ pathname: '/lecture/[id]', params: { id: s.lecture_id, t: String(s.start ?? 0) } })}
+                  <Pressable key={i} disabled={!s.lecture_id && !s.document_id}
+                    onPress={() => {
+                      if (s.lecture_id) router.push({ pathname: '/lecture/[id]', params: { id: s.lecture_id, t: String(s.start ?? 0) } });
+                      else if (s.document_id) openDocumentAt(s.document_id, { page: s.page }).catch((e) => Alert.alert('تعذّر الفتح', e instanceof Error ? e.message : ''));
+                    }}
                     style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, backgroundColor: c.soft }}>
                     <Icon name={s.lecture_id ? 'play' : 'file'} size={12} color={c.accent} />
                     <T size={11} weight="bold" color={c.softInk}>
-                      [{arDigits(i + 1)}] {s.title}{s.page ? ` · ص${arDigits(s.page)}` : ''}{s.lecture_id ? ` · ${arDigits(clock(s.start ?? 0))}` : ''}
+                      [{arDigits(i + 1)}] {s.title}{s.page ? ` · ص${arDigits(s.page)}${s.printed && s.printed !== String(s.page) ? ` (المطبوعة ${arDigits(s.printed)})` : ''}` : ''}{s.lecture_id ? ` · ${arDigits(clock(s.start ?? 0))}` : ''}
                     </T>
                   </Pressable>
                 ))}
@@ -234,8 +250,17 @@ export default function AiChat() {
         <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled"
           style={{ flexGrow: 0, flexShrink: 0, height: 46, backgroundColor: c.card, borderTopWidth: 1, borderTopColor: c.line }}
           contentContainerStyle={{ gap: 6, paddingHorizontal: 12, alignItems: 'center', paddingTop: 6 }}>
-          {QUICK.map((q) => <Chip small key={q.label} label={q.label} onPress={() => ask(q.prompt(subjectName))} />)}
+          {(docCtx ? DOC_QUICK.map((q) => ({ ...q, prompt: () => q.prompt(!!docCtx.from) })) : QUICK).map((q) => <Chip small key={q.label} label={q.label} onPress={() => ask(q.prompt(subjectName))} />)}
         </ScrollView>
+      ) : null}
+      {docCtx ? (
+        <Row gap={8} style={{ backgroundColor: c.soft, paddingVertical: 8, paddingHorizontal: Math.max(12, (width - MAX_WIDTH) / 2), borderTopWidth: 1, borderTopColor: c.line }}>
+          <Icon name="file" size={16} color={c.accent} />
+          <T size={12} weight="bold" color={c.softInk} lines={1} style={{ flex: 1 }}>
+            تسأل عن: {docCtx.title ?? 'الملزمة'}{docCtx.page ? ` · صفحة ${arDigits(docCtx.page)}` : docCtx.from ? ` · ص ${arDigits(docCtx.from)}–${arDigits(docCtx.to ?? docCtx.from)}` : ''}
+          </T>
+          <Pressable onPress={() => setDocCtx(null)} accessibilityLabel="إلغاء ربط السؤال بالملزمة" hitSlop={8}><Icon name="close" size={16} color={c.softInk} /></Pressable>
+        </Row>
       ) : null}
       <Row gap={8} style={{ backgroundColor: c.card, paddingTop: 10, paddingBottom: insets.bottom + 10, borderTopWidth: messages.length && !thinking ? 0 : 1, borderTopColor: c.line, alignItems: 'flex-end', paddingHorizontal: Math.max(12, (width - MAX_WIDTH) / 2) }}>
         <TextInput

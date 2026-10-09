@@ -172,4 +172,30 @@ do $$ begin
 end $$;
 reset role;
 
+-- ٩. فهرس الكتب والملازم: الطالب يقرؤه ولا يكتبه، والربط بين الملفات يعمل
+insert into public.documents (id, subject_id, title, file_key, kind, pages, is_published)
+select '00000000-0000-0000-0000-0000000000d1', id, 'كتاب الفيزياء', 'materials/b.pdf', 'book', 100, true from public.subjects where slug = 'physics';
+insert into public.documents (id, subject_id, title, file_key, kind, pages, is_published)
+select '00000000-0000-0000-0000-0000000000d2', id, 'ملزمة الفيزياء', 'materials/m.pdf', 'malzama', 50, true from public.subjects where slug = 'physics';
+insert into public.documents (id, subject_id, title, file_key, kind, pages, is_published)
+select '00000000-0000-0000-0000-0000000000d3', id, 'ملزمة مخفية', 'materials/h.pdf', 'malzama', 50, false from public.subjects where slug = 'physics';
+insert into public.document_outline (id, document_id, level, title, start_page, end_page, sort, embedding) values
+  ('00000000-0000-0000-0000-0000000000e1', '00000000-0000-0000-0000-0000000000d1', 2, 'المتسعات', 10, 20, 1, array_fill(0.1::float, array[768])::extensions.vector),
+  ('00000000-0000-0000-0000-0000000000e2', '00000000-0000-0000-0000-0000000000d2', 2, 'السعة الكهربائية', 3, 8, 1, array_fill(0.1::float, array[768])::extensions.vector),
+  ('00000000-0000-0000-0000-0000000000e3', '00000000-0000-0000-0000-0000000000d3', 2, 'مخفي', 1, 2, 1, array_fill(0.1::float, array[768])::extensions.vector);
+
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000b');
+do $$ begin
+  assert (select count(*) from public.document_outline) = 2, 'الطالب يرى فهرس ملف غير منشور أو لا يرى المنشور';
+  assert (select count(*) from public.related_topics('00000000-0000-0000-0000-0000000000e1')) = 1, 'الربط بين الكتاب والملزمة لا يعمل أو يكشف المخفي';
+  assert (select title from public.related_topics('00000000-0000-0000-0000-0000000000e1') limit 1) = 'السعة الكهربائية';
+  begin
+    insert into public.document_outline (document_id, level, title, start_page) values ('00000000-0000-0000-0000-0000000000d1', 1, 'اختراق', 1);
+    raise exception 'طالب كتب في الفهرس!';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+reset role;
+
 select 'ALL RLS TESTS PASSED' as result;

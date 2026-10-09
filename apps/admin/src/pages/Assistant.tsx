@@ -351,7 +351,7 @@ function FilesTab({ data: d, reload }: { data: Data; reload: () => Promise<void>
     if (indexAfter) {
       for (let i = 0; i < added.length; i++) {
         try {
-          await ingestDocument(added[i].id, (n, total) => setStep(`فهرسة (${i + 1}/${added.length}) «${added[i].title}» — ${n}/${total} صفحة`));
+          await ingestDocument(added[i].id, (n, total, stage) => setStep(stage === 'outline' ? `بناء فهرس الفصول والمواضيع (${i + 1}/${added.length}) «${added[i].title}»…` : `قراءة (${i + 1}/${added.length}) «${added[i].title}» — ${n}/${total} صفحة`));
         } catch (e) {
           toast(`${added[i].title}: ${e instanceof Error ? e.message : 'فشلت الفهرسة'}`, true);
           if (e instanceof Error && e.message.includes('رصيد')) break;

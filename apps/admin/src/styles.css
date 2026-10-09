@@ -217,3 +217,14 @@ tbody tr:hover { background: var(--bg); }
 .sc-thumb-act button:disabled { opacity: .3; cursor: default; }
 .sc-prev { display: flex; gap: 12px; overflow-x: auto; padding: 6px 0 10px; }
 .sc-prev img { height: 360px; width: auto; border-radius: 10px; border: 1px solid var(--line); background: #fff; flex: none; }
+
+/* محرر فهرس الكتب */
+.ol-list { display: flex; flex-direction: column; gap: 12px; }
+.ol-chapter { border: 1px solid var(--line); border-radius: 18px; padding: 12px; display: flex; flex-direction: column; gap: 8px; background: var(--bg); }
+.ol-row { display: grid; gap: 8px; align-items: center; }
+.ol-row.ch { grid-template-columns: 30px minmax(160px, 1fr) 84px 84px auto auto; }
+.ol-row.tp { grid-template-columns: 14px minmax(160px, 1fr) 84px auto auto; padding-inline-start: 22px; }
+.ol-row .input { height: 38px; font-size: 14px; }
+.ol-no { display: inline-flex; width: 28px; height: 28px; border-radius: 9px; background: var(--soft); color: var(--accent); align-items: center; justify-content: center; font-family: 'Display', serif; }
+.ol-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); opacity: .5; }
+@media (max-width: 700px) { .ol-row.ch, .ol-row.tp { grid-template-columns: 1fr 1fr; } }
