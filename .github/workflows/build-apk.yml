@@ -113,7 +113,9 @@ jobs:
           mkdir -p out
           cp apps/mobile/android/app/build/outputs/apk/release/app-release.apk out/saey.apk
           echo "بصمة توقيع النسخة (يجب أن تبقى ثابتة بين النسخ):"
-          keytool -printcert -jarfile out/saey.apk | grep -E 'Owner|SHA256' || true
+          # النسخ الحديثة موقّعة بصيغة v2/v3 فلا يقرؤها keytool، لذلك نستخدم apksigner من أدوات أندرويد
+          APKSIGNER=$(ls -d "${ANDROID_HOME:-/usr/local/lib/android/sdk}"/build-tools/*/apksigner 2>/dev/null | sort -V | tail -1)
+          if [ -n "$APKSIGNER" ]; then "$APKSIGNER" verify --print-certs out/saey.apk | grep -E 'DN|SHA-256' || true; else echo "apksigner غير متاح"; fi
           ls -lh out
 
       - uses: actions/upload-artifact@v4
