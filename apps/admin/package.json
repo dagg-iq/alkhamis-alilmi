@@ -12,8 +12,10 @@
   "dependencies": {
     "@saey/shared": "*",
     "@supabase/supabase-js": "^2.117.2",
+    "html2canvas": "^1.4.1",
     "katex": "^0.16.11",
     "marked": "^12.0.2",
+    "pdf-lib": "^1.17.1",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-router-dom": "^7.9.0"

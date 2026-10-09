@@ -53,6 +53,15 @@ const data = {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ key: 'materials/test.pdf', url: 'https://yjxhprmtyuqnbgraocar.supabase.co/storage/v1/fake-put' }) });
     }
     if (url.pathname.includes('/storage/v1/fake-put')) return route.fulfill({ status: 200, body: '' });
+    if (url.pathname.endsWith('/functions/v1/scan-convert')) {
+      const html = `<section class="page"><div style="text-align:center;font-weight:700;font-size:20px;border-bottom:2px solid #111;padding-bottom:6px">امتحان الفيزياء — الشهر الأول</div>
+<div style="display:flex;justify-content:space-between;margin-top:10px"><span>الزمن: ساعتان</span><span>الدرجة: ٥٠</span></div>
+<p style="margin-top:16px"><b>س١:</b> احسب السعة المكافئة إذا كانت $C = \\frac{\\epsilon_0 A}{d}$ و $d = 2\\,\\text{mm}$.</p>
+<table border="1" style="width:100%;margin-top:10px"><tr><th>القيمة</th><th>الرمز</th></tr><tr><td>٢٠ فاراد</td><td>C</td></tr></table>
+<img data-page="1" data-box="100,100,400,500" style="width:40%">
+<div class="line"></div><div class="line"></div><p><b>س٢:</b> علل: تزداد سعة المتسعة عند إدخال مادة عازلة. <span class="dots"></span></p></section>`;
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ html }) });
+    }
     if (url.pathname.endsWith('/functions/v1/content-ai')) {
       const b = JSON.parse(req.postData() || '{}');
       const vids = [
@@ -89,6 +98,16 @@ const data = {
       await page.fill(sel, val.join('='));
     }
     if (process.env.TAB) await page.getByRole('tab', { name: process.env.TAB }).click();
+    if (process.env.SCAN) {
+      await page.getByRole('button', { name: /من صور/ }).click();
+      await page.setInputFiles('input[type=file][multiple]', process.env.SCAN.split(','));
+      await page.locator('input.input').first().fill('أسئلة الفيزياء — الشهر الأول');
+      await page.getByRole('button', { name: 'حوّل إلى PDF' }).click();
+      await page.waitForSelector('.sc-prev img', { timeout: 30000 });
+      await page.waitForTimeout(500);
+      const [dl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'تنزيل PDF' }).click()]);
+      await dl.saveAs('/tmp/claude-0/converted.pdf');
+    }
     if (process.env.UPLOAD) {
       await page.setInputFiles('input[type=file]', process.env.UPLOAD.split(','));
       await page.waitForTimeout(2500);

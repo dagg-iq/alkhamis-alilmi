@@ -4,6 +4,7 @@ import {
 } from '@saey/shared';
 import { useState } from 'react';
 import { askConfirm } from '../components/dialog';
+import { ScanConvert } from '../components/ScanConvert';
 import { Empty, Field, Markdown, Modal, Tabs, check, useAction } from '../components/ui';
 import { useLoad } from '../lib/hooks';
 import { must, signedUrl, supabase } from '../lib/supabase';
@@ -16,6 +17,7 @@ export default function Questions() {
   const [filter, setFilter] = useState<Filter>('draft');
   const [edit, setEdit] = useState<Draft | null>(null);
   const [preview, setPreview] = useState(false);
+  const [scan, setScan] = useState(false);
 
   const q = useLoad(async () => {
     const [subjects, sections, sets] = await Promise.all([
@@ -47,13 +49,16 @@ export default function Questions() {
     <>
       <div className="head">
         <h1>الأسئلة</h1>
-        <button className="btn primary" onClick={() => { setPreview(false); setEdit({ subject_id: d.subjects[0]?.id, kind: 'expected', period: 'month1', title: '', content_md: '' }); }}>+ أسئلة جديدة</button>
+        <div className="row">
+        <button className="btn primary" onClick={() => setScan(true)}>+ من صور (تحويل ذكي إلى PDF)</button>
+        <button className="btn" onClick={() => { setPreview(false); setEdit({ subject_id: d.subjects[0]?.id, kind: 'expected', period: 'month1', title: '', content_md: '' }); }}>+ كتابة نص يدوياً</button>
+        </div>
       </div>
       <Tabs<Filter> value={filter} onChange={setFilter} options={[
         { key: 'draft', label: 'مسودات تنتظر المراجعة', count: d.sets.filter((s) => s.status === 'draft').length },
         { key: 'published', label: 'المنشورة' },
       ]} />
-      <p className="small dim">الأسئلة المصوّرة من التطبيق تصل هنا كمسودة: راجع النص المستخرج وصحّحه ثم انشره.</p>
+      <p className="small dim">الأسئلة المحوّلة من صور (هنا أو من التطبيق) تحفظ كملف PDF بنفس تنسيق الورقة. اختر «مسودات» لمراجعة ما لم يُنشر بعد.</p>
       {list.length === 0 ? <Empty>لا يوجد شيء هنا</Empty> : (
         <div className="table-wrap">
           <table>
@@ -79,6 +84,8 @@ export default function Questions() {
           </table>
         </div>
       )}
+
+      {scan ? <ScanConvert subjects={d.subjects} sections={d.sections} onClose={() => setScan(false)} onSaved={q.reload} /> : null}
 
       {edit ? (
         <Modal title={edit.id ? 'مراجعة الأسئلة' : 'أسئلة جديدة'} onClose={() => setEdit(null)}>
