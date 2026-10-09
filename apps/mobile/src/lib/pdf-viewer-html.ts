@@ -52,12 +52,30 @@ window.openPdf=function(src,opts){
   }).catch(function(e){post('error:'+e.message);});
 };
 window.scrollToPage=function(n,instant){var el=document.querySelector('.pg[data-n="'+n+'"]');if(el){el.scrollIntoView({block:'start',behavior:instant?'auto':'smooth'});}};
+// دقة الرسم = كثافة شاشة الهاتف × التكبير الحالي بالإصبعين (حتى يبقى النص حاداً)، بحد أقصى حتى لا تمتلئ الذاكرة
+function quality(){var z=(window.visualViewport&&window.visualViewport.scale)||1;return Math.min((window.devicePixelRatio||1)*z,5);}
 function draw(pdf,n,el){var gen=el.dataset.gen;pdf.getPage(n).then(function(p){
   if(el.dataset.gen!==gen||!el.dataset.done)return; // ابتعدت الصفحة قبل أن تُرسم
-  var v0=p.getViewport({scale:1}),dpr=Math.min(window.devicePixelRatio||1,2),W=parseFloat(el.style.width),v=p.getViewport({scale:W/v0.width*dpr});
-  var cv=document.createElement('canvas');cv.width=v.width;cv.height=v.height;el.style.height=(W*v0.height/v0.width)+'px';el.appendChild(cv);
-  p.render({canvasContext:cv.getContext('2d'),viewport:v});
+  var v0=p.getViewport({scale:1}),W=parseFloat(el.style.width),q=quality(),px=Math.min(W*q,3600),v=p.getViewport({scale:px/v0.width});
+  var cv=document.createElement('canvas');cv.width=Math.floor(v.width);cv.height=Math.floor(v.height);el.style.height=(W*v0.height/v0.width)+'px';
+  var task=p.render({canvasContext:cv.getContext('2d'),viewport:v});
+  // الرسم الجديد يحل محل القديم بعد اكتماله (بلا وميض عند إعادة الرسم بعد التكبير)
+  task.promise.then(function(){
+    if(el.dataset.gen!==gen||!el.dataset.done)return;
+    var old=el.querySelector('canvas');if(old){old.width=0;old.height=0;old.remove();}
+    el.appendChild(cv);el.dataset.q=String(q);
+  }).catch(function(){});
 });}
+// بعد التكبير بالإصبعين: نعيد رسم الصفحات الظاهرة بدقة أعلى
+var zt=0;
+if(window.visualViewport)window.visualViewport.addEventListener('resize',function(){clearTimeout(zt);zt=setTimeout(function(){
+  if(!DOC)return;var q=quality();
+  document.querySelectorAll('.pg').forEach(function(el){
+    if(!el.dataset.done)return;var r=el.getBoundingClientRect();
+    var near=r.bottom>-window.innerHeight&&r.top<window.innerHeight*2;
+    if(near&&(+el.dataset.q||0)<q*0.85){el.dataset.gen=(+el.dataset.gen||0)+1;draw(DOC,+el.dataset.n,el);}
+  });
+},350);});
 function pageJpeg(pdf,n,width,quality){
   return pdf.getPage(n).then(function(p){
     var v0=p.getViewport({scale:1}),v=p.getViewport({scale:width/v0.width});

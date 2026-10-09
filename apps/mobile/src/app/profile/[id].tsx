@@ -39,10 +39,11 @@ export default function ProfileScreen() {
     try {
       const img = await compressImage(res.assets[0].uri, 400, 0.75);
       const path = `${me.id}/${Date.now()}.jpg`;
-      const { error } = await supabase.storage.from('avatars').upload(path, await new File(img.uri).bytes(), { contentType: 'image/jpeg', upsert: true });
+      const { error } = await supabase.storage.from('avatars').upload(path, await new File(img.uri).bytes(), { contentType: 'image/jpeg', upsert: false });
       if (error) throw new Error(error.message);
       const url = supabase.storage.from('avatars').getPublicUrl(path).data.publicUrl;
-      await supabase.from('profiles').update({ avatar_url: url }).eq('id', me.id);
+      const { error: pe } = await supabase.from('profiles').update({ avatar_url: url }).eq('id', me.id);
+      if (pe) throw new Error(pe.message);
       await Promise.all([q.reload(), refreshProfile()]);
     } catch (e) {
       Alert.alert('تعذّر تغيير الصورة', e instanceof Error ? e.message : '');

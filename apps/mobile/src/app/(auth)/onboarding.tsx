@@ -44,7 +44,7 @@ export default function Onboarding() {
         const img = await compressImage(localAvatar, 400, 0.75);
         const path = `${userId}/${Date.now()}.jpg`;
         const bytes = await new File(img.uri).bytes();
-        const { error } = await supabase.storage.from('avatars').upload(path, bytes, { contentType: 'image/jpeg', upsert: true });
+        const { error } = await supabase.storage.from('avatars').upload(path, bytes, { contentType: 'image/jpeg', upsert: false });
         if (error) throw new Error(error.message);
         avatarUrl = supabase.storage.from('avatars').getPublicUrl(path).data.publicUrl;
       }

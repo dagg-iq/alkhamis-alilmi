@@ -3,7 +3,7 @@ import {
   targetLabel, targetSchoolDay, type Post, type Subject, type Task,
 } from '@saey/shared';
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { Icon } from '@/components/icon';
 import { CountUp } from '@/components/motion';
@@ -17,10 +17,11 @@ import { must, supabase } from '@/lib/supabase';
 import { useTheme } from '@/lib/theme';
 import { useLoad } from '@/lib/use-load';
 
-function greeting() {
-  const h = new Date().getHours();
-  if (h < 12) return 'صباح الخير';
-  if (h < 18) return 'مساء النور';
+/** تحية بحسب ساعة الهاتف: الصباح يبدأ ٤ فجراً (قبلها ما زال ليلاً)، والعصر حتى المغرب */
+function greeting(now = new Date()) {
+  const h = now.getHours();
+  if (h >= 4 && h < 12) return 'صباح الخير';
+  if (h >= 12 && h < 17) return 'مساء النور';
   return 'مساء الخير';
 }
 
@@ -29,6 +30,10 @@ export default function Home() {
   const me = useMe();
   const rules = useGradingRules();
   const schedSettings = useScheduleSettings();
+
+  // الساعة: تتحدث كل دقيقة حتى تتغير التحية والتاريخ والتطبيق مفتوح
+  const [clock, setClock] = useState(() => new Date());
+  useEffect(() => { const t = setInterval(() => setClock(new Date()), 60_000); return () => clearInterval(t); }, []);
 
   const q = useLoad(async () => {
     const now = new Date();
@@ -85,8 +90,10 @@ export default function Home() {
     <Screen onRefresh={q.refresh} refreshing={q.refreshing}>
       <Row style={{ justifyContent: 'space-between' }}>
         <View style={{ flex: 1 }}>
-          <T dim size={14}>{formatDayDate(new Date())}</T>
-          <T weight="bold" size={24} lines={1}>{greeting()}، {firstName}</T>
+          <T dim size={14}>{formatDayDate(clock)}</T>
+          <Pressable onPress={() => router.push(`/profile/${me.id}`)} accessibilityRole="button" accessibilityLabel="ملفي الشخصي" hitSlop={6}>
+            <T weight="bold" size={24} lines={1}>{greeting(clock)}، <T weight="bold" size={24} color={c.accent}>{firstName}</T></T>
+          </Pressable>
         </View>
         <Row gap={8}>
           <IconButton name="bell" label="الإشعارات" onPress={() => router.push('/notifications')} badge={d?.unreadNotifs} />

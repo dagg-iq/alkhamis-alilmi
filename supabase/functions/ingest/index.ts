@@ -8,7 +8,7 @@ import {
 } from '../_shared/outline.ts';
 import { handler, HttpError, json } from '../_shared/cors.ts';
 import { admin, getCaller, getSetting } from '../_shared/supabase.ts';
-import { chunkText, embed, fileRef, firstAvailableSlot, generate, poolSlots, slotRank, strongestSlot, GeminiQuotaError, parseJson, uploadFile, MAIN_MODELS, modelChain } from '../_shared/gemini.ts';
+import { chunkText, embed, toBase64, fileRef, firstAvailableSlot, generate, poolSlots, slotRank, strongestSlot, GeminiQuotaError, parseJson, uploadFile, MAIN_MODELS, modelChain } from '../_shared/gemini.ts';
 import { getObject } from '../_shared/storage.ts';
 
 // الفهرسة تُنفَّذ مرة واحدة للكتاب، فنفضّل الجودة: صفحات أقل في الطلب الواحد وأقوى نموذج متاح وصور بدقة عالية
@@ -75,6 +75,91 @@ async function readRange(fileUri: string, slot: string, from: number, to: number
   const byPage = new Map<number, ReadPage>();
   for (const p of [...rest, ...redo]) byPage.set(p.page, p);
   return [...byPage.values()].sort((a, b) => a.page - b.page);
+}
+
+const INLINE_PROMPT = (from: number, to: number) => `هذا الملف يحتوي ${to - from + 1} صفحة فقط، وهي الصفحات من ${from} إلى ${to} من الكتاب (ترقيم صفحات ملف PDF الكامل).
+الصفحة الأولى في هذا الملف = صفحة ${from}، والثانية = ${from + 1}، وهكذا. اكتب في page رقمها في الكتاب (${from}..${to}) لا في هذا الملف.
+${READ_PROMPT(from, to).split('\n').slice(1).join('\n')}`;
+
+/** صفحات محددة من ملف PDF صغير (قطعته لوحة التحكم): أسرع بكثير من إرسال الكتاب كاملاً، وأي مفتاح يقرؤه */
+async function readInline(pdf: Uint8Array | string, from: number, to: number, deadline: number): Promise<ReadPage[]> {
+  if (Date.now() > deadline) return [];
+  const b64 = typeof pdf === 'string' ? pdf : toBase64(pdf);
+  let pages: ReadPage[] = [];
+  try {
+    const raw = await generate(MAIN_MODELS, [{
+      role: 'user',
+      parts: [{ inline_data: { mime_type: 'application/pdf', data: b64 } }, { text: INLINE_PROMPT(from, to) }],
+    }], { json: true, temperature: 0, maxOutputTokens: 32768, pool: 'admin', thinking: 'low', extraConfig: { mediaResolution: 'MEDIA_RESOLUTION_HIGH' } });
+    const parsed = parseJson<ReadPage[] | { pages: ReadPage[] }>(raw);
+    const list = Array.isArray(parsed) ? parsed : parsed.pages;
+    pages = (Array.isArray(list) ? list : []).filter((p) => Number.isInteger(Number(p?.page)) && Number(p.page) >= from && Number(p.page) <= to)
+      .map((p) => ({
+        page: Number(p.page),
+        printed: p.printed == null || String(p.printed).trim() === '' || String(p.printed) === 'null' ? null : String(p.printed).trim().slice(0, 12),
+        text: String(p.text ?? ''),
+        headings: Array.isArray(p.headings) ? p.headings.filter((h) => h && typeof h.title === 'string') : [],
+      }));
+  } catch (e) {
+    if (e instanceof GeminiQuotaError) throw e;
+    console.error('read inline failed', from, to, String((e as Error).message ?? e).slice(0, 200));
+  }
+  const got = new Set(pages.map((p) => p.page));
+  if (from === to || Date.now() > deadline) {
+    // الصفحة المنفردة التي فشلت لا تُكتب فارغة: تبقى ناقصة وتُعاد في المرة القادمة
+    return pages;
+  }
+  const missing: number[] = [];
+  for (let n = from; n <= to; n++) if (!got.has(n)) missing.push(n);
+  if (!missing.length) return pages;
+  // نقطع الملف الصغير نفسه (رخيص) ونعيد الصفحات الناقصة
+  const src = await PDFDocument.load(typeof pdf === 'string' ? Uint8Array.from(atob(pdf), (c) => c.charCodeAt(0)) : pdf, { ignoreEncryption: true, updateMetadata: false });
+  const groups: number[][] = [];
+  for (const n of missing) {
+    const g = groups[groups.length - 1];
+    if (g && g[g.length - 1] === n - 1 && g.length < Math.ceil((to - from + 1) / 2)) g.push(n); else groups.push([n]);
+  }
+  for (const g of groups) {
+    const sub = await PDFDocument.create();
+    const copied = await sub.copyPages(src, g.map((n) => n - from));
+    copied.forEach((pg) => sub.addPage(pg));
+    pages.push(...await readInline(await sub.save(), g[0], g[g.length - 1], deadline));
+  }
+  const byPage = new Map<number, ReadPage>();
+  for (const p of pages) byPage.set(p.page, p);
+  return [...byPage.values()].sort((a, b) => a.page - b.page);
+}
+
+/** يحفظ صفحات مقروءة (مقاطع البحث + document_pages) ويحدّث عدد الصفحات المتتالية المكتملة */
+async function storePages(doc: Record<string, any>, read: ReadPage[], total: number) {
+  if (read.length) {
+    const nums = read.map((p) => p.page);
+    await admin.from('content_chunks').delete().eq('source_type', 'document').eq('source_id', doc.id).in('page', nums);
+    const rows: { page: number; content: string }[] = [];
+    for (const p of read) for (const c of chunkText(p.text)) rows.push({ page: p.page, content: c });
+    if (rows.length) {
+      const vectors = await embed(rows.map((r) => r.content), 'RETRIEVAL_DOCUMENT', 'admin');
+      const { error } = await admin.from('content_chunks').insert(rows.map((r, i) => ({
+        source_type: 'document', source_id: doc.id, subject_id: doc.subject_id, chapter_id: doc.chapter_id,
+        page: r.page, content: r.content, embedding: vectors[i],
+      })));
+      if (error) throw error;
+    }
+    const { error: pe } = await admin.from('document_pages').upsert(read.map((p) => ({
+      document_id: doc.id, page: p.page, printed: p.printed, headings: p.headings.slice(0, 8),
+      digest: p.text.replace(/\s+/g, ' ').trim().slice(0, 90) || null,
+      text: p.text.trim() || null,
+    })));
+    if (pe) throw pe;
+  }
+  // الصفحات المتتالية من ١ (القراءة تجري بالتوازي فقد تكتمل دفعة متأخرة قبل سابقتها)
+  const { data } = await admin.from('document_pages').select('page').eq('document_id', doc.id).order('page');
+  const have = new Set(((data ?? []) as { page: number }[]).map((r) => r.page));
+  let upTo = 0;
+  while (have.has(upTo + 1)) upTo++;
+  const done = upTo >= total;
+  await admin.from('documents').update({ pages: total, ingested_pages: upTo, ingest_status: done ? 'done' : 'running', ingest_error: null }).eq('id', doc.id);
+  return { done, ingested: upTo, pages: total, have: have.size };
 }
 
 async function ingestBatch(doc: Record<string, any>, restart: boolean) {
@@ -270,6 +355,29 @@ Deno.serve(handler(async (req) => {
   const { data: doc } = await admin.from('documents').select('*').eq('id', documentId).single();
   if (!doc) throw new HttpError(404, 'الملف غير موجود.');
   if (action === 'outline') return await buildOutline(doc);
+  // الطريقة الجديدة: لوحة التحكم تقطع صفحات قليلة من الكتاب وترسلها (لا رفع للكتاب كاملاً ولا ارتباط بمفتاح)
+  if (action === 'restart') {
+    await admin.from('content_chunks').delete().eq('source_type', 'document').eq('source_id', doc.id);
+    await admin.from('document_pages').delete().eq('document_id', doc.id);
+    await admin.from('document_outline').delete().eq('document_id', doc.id);
+    await admin.from('documents').update({ ingested_pages: 0, ingest_status: 'running', ingest_error: null, outline_status: 'none', outline_error: null }).eq('id', doc.id);
+    return json({ ok: true });
+  }
+  if (action === 'read') {
+    const from = Math.round(Number(body.from));
+    const to = Math.round(Number(body.to));
+    const total = Math.round(Number(body.total));
+    if (!(from >= 1 && to >= from && to - from < 20 && total >= to) || typeof body.pdf !== 'string') throw new HttpError(400, 'طلب قراءة غير صحيح.');
+    const started = Date.now();
+    try {
+      const read = await readInline(body.pdf, from, to, started + 110_000);
+      return json({ ...(await storePages(doc, read, total)), read: read.map((p) => p.page) });
+    } catch (e) {
+      const msg = e instanceof GeminiQuotaError ? `انتهت حصة Gemini على كل المفاتيح${e.message.includes('حتى') ? ` (${e.message.match(/حتى .+$/)?.[0]})` : ''}. اضغط «إكمال» بعدها ويكمل من حيث توقف.` : String((e as Error).message ?? e).slice(0, 300);
+      await admin.from('documents').update({ ingest_status: 'error', ingest_error: msg }).eq('id', doc.id);
+      throw new HttpError(e instanceof GeminiQuotaError ? 503 : 500, msg);
+    }
+  }
   if (action === 'embed_outline') return await embedOutline(doc);
   return await ingestBatch(doc, !!restart);
 }));

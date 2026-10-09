@@ -110,6 +110,8 @@ const rpc = {
       await page.locator(label.startsWith('text=') ? label : `[aria-label="${label}"]`).first().click({ timeout: 3000 }).catch((e) => errs.push('CLICK ' + label + ' ' + e.message.slice(0, 80)));
       await page.waitForTimeout(Number(process.env.CLICK_WAIT || 1500));
     }
+    // SCROLL=1 — ينزل لآخر الشاشة قبل اللقطة
+    if (process.env.SCROLL) { await page.evaluate(() => document.querySelectorAll('div').forEach((d) => { if (d.scrollHeight > d.clientHeight + 40 && getComputedStyle(d).overflowY !== 'visible') d.scrollTop = d.scrollHeight; })); await page.waitForTimeout(600); }
     const text = (await page.evaluate(() => document.body.innerText)).replace(/\s+/g, ' ').slice(0, 90);
     const name = r.replace(/[\/]/g, '_') || 'home';
     await page.screenshot({ path: `shots/${name}.png` });

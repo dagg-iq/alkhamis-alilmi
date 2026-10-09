@@ -25,13 +25,30 @@ const Ctx = createContext<AuthValue | null>(null);
 
 export const authRedirectUrl = () => Linking.createURL('auth-callback');
 
+// رمز الدخول يصل من طريقين معاً (نافذة الدخول + رابط العودة auth-callback): نستبدله مرة واحدة فقط،
+// وإلا نجح أحدهما وفشل الآخر فتظهر «تعذّر الدخول» رغم أن الدخول تم
+const exchanges = new Map<string, Promise<void>>();
+export function exchangeCode(code: string): Promise<void> {
+  let p = exchanges.get(code);
+  if (!p) {
+    p = (async () => {
+      const { error } = await supabase.auth.exchangeCodeForSession(code);
+      if (error) {
+        const { data } = await supabase.auth.getSession();
+        if (!data.session) throw new Error(error.message);
+      }
+    })();
+    exchanges.set(code, p);
+  }
+  return p;
+}
+
 /** يستخرج code من رابط العودة ويحوله إلى جلسة */
 export async function completeAuthFromUrl(url: string): Promise<boolean> {
   const parsed = Linking.parse(url);
   const code = parsed.queryParams?.code;
   if (typeof code === 'string') {
-    const { error } = await supabase.auth.exchangeCodeForSession(code);
-    if (error) throw new Error(error.message);
+    await exchangeCode(code);
     return true;
   }
   const errorDesc = parsed.queryParams?.error_description;

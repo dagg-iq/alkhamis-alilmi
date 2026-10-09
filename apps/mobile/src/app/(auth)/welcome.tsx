@@ -7,6 +7,7 @@ import { LogoMark } from '@/components/icon';
 import { enter } from '@/components/motion';
 import { Button, T } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
+import { supabase } from '@/lib/supabase';
 import { useTheme } from '@/lib/theme';
 
 export default function Welcome() {
@@ -20,7 +21,9 @@ export default function Welcome() {
     try {
       await signInWithGoogle();
     } catch (e) {
-      Alert.alert('تعذّر الدخول', e instanceof Error ? e.message : 'حاول مرة أخرى');
+      // إن تمّ الدخول فعلاً (من الطريق الآخر) لا نعرض خطأً
+      const { data } = await supabase.auth.getSession();
+      if (!data.session) Alert.alert('تعذّر الدخول', e instanceof Error ? e.message : 'حاول مرة أخرى');
     } finally {
       setBusy(false);
     }

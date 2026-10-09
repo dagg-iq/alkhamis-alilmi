@@ -168,35 +168,45 @@ function LinkedItem({ type, id, start }: { type: Linked['type']; id: string; sta
   return <AttachmentCard a={item} mine={false} />;
 }
 
-const DEVELOPER_LINKS: { icon: IconName; label: string; url: string }[] = [
-  { icon: 'whatsapp', label: 'واتساب', url: 'https://wa.me/9647771821250' },
-  { icon: 'telegram', label: 'تلغرام', url: 'https://t.me/dagg_iq' },
-  { icon: 'instagram', label: 'إنستغرام', url: 'https://instagram.com/tiipf' },
-  { icon: 'facebook', label: 'فيسبوك', url: 'https://www.facebook.com/mohammed.al.ahmed.23957' },
+const DEVELOPER_LINKS: { icon: IconName; label: string; url: string; color: string }[] = [
+  { icon: 'whatsapp', label: 'واتساب', url: 'https://wa.me/9647771821250', color: '#25D366' },
+  { icon: 'telegram', label: 'تلغرام', url: 'https://t.me/dagg_iq', color: '#229ED9' },
+  { icon: 'instagram', label: 'إنستغرام', url: 'https://instagram.com/tiipf', color: '#E1306C' },
+  { icon: 'facebook', label: 'فيسبوك', url: 'https://www.facebook.com/mohammed.al.ahmed.23957', color: '#1877F2' },
 ];
 
-/** بطاقة المطوّر: الاسم وروابط التواصل */
+/** بطاقة المطوّر: ترويسة بلون سعي، الاسم والصف، وروابط التواصل بألوان كل منصة */
 export function DeveloperCard() {
   const { c } = useTheme();
   return (
-    <View style={{ borderRadius: 18, borderWidth: 1, borderColor: c.line, backgroundColor: c.bg, padding: 14, gap: 12, maxWidth: 360 }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-        <View style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: c.card, borderWidth: 1, borderColor: c.line, alignItems: 'center', justifyContent: 'center' }}>
-          <LogoMark size={28} ink={c.ink} dot={c.accent} />
-        </View>
+    <View style={{ borderRadius: 22, overflow: 'hidden', borderWidth: 1, borderColor: c.line, backgroundColor: c.card, maxWidth: 380 }}>
+      <View style={{ backgroundColor: c.heroBg, paddingHorizontal: 16, paddingTop: 16, paddingBottom: 28, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
         <View style={{ flex: 1 }}>
-          <T weight="bold" size={16}>محمد حازم احمد</T>
-          <T dim size={12}>مطوّر سعي · الخامس العلمي، إعدادية الشهاب</T>
+          <T size={12} color={c.heroInk2}>صانع التطبيق</T>
+          <T display size={22} color={c.heroInk}>محمد حازم احمد</T>
+        </View>
+        <View style={{ width: 54, height: 54, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center' }}>
+          <LogoMark size={32} ink={c.heroInk} dot={c.heroInk2} />
         </View>
       </View>
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-        {DEVELOPER_LINKS.map((l) => (
-          <Pressable key={l.url} onPress={() => Linking.openURL(l.url).catch(() => {})} accessibilityRole="link" accessibilityLabel={l.label}
-            style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 6, height: 36, paddingHorizontal: 12, borderRadius: 18, backgroundColor: c.soft, opacity: pressed ? 0.7 : 1 })}>
-            <Icon name={l.icon} size={18} color={c.accent} />
-            <T size={13} weight="bold" color={c.softInk}>{l.label}</T>
-          </Pressable>
-        ))}
+      <View style={{ marginTop: -14, marginHorizontal: 12, borderRadius: 16, backgroundColor: c.card, borderWidth: 1, borderColor: c.line, paddingVertical: 10, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <Icon name="book" size={16} color={c.accent} />
+        <T size={12} weight="bold" style={{ flex: 1 }}>طالب في الخامس العلمي · إعدادية الشهاب للبنين</T>
+      </View>
+      <View style={{ padding: 12, gap: 8 }}>
+        <T dim size={12}>عندك فكرة أو وجدت خطأ؟ راسلني مباشرة:</T>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+          {DEVELOPER_LINKS.map((l) => (
+            <Pressable key={l.url} onPress={() => Linking.openURL(l.url).catch(() => {})} accessibilityRole="link" accessibilityLabel={l.label}
+              style={({ pressed }) => ({ flexGrow: 1, flexBasis: '45%', flexDirection: 'row', alignItems: 'center', gap: 8, height: 44, paddingHorizontal: 12, borderRadius: 14,
+                backgroundColor: `${l.color}1A`, borderWidth: 1, borderColor: `${l.color}40`, opacity: pressed ? 0.7 : 1 })}>
+              <View style={{ width: 28, height: 28, borderRadius: 9, backgroundColor: l.color, alignItems: 'center', justifyContent: 'center' }}>
+                <Icon name={l.icon} size={16} color="#FFFFFF" />
+              </View>
+              <T size={14} weight="bold">{l.label}</T>
+            </Pressable>
+          ))}
+        </View>
       </View>
     </View>
   );

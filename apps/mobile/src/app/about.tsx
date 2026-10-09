@@ -1,7 +1,9 @@
 import { arDigits } from '@saey/shared';
 import Constants from 'expo-constants';
 import { useEffect, useState } from 'react';
-import { Linking, Share, View } from 'react-native';
+import { Intro } from '@/components/intro';
+import { Portal } from '@/components/portal';
+import { Linking, Pressable, Share, View } from 'react-native';
 import { Alert } from '@/lib/dialog';
 import { DeveloperCard } from '@/components/rich-text';
 import { Icon, LogoMark, type IconName } from '@/components/icon';
@@ -28,6 +30,7 @@ export default function About() {
   const d = useDownload();
   const [checking, setChecking] = useState(false);
   const [info, setInfo] = useState<UpdateInfo | null>(null);
+  const [intro, setIntro] = useState(false);
   const version = Constants.expoConfig?.version ?? '1.0.0';
   // جاء من إشعار «تعذّر التحميل»: نجلب معلومات النسخة فيظهر زر «إعادة المحاولة» مباشرة
   useEffect(() => { if (d.status === 'error') checkForUpdate(true).then((u) => u && setInfo(u)).catch(() => {}); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
@@ -48,12 +51,15 @@ export default function About() {
 
   return (
     <Screen>
+      {intro ? <Portal><Intro ready onDone={() => setIntro(false)} /></Portal> : null}
       <Header title="عن التطبيق" />
 
       <Card tone="hero" style={{ alignItems: 'center', gap: 6, paddingVertical: 28 }}>
-        <View style={{ width: 84, height: 84, borderRadius: 26, backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center', marginBottom: 6 }}>
+        {/* الضغط على الشعار يعيد حركة شعار سعي التي تظهر عند فتح التطبيق */}
+        <Pressable onPress={() => setIntro(true)} accessibilityRole="button" accessibilityLabel="عرض شعار سعي"
+          style={({ pressed }) => ({ width: 84, height: 84, borderRadius: 26, backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center', marginBottom: 6, transform: [{ scale: pressed ? 0.94 : 1 }] })}>
           <LogoMark size={52} ink={c.heroInk} dot={c.heroInk2} />
-        </View>
+        </Pressable>
         <T display size={34} color={c.heroInk} center>سعي</T>
         <T size={14} color={c.heroInk2} center>اسعَ تُعفَ.</T>
         <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
@@ -101,9 +107,6 @@ export default function About() {
 
       <SectionTitle title="المطوّر" />
       <DeveloperCard />
-      <T dim size={13} style={{ lineHeight: 22 }}>
-        صممه وبرمجه محمد حازم احمد، طالب في الخامس العلمي بإعدادية الشهاب للبنين، ليخدم زملاءه. عندك فكرة أو وجدت خطأ؟ راسله مباشرة من الروابط أعلاه.
-      </T>
 
       <SectionTitle title="المزيد" />
       <Card style={{ paddingVertical: 2 }}>

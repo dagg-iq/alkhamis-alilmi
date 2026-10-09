@@ -142,6 +142,16 @@ end $$;
 reset role;
 
 -- ٨. الجداول: المشرف يكتب، الطالب يرى المنشور لشعبته أو للكل فقط، وتفضيلاته تُحفظ على حسابه
+-- (migration ١٨ أنشأ جدول الحصص الحقيقي لكل شعبة: ٥ شعب × ٥ أيام × ٦ حصص — نتحقق منه ثم نمسحه ليبقى الاختبار معزولاً)
+do $$ begin
+  assert (select count(*) from public.schedules where kind = 'weekly' and section_id is not null) = 5, 'جداول الشعب الخمس';
+  assert (select count(*) from public.schedule_items) = 150, 'عدد الحصص';
+  assert (select count(*) from public.schedule_items i join public.schedules s on s.id = i.schedule_id
+          join public.sections c on c.id = s.section_id where c.name = 'أ' and i.day = 0 and i.sort = 1
+          and i.subject_id = (select id from public.subjects where slug = 'computer')) = 1, 'أول حصة أحد لشعبة أ = حاسوب';
+  assert (select count(*) from public.schedule_items where subject_id is null and title is null) = 0, 'حصة بلا مادة';
+end $$;
+delete from public.schedules;
 set role authenticated;
 select pg_temp.as_user('00000000-0000-0000-0000-00000000000a');
 insert into public.schedules (id, title, kind, section_id, is_published) values
