@@ -30,9 +30,30 @@ function untilReset(now: number) {
 
 type View = 'keys' | 'students';
 
+/** دائرة نسبة (SVG) بلون حسب الامتلاء */
+function Ring({ value, label, center, sub, color }: { value: number; label: string; center: string; sub?: string; color?: string }) {
+  const v = Math.max(0, Math.min(1, value));
+  const r = 52;
+  const c = 2 * Math.PI * r;
+  const col = color ?? (v >= 0.9 ? 'var(--bad)' : v >= 0.7 ? 'var(--warn)' : 'var(--accent)');
+  return (
+    <div className="card usage-ring">
+      <svg viewBox="0 0 130 130" width="130" height="130" aria-hidden="true">
+        <circle cx="65" cy="65" r={r} fill="none" stroke="var(--line)" strokeWidth="12" />
+        <circle cx="65" cy="65" r={r} fill="none" stroke={col} strokeWidth="12" strokeLinecap="round"
+          strokeDasharray={`${c * v} ${c}`} transform="rotate(-90 65 65)" style={{ transition: 'stroke-dasharray .6s' }} />
+        <text x="65" y="64" textAnchor="middle" fontSize={center.length > 6 ? 17 : 24} fontWeight="900" fill="currentColor">{center}</text>
+        {sub ? <text x="65" y="86" textAnchor="middle" fontSize="11" fill="var(--ink2)">{sub}</text> : null}
+      </svg>
+      <span>{label}</span>
+    </div>
+  );
+}
+
 export default function Usage() {
   const [view, setView] = useState<View>('keys');
   const [now, setNow] = useState(Date.now());
+  const [open, setOpen] = useState<Record<string, boolean>>({});
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 30_000); return () => clearInterval(t); }, []);
 
   const q = useLoad(async () => {
@@ -102,6 +123,19 @@ export default function Usage() {
         يتجدد العدّ <b>٣:٠٠ فجراً</b> (بعد {untilReset(now)}). النموذج الذي تنتهي حصته يُقفل حتى الوقت الذي تحدده Google.
       </p>
 
+      <div className="usage-rings">
+        <Ring value={calc.capacity ? calc.used / calc.capacity : 0} label="المستخدم من السعة اليومية"
+          center={`${ar(Math.round(calc.capacity ? (calc.used / calc.capacity) * 100 : 0))}٪`} sub={`${ar(calc.used)} من ${ar(calc.capacity)}`} />
+        {(() => {
+          // اليوم من ٣:٠٠ فجراً إلى ٣:٠٠ فجراً: كم مضى وكم بقي حتى تتجدد كل النماذج
+          const n = new Date(now);
+          const start = Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate());
+          const passed = (now - start) / 86400000;
+          return <Ring value={passed} color="var(--ok)" label="الوقت حتى تجدد الحصة (٣:٠٠ فجراً)" center={untilReset(now)} sub={`مضى ${ar(Math.round(passed * 100))}٪`} />;
+        })()}
+        <Ring value={calc.total ? calc.working / calc.total : 0} color="var(--accent)" label="المفاتيح التي تعمل" center={`${ar(calc.working)}/${ar(calc.total)}`} sub="مفتاح" />
+      </div>
+
       <div className="grid">
         <div className="card stat hero"><b className="num">{ar(calc.left)}</b><span>طلباً متبقياً اليوم (تقريباً)</span></div>
         <div className="card stat"><b className="num">{ar(calc.used)}</b><span className="dim">طلباً استُخدم اليوم</span></div>
@@ -121,15 +155,17 @@ export default function Usage() {
 
       {view === 'keys' ? calc.keys.map((k) => (
         <div key={k.slot} className="card" style={{ marginBottom: 14 }}>
-          <div className="row" style={{ justifyContent: 'space-between' }}>
-            <div>
+          <button className="usage-key-head" onClick={() => setOpen((o) => ({ ...o, [k.slot]: !o[k.slot] }))} aria-expanded={!!open[k.slot]}>
+            <span className="usage-chev" style={{ transform: open[k.slot] ? 'rotate(180deg)' : undefined }}>▾</span>
+            <div style={{ flex: 1, textAlign: 'start' }}>
               <b style={{ fontSize: 17 }}>{slotLabel(k.slot)}</b> <span className="small dim">({k.slot})</span>
+              {!k.dead ? <div className="progress" style={{ marginTop: 8, maxWidth: 360 }}><div style={{ width: `${Math.min(100, (k.used / (calc.models.length * calc.per)) * 100)}%` }} /></div> : null}
             </div>
             {k.dead ? <span className="pill bad">متوقف</span>
               : <span className={`pill ${k.left > 0 ? 'ok' : 'warn'}`}>بقي {ar(k.left)} من {ar(calc.models.length * calc.per)}</span>}
-          </div>
+          </button>
           {k.dead ? <p className="small" style={{ color: 'var(--bad)' }}>Google رفضت هذا المفتاح، فيُتخطى تلقائياً حتى {time(k.dead.blocked_until)} ثم يُجرَّب من جديد. السبب من Google: «{k.dead.reason}».</p> : null}
-          {k.dead ? null : <div className="table-wrap" style={{ marginTop: 10 }}>
+          {k.dead || !open[k.slot] ? null : <div className="table-wrap" style={{ marginTop: 10 }}>
             <table>
               <thead><tr><th>النموذج</th><th>استُخدم</th><th style={{ width: '30%' }} /><th>الحالة</th><th>أخطاء</th></tr></thead>
               <tbody>
