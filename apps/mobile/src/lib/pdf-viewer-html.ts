@@ -34,7 +34,11 @@ window.openPdf=function(src,opts){
     var from=Math.max(1,Math.min(pdf.numPages,opts.from||1)),to=Math.max(from,Math.min(pdf.numPages,opts.to||pdf.numPages));
     var W=Math.min(window.innerWidth-16,900),box=document.getElementById('pages');
     box.innerHTML='';
-    var io=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting&&!e.target.dataset.done){e.target.dataset.done=1;draw(pdf,+e.target.dataset.n,e.target);}});},{rootMargin:'800px 0px'});
+    // ترسم الصفحات القريبة فقط، وتحرّر الصفحات البعيدة (كتاب ٣٠٠ صفحة كان سيملأ ذاكرة الهاتف)
+    var io=new IntersectionObserver(function(es){es.forEach(function(e){var el=e.target;
+      if(e.isIntersecting&&!el.dataset.done){el.dataset.done=1;draw(pdf,+el.dataset.n,el);}
+      else if(!e.isIntersecting&&el.dataset.done){el.dataset.done='';el.dataset.gen=(+el.dataset.gen||0)+1;var cv=el.querySelector('canvas');if(cv){cv.width=0;cv.height=0;cv.remove();}}
+    });},{rootMargin:'1600px 0px'});
     // الصفحة الظاهرة الآن (للعدّاد في التطبيق): الأقرب لمنتصف الشاشة
     var cur=0,pio=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){var n=+e.target.dataset.n;if(n!==cur){cur=n;post('page:'+n);}}});},{rootMargin:'-45% 0px -45% 0px'});
     pdf.getPage(from).then(function(p1){
@@ -48,8 +52,9 @@ window.openPdf=function(src,opts){
   }).catch(function(e){post('error:'+e.message);});
 };
 window.scrollToPage=function(n,instant){var el=document.querySelector('.pg[data-n="'+n+'"]');if(el){el.scrollIntoView({block:'start',behavior:instant?'auto':'smooth'});}};
-function draw(pdf,n,el){pdf.getPage(n).then(function(p){
-  var v0=p.getViewport({scale:1}),dpr=Math.min(window.devicePixelRatio||1,2.5),W=parseFloat(el.style.width),v=p.getViewport({scale:W/v0.width*dpr});
+function draw(pdf,n,el){var gen=el.dataset.gen;pdf.getPage(n).then(function(p){
+  if(el.dataset.gen!==gen||!el.dataset.done)return; // ابتعدت الصفحة قبل أن تُرسم
+  var v0=p.getViewport({scale:1}),dpr=Math.min(window.devicePixelRatio||1,2),W=parseFloat(el.style.width),v=p.getViewport({scale:W/v0.width*dpr});
   var cv=document.createElement('canvas');cv.width=v.width;cv.height=v.height;el.style.height=(W*v0.height/v0.width)+'px';el.appendChild(cv);
   p.render({canvasContext:cv.getContext('2d'),viewport:v});
 });}

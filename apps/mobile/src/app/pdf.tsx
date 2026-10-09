@@ -37,6 +37,8 @@ export default function PdfScreen() {
   const [cur, setCur] = useState<number | undefined>(page ? Number(page) : from ? Number(from) : undefined);
   const [outline, setOutline] = useState<OutlineNode[]>([]);
   const [showOutline, setShowOutline] = useState(false);
+  // ملف مفهرس فيه زرّا الفهرس والمساعد، فتُجمع بقية الأزرار في قائمة حتى لا يضيق العنوان
+  const [menu, setMenu] = useState(false);
   const viewRef = useRef<PdfViewHandle>(null);
 
   // فهرس الملف (إن كان مفهرساً) للتنقل بين الفصول والمواضيع من داخل العارض
@@ -99,9 +101,15 @@ export default function PdfScreen() {
         </View>
         {doc ? <IconButton name="sparkle" label="اسأل سعي AI عن هذه الصفحة" size={40} onPress={() => router.push({ pathname: '/ai/[id]', params: { id: 'new', doc, docPage: cur ? String(cur) : undefined, from: view.from ? String(view.from) : undefined, to: view.to ? String(view.to) : undefined, docTitle: title } })} /> : null}
         {outline.length ? <IconButton name="list" label="فهرس الفصول والمواضيع" size={40} onPress={() => setShowOutline(true)} /> : null}
-        <IconButton name="download" label="حفظ في الهاتف" size={40} onPress={save} />
-        <IconButton name="share" label="مشاركة" size={40} onPress={share} />
-        <IconButton name="send" label="إرسال إلى دردشة" size={40} onPress={() => setPicking(true)} />
+        {doc || outline.length ? (
+          <IconButton name="more" label="خيارات الملف" size={40} onPress={() => setMenu(true)} />
+        ) : (
+          <>
+            <IconButton name="download" label="حفظ في الهاتف" size={40} onPress={save} />
+            <IconButton name="share" label="مشاركة" size={40} onPress={share} />
+            <IconButton name="send" label="إرسال إلى دردشة" size={40} onPress={() => setPicking(true)} />
+          </>
+        )}
       </Row>
       <View style={{ flex: 1 }}>
         {error ? (
@@ -116,6 +124,14 @@ export default function PdfScreen() {
             onChapter={(c) => goTo(c.start_page, c.end_page, c.start_page)}
             onTopic={(t, c) => goTo(c.start_page, c.end_page, t.start_page)} />
         </ScrollView>
+      </Sheet>
+      <Sheet visible={menu} onClose={() => setMenu(false)}>
+        <T display size={22}>{title}</T>
+        <View style={{ gap: 10, paddingTop: 6 }}>
+          <Button title="حفظ في الهاتف" icon="download" variant="secondary" onPress={() => { setMenu(false); save(); }} />
+          <Button title="مشاركة" icon="share" variant="secondary" onPress={() => { setMenu(false); share(); }} />
+          <Button title="إرسال إلى دردشة" icon="send" variant="secondary" onPress={() => { setMenu(false); setPicking(true); }} />
+        </View>
       </Sheet>
       <ConversationPicker visible={picking} onClose={() => setPicking(false)} title="إرسال الملف إلى"
         onPick={async (conv) => {

@@ -36,8 +36,10 @@ const READ_PROMPT = (from: number, to: number) => `انسخ الصفحات من 
 - انسخ نص العنوان كما هو مطبوع. إن لم يبدأ في الصفحة عنوان فاجعل headings مصفوفة فارغة.`;
 
 /** يقرأ نطاق صفحات؛ إن فشل التحليل أو نقصت صفحات يقسّم النطاق ويعيد المحاولة حتى صفحة واحدة */
-async function readRange(fileUri: string, keyIndex: number, from: number, to: number, ai: AiSettings): Promise<ReadPage[]> {
+async function readRange(fileUri: string, keyIndex: number, from: number, to: number, ai: AiSettings, deadline: number): Promise<ReadPage[]> {
   let pages: ReadPage[] = [];
+  // الدالة محدودة الزمن (~١٥٠ ث): بعد المهلة لا نبدأ طلباً جديداً، والصفحات الناقصة تُقرأ في الاستدعاء التالي
+  if (Date.now() > deadline) return [];
   try {
     const raw = await generate(modelChain(ai.ingest_model ?? ai.model, MAIN_MODELS), [{
       role: 'user',
@@ -61,6 +63,7 @@ async function readRange(fileUri: string, keyIndex: number, from: number, to: nu
   for (let n = from; n <= to; n++) if (!got.has(n)) missing.push(n);
   if (!missing.length) return pages;
   // صفحات ناقصة أو فشل كامل: نقسم ونعيد (الصفحة المنفردة التي تفشل مرتين تُسجَّل فارغة بدل إيقاف الكتاب)
+  if (Date.now() > deadline) return pages;
   if (from === to) {
     return [{ page: from, printed: null, text: '', headings: [] }];
   }
@@ -68,13 +71,14 @@ async function readRange(fileUri: string, keyIndex: number, from: number, to: nu
   const rest = pages.filter((p) => p.page >= from && p.page <= to);
   const redo: ReadPage[] = [];
   const parts: [number, number][] = missing.length === to - from + 1 ? [[from, mid], [mid + 1, to]] : missing.map((n) => [n, n] as [number, number]);
-  for (const [a, b] of parts) redo.push(...await readRange(fileUri, keyIndex, a, b, ai));
+  for (const [a, b] of parts) redo.push(...await readRange(fileUri, keyIndex, a, b, ai, deadline));
   const byPage = new Map<number, ReadPage>();
   for (const p of [...rest, ...redo]) byPage.set(p.page, p);
   return [...byPage.values()].sort((a, b) => a.page - b.page);
 }
 
 async function ingestBatch(doc: Record<string, any>, restart: boolean) {
+  const started = Date.now();
   if (restart) {
     await admin.from('content_chunks').delete().eq('source_type', 'document').eq('source_id', doc.id);
     await admin.from('document_pages').delete().eq('document_id', doc.id);
@@ -114,10 +118,16 @@ async function ingestBatch(doc: Record<string, any>, restart: boolean) {
   try {
     const ai = await getSetting<AiSettings>('ai');
     const ref = fileRef(fileUri!);
-    const read = await readRange(ref.uri, ref.keyIndex, from, to, ai);
+    const all = await readRange(ref.uri, ref.keyIndex, from, to, ai, started + 105_000);
+    // نحفظ الصفحات المتتالية المقروءة فقط؛ ما بعد أول صفحة ناقصة يُعاد في الاستدعاء التالي
+    const got = new Set(all.map((p) => p.page));
+    let upTo = from - 1;
+    while (upTo < to && got.has(upTo + 1)) upTo++;
+    if (upTo < from) throw new Error('انتهت مهلة القراءة قبل إكمال أي صفحة. اضغط «إكمال» لإعادة المحاولة.');
+    const read = all.filter((p) => p.page <= upTo);
 
     // مقاطع البحث (مع إعادة الكتابة: نحذف ما سبق لهذه الصفحات حتى لا يتكرر عند إعادة المحاولة)
-    await admin.from('content_chunks').delete().eq('source_type', 'document').eq('source_id', doc.id).gte('page', from).lte('page', to);
+    await admin.from('content_chunks').delete().eq('source_type', 'document').eq('source_id', doc.id).gte('page', from).lte('page', upTo);
     const rows: { page: number; content: string }[] = [];
     for (const p of read) for (const c of chunkText(p.text)) rows.push({ page: p.page, content: c });
     if (rows.length) {
@@ -136,9 +146,9 @@ async function ingestBatch(doc: Record<string, any>, restart: boolean) {
     })));
     if (pe) throw pe;
 
-    const done = to >= pages!;
-    await admin.from('documents').update({ ingested_pages: to, ingest_status: done ? 'done' : 'running' }).eq('id', doc.id);
-    return json({ done, ingested: to, pages, chunks: rows.length });
+    const done = upTo >= pages!;
+    await admin.from('documents').update({ ingested_pages: upTo, ingest_status: done ? 'done' : 'running' }).eq('id', doc.id);
+    return json({ done, ingested: upTo, pages, chunks: rows.length });
   } catch (e) {
     const msg = e instanceof GeminiQuotaError ? 'انتهى رصيد Gemini المجاني مؤقتاً، أكمل لاحقاً.' : String((e as Error).message ?? e).slice(0, 300);
     await admin.from('documents').update({ ingest_status: 'error', ingest_error: msg }).eq('id', doc.id);
@@ -164,7 +174,7 @@ async function buildOutline(doc: Record<string, any>) {
   try {
     const { data: rows } = await admin.from('document_pages').select('page, headings, digest').eq('document_id', doc.id).order('page');
     const pages = (rows ?? []) as { page: number; headings: { level: number; title: string }[]; digest: string | null }[];
-    if (!pages.length) throw new HttpError(409, 'لا توجد صفحات مقروءة. أعد الفهرسة الكاملة أولاً.');
+    if (!pages.length) throw new HttpError(409, 'لا توجد صفحات مقروءة لهذا الملف (رُفع قبل تحديث الفهرسة). اضغط «إعادة القراءة» مرة واحدة ثم يُبنى الفهرس تلقائياً.');
     const total = Math.max(doc.pages ?? 0, ...pages.map((p) => p.page));
     const collapsed = collapseHeadings(pages, total);
 

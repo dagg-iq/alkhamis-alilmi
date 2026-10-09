@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildTree, collapseHeadings, fallbackOutline, flattenOutline, locate, normalizeOutline, normTitle, pageLabel } from './outline';
+import { buildTree, collapseHeadings, fallbackOutline, flattenOutline, locate, normalizeOutline, normTitle, pageLabel, pickSection, printedVariants } from './outline';
 
 describe('عناوين الصفحات', () => {
   it('الترويسة المتكررة في صفحات متتالية تُحسب مرة واحدة', () => {
@@ -152,5 +152,26 @@ describe('فهم الطلب: صفحة وفصل', () => {
   it('فصول بلا رقم في عناوينها: الرقم بترتيبها بعد تخطي المقدمة', () => {
     const t2 = [mk('مقدمة الملف', 1, 5, 0), mk('الكهربائية الساكنة', 6, 30, 1), mk('المتسعات', 31, 60, 2)];
     expect(pickChapter(t2, 'اشرح الفصل الثاني')?.title).toBe('المتسعات');
+  });
+});
+
+describe('pickSection & printedVariants', () => {
+  const rows = [
+    { id: 'c1', document_id: 'd', parent_id: null, level: 1 as const, title: 'الكهربائية الساكنة', start_page: 1, end_page: 20, sort: 0 },
+    { id: 't1', document_id: 'd', parent_id: 'c1', level: 2 as const, title: 'قانون كولوم', start_page: 3, end_page: 7, sort: 1 },
+    { id: 't2', document_id: 'd', parent_id: 'c1', level: 2 as const, title: 'المتسعات وربطها', start_page: 8, end_page: 20, sort: 2 },
+  ];
+  const tree = buildTree(rows);
+  it('finds a topic by name when no chapter matches', () => {
+    expect(pickSection(tree, 'اشرح لي قانون كولوم كامل')).toEqual({ title: 'قانون كولوم', start: 3, end: 7 });
+  });
+  it('prefers a chapter', () => {
+    expect(pickSection(tree, 'اشرح الفصل الأول')?.start).toBe(1);
+  });
+  it('returns null for unrelated text', () => {
+    expect(pickSection(tree, 'اشرح الحث الذاتي كامل')).toBeNull();
+  });
+  it('printed variants', () => {
+    expect(printedVariants(52)).toEqual(['52', '٥٢']);
   });
 });

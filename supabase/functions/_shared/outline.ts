@@ -163,7 +163,7 @@ export function buildTree(rows: OutlineRow[]): OutlineNode[] {
 export function locate(tree: OutlineNode[], page: number): { chapter: OutlineNode | null; topic: OutlineRow | null } {
   const chapter = tree.find((c) => page >= c.start_page && page <= (c.end_page ?? Infinity)) ?? null;
   let topic: OutlineRow | null = null;
-  for (const t of chapter?.topics ?? []) if (t.start_page <= page) topic = t;
+  for (const t of chapter?.topics ?? []) if (t.start_page <= page && page <= (t.end_page ?? chapter!.end_page ?? Infinity)) topic = t;
   return { chapter, topic };
 }
 
@@ -241,4 +241,28 @@ export function pickChapter(tree: OutlineNode[], question: string): OutlineNode 
     if (score > bestScore) { bestScore = score; best = c; }
   }
   return bestScore >= 0.6 ? best : null;
+}
+
+/** أنسب جزء للطلب: فصل (برقمه أو اسمه) وإلا موضوع باسمه ← نطاق صفحاته */
+export function pickSection(tree: OutlineNode[], question: string): { title: string; start: number; end: number } | null {
+  const ch = pickChapter(tree, question);
+  if (ch) return { title: ch.title, start: ch.start_page, end: ch.end_page ?? ch.start_page };
+  const GENERIC = /^(ال)?(فصل|باب|وحده|درس|موضوع|اشرح|شرح|كامل|كامله|بالكامل|لي|عن)$/;
+  const content = (t: string) => normTitle(t).split(' ').filter((w) => w.length > 2 && !GENERIC.test(w));
+  const q = new Set(content(question));
+  let best: OutlineRow | null = null;
+  let bestScore = 0;
+  for (const c of tree) for (const t of c.topics) {
+    const words = content(t.title);
+    if (!words.length) continue;
+    const score = words.filter((w) => q.has(w)).length / words.length;
+    if (score > bestScore) { bestScore = score; best = t; }
+  }
+  return best && bestScore >= 0.6 ? { title: best.title, start: best.start_page, end: best.end_page ?? best.start_page } : null;
+}
+
+/** الرقم بصيغتيه (٥٢ و 52) للمطابقة مع الرقم المطبوع المحفوظ */
+export function printedVariants(n: number): string[] {
+  const latin = String(n);
+  return [latin, latin.replace(/\d/g, (d) => String.fromCharCode(0x660 + Number(d)))];
 }

@@ -1,6 +1,7 @@
 import { arDigits, type OutlineNode, type OutlineRow } from '@saey/shared';
 import { useState } from 'react';
 import { ActivityIndicator, Pressable, View } from 'react-native';
+import { Alert } from '@/lib/dialog';
 import { loadRelated, openDocumentAt, type RelatedTopic } from '@/lib/outline';
 import { useTheme } from '@/lib/theme';
 import { Icon } from './icon';
@@ -33,6 +34,15 @@ export function OutlineList({ nodes, onChapter, onTopic, currentPage, compact }:
     } catch {
       setRel((r) => ({ ...r, [id]: 'none' }));
     }
+  };
+
+  // فتح الموضوع في ملف آخر (قد يحتاج تحميل الملف أول مرة)
+  const [opening, setOpening] = useState<string | null>(null);
+  const openRelated = async (x: RelatedTopic) => {
+    if (opening) return;
+    setOpening(x.outline_id);
+    try { await openDocumentAt(x.document_id, { page: x.start_page }); } catch (e) { Alert.alert('تعذّر فتح الملف', e instanceof Error ? e.message : 'تأكد من الإنترنت وحاول مرة أخرى.'); }
+    setOpening(null);
   };
 
   const inChapter = (n: OutlineNode) => currentPage !== undefined && currentPage >= n.start_page && currentPage <= (n.end_page ?? Infinity);
@@ -86,7 +96,7 @@ export function OutlineList({ nodes, onChapter, onTopic, currentPage, compact }:
                       {Array.isArray(r) ? (
                         <View style={{ paddingHorizontal: 22, paddingBottom: 8, gap: 6 }}>
                           {r.map((x) => (
-                            <PressScale key={x.outline_id} onPress={() => openDocumentAt(x.document_id, { page: x.start_page, from: undefined, to: undefined })} scaleTo={0.97}
+                            <PressScale key={x.outline_id} onPress={() => openRelated(x)} scaleTo={0.97}
                               accessibilityRole="button" accessibilityLabel={`${x.document_title} صفحة ${x.start_page}`}
                               style={{ flexDirection: 'row', alignItems: 'center', gap: 10, padding: 10, borderRadius: 14, backgroundColor: c.soft }}>
                               <Icon name="file" size={18} color={c.accent} />
@@ -94,7 +104,7 @@ export function OutlineList({ nodes, onChapter, onTopic, currentPage, compact }:
                                 <T size={13} weight="bold" color={c.softInk} lines={1}>{x.document_title}</T>
                                 <T size={12} color={c.softInk} lines={1}>{x.title} · ص {arDigits(x.start_page)}</T>
                               </View>
-                              <Icon name="forward" size={16} color={c.softInk} />
+                              {opening === x.outline_id ? <ActivityIndicator color={c.accent} /> : <Icon name="forward" size={16} color={c.softInk} />}
                             </PressScale>
                           ))}
                         </View>
