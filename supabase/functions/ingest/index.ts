@@ -8,7 +8,7 @@ import {
 } from '../_shared/outline.ts';
 import { handler, HttpError, json } from '../_shared/cors.ts';
 import { admin, getCaller, getSetting } from '../_shared/supabase.ts';
-import { chunkText, embed, fileRef, firstAvailableSlot, generate, poolSlots, GeminiQuotaError, parseJson, uploadFile, MAIN_MODELS, modelChain } from '../_shared/gemini.ts';
+import { chunkText, embed, fileRef, firstAvailableSlot, generate, poolSlots, slotRank, strongestSlot, GeminiQuotaError, parseJson, uploadFile, MAIN_MODELS, modelChain } from '../_shared/gemini.ts';
 import { getObject } from '../_shared/storage.ts';
 
 // الفهرسة تُنفَّذ مرة واحدة للكتاب، فنفضّل الجودة: صفحات أقل في الطلب الواحد وأقوى نموذج متاح وصور بدقة عالية
@@ -99,7 +99,9 @@ async function ingestBatch(doc: Record<string, any>, restart: boolean) {
   };
   let bytes: Uint8Array | null = null;
   const reupload = async (exclude: string[]) => {
-    const target = await firstAvailableSlot('admin', chain, exclude);
+    // المفتاح الذي عنده أقوى نموذج متاح الآن (الفهرسة تستحق أفضل جودة)
+    const best = await strongestSlot('admin', chain);
+    const target = best && !exclude.includes(best.slot) ? best.slot : await firstAvailableSlot('admin', chain, exclude);
     if (!target) throw new GeminiQuotaError('انتهت حصة كل المفاتيح اليوم');
     bytes ??= await getObject(doc.file_key);
     fileUri = await uploadFile(bytes, 'application/pdf', doc.title, 'admin', target, chain);
@@ -117,7 +119,10 @@ async function ingestBatch(doc: Record<string, any>, restart: boolean) {
     pages = pdf.getPageCount();
     await admin.from('documents').update({ pages }).eq('id', doc.id);
   }
-  if (stale || !(await firstAvailableSlot('admin', chain, slotNames.filter((x) => x !== slotOf(fileUri))))) await reupload([]);
+  // الملف على مفتاح نماذجه القوية انتهت ومفتاح آخر ما زال عنده نموذج أقوى ← ننقله (رفع الملف لا يُحسب من الحصة)
+  const cur = stale ? null : await slotRank(slotOf(fileUri)!, chain);
+  const best = await strongestSlot('admin', chain);
+  if (stale || cur === null || (best && best.rank < cur)) await reupload([]);
 
   const from = (doc.ingested_pages ?? 0) + 1;
   if (from > pages!) {

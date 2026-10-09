@@ -144,13 +144,38 @@ export function nextIraqReset(now = Date.now()): number {
   return Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate() + 1);
 }
 
-/** ترتيب المحاولات: كل نماذج المفتاح الأول ثم الثاني…، ثم نماذج الاحتياط بنفس الطريقة */
-export function attemptOrder(slots: string[], models: string[], fallback: string[] = FALLBACK_MODELS): { slot: string; m: string }[] {
+/**
+ * ترتيب المحاولات:
+ * - الطلاب: كل نماذج المفتاح الأول ثم الثاني… (يوزع الاستهلاك ويحفظ النماذج القوية للمفاتيح التالية)
+ * - لوحة التحكم (strongFirst): أقوى نموذج على كل المفاتيح أولاً ثم الذي يليه — الفهرسة تأخذ أفضل جودة متاحة
+ * ثم نماذج الاحتياط (2.5) بنفس الطريقة.
+ */
+export function attemptOrder(slots: string[], models: string[], fallback: string[] = FALLBACK_MODELS, strongFirst = false): { slot: string; m: string }[] {
   const out: { slot: string; m: string }[] = [];
-  for (const slot of slots) for (const m of models) out.push({ slot, m });
   const fb = fallback.filter((m) => !models.includes(m));
-  for (const slot of slots) for (const m of fb) out.push({ slot, m });
+  for (const list of [models, fb]) {
+    if (strongFirst) for (const m of list) for (const slot of slots) out.push({ slot, m });
+    else for (const slot of slots) for (const m of list) out.push({ slot, m });
+  }
   return out;
+}
+
+/** أفضل مفتاح للوحة: الذي عنده أقوى نموذج متاح الآن (لرفع ملف الفهرسة إليه) */
+export async function strongestSlot(pool: Pool, models: string[] = MAIN_MODELS): Promise<{ slot: string; rank: number } | null> {
+  await refreshBlocks(true);
+  const all = [...models, ...FALLBACK_MODELS.filter((m) => !models.includes(m))];
+  for (let r = 0; r < all.length; r++) {
+    for (const s of poolSlots(pool)) if (!blockedUntil(s.slot, all[r])) return { slot: s.slot, rank: r };
+  }
+  return null;
+}
+
+/** ترتيب أقوى نموذج متاح على مفتاح محدد (أصغر = أقوى)، أو null إن انتهى كله */
+export async function slotRank(slot: string, models: string[] = MAIN_MODELS): Promise<number | null> {
+  await refreshBlocks(true);
+  const all = [...models, ...FALLBACK_MODELS.filter((m) => !models.includes(m))];
+  const r = all.findIndex((m) => !blockedUntil(slot, m));
+  return r < 0 ? null : r;
 }
 
 /** هل لهذا المفتاح نموذج متاح الآن؟ (لنقل ملف الفهرسة إلى مفتاح آخر عند انتهاء حصة الأول) */
@@ -191,7 +216,7 @@ export async function generate(model: string | string[], contents: Content[], op
   const slots = pinned ? [pinned] : all.map((s) => s.slot);
   const models = Array.isArray(model) ? model : modelChain(model);
   await refreshBlocks();
-  const order = attemptOrder(slots, models);
+  const order = attemptOrder(slots, models, FALLBACK_MODELS, opts.pool === 'admin');
   const failures: string[] = [];
   let busy = false;
   let tried = 0;

@@ -73,7 +73,11 @@ try { await g.generate(g.MAIN_MODELS, [{ role: 'user', parts: [{ text: 'س' }] }
 check('مفتاح الملف انتهت حصته ← خطأ حصة', err === 'QUOTA', err);
 check('أول مفتاح متاح غير المنتهي', (await g.firstAvailableSlot('admin', g.MAIN_MODELS, ['GEMINI_API_KEY_2'])) === 'GEMINI_API_KEY', String(await g.firstAvailableSlot('admin', g.MAIN_MODELS, ['GEMINI_API_KEY_2'])));
 
-// ٤) تحليل مدة الانتظار
+// ٤) لوحة التحكم: أقوى نموذج على كل المفاتيح أولاً
+check('اللوحة: 3.8 على كل المفاتيح قبل 3.7', JSON.stringify(g.attemptOrder(['A', 'B'], ['m1', 'm2'], ['f'], true)) === JSON.stringify([{ slot: 'A', m: 'm1' }, { slot: 'B', m: 'm1' }, { slot: 'A', m: 'm2' }, { slot: 'B', m: 'm2' }, { slot: 'A', m: 'f' }, { slot: 'B', m: 'f' }]));
+check('الطلاب: المفتاح الأول بكل نماذجه أولاً', JSON.stringify(g.attemptOrder(['A', 'B'], ['m1', 'm2'], ['f'])) === JSON.stringify([{ slot: 'A', m: 'm1' }, { slot: 'A', m: 'm2' }, { slot: 'B', m: 'm1' }, { slot: 'B', m: 'm2' }, { slot: 'A', m: 'f' }, { slot: 'B', m: 'f' }]));
+
+// ٥) تحليل مدة الانتظار
 check('retryDelay', g.retryAfterMs('"retryDelay": "12954s"') === 12954000);
 check('Please retry in 3h35m54.6s', Math.round(g.retryAfterMs('Please retry in 3h35m54.6s')! / 1000) === 12955);
 check('retry in 41s', g.retryAfterMs('Please retry in 41.2s') === 41200);
