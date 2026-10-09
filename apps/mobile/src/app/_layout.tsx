@@ -16,6 +16,7 @@ import { AppThemeProvider, fontAssets, useTheme } from '@/lib/theme';
 import { Intro } from '@/components/intro';
 import { PortalProvider } from '@/components/portal';
 import { DialogHost } from '@/lib/dialog';
+import { OfflineBanner } from '@/components/offline-banner';
 import { MessageBanner } from '@/components/message-banner';
 import { NotConfigured } from '@/components/not-configured';
 import { useWidgetSync } from '@/widgets/sync';
@@ -69,6 +70,24 @@ export default function RootLayout() {
         </AppThemeProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
+  );
+}
+
+/** الدخول ناجح لكن الملف الشخصي لم يُحمَّل (بلا إنترنت ولا نسخة محفوظة بعد): زر إعادة المحاولة بدل شاشة فارغة */
+function ProfileWait() {
+  const { c } = useTheme();
+  const { refreshProfile, signOut } = useAuth();
+  const [late, setLate] = useState(false);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { const t = setTimeout(() => setLate(true), 5000); return () => clearTimeout(t); }, []);
+  if (!late) return null;
+  return (
+    <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 80, backgroundColor: c.bg, alignItems: 'center', justifyContent: 'center', padding: 28, gap: 14 }}>
+      <Text style={{ fontSize: 22, fontWeight: '700', color: c.ink, textAlign: 'center' }}>تعذّر تحميل حسابك</Text>
+      <Text style={{ fontSize: 14, color: c.ink2, textAlign: 'center', lineHeight: 24 }}>تأكد من الإنترنت ثم أعد المحاولة. بعد أول تحميل ناجح يفتح التطبيق بدون إنترنت.</Text>
+      <Text onPress={async () => { setBusy(true); await refreshProfile().catch(() => {}); setBusy(false); }} style={{ fontSize: 17, fontWeight: '700', color: c.accent, padding: 12 }}>{busy ? 'يحاول…' : 'إعادة المحاولة'}</Text>
+      <Text onPress={() => { signOut().catch(() => {}); }} style={{ fontSize: 14, color: c.ink3, padding: 8 }}>تسجيل الخروج</Text>
+    </View>
   );
 }
 
@@ -144,6 +163,8 @@ function Navigator() {
       </Stack>
       )}
       {ready ? <MessageBanner myId={approvedId} /> : null}
+      {ready ? <OfflineBanner /> : null}
+      {ready && session && !profile ? <ProfileWait /> : null}
       <UpdateSheet enabled={ready && introDone && !!approvedId} />
       {!introDone ? <Intro ready={ready} onDone={() => setIntroDone(true)} /> : null}
       <DialogHost />

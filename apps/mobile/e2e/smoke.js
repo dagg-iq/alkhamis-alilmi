@@ -67,7 +67,9 @@ const rpc = {
     if (goal) localStorage.setItem('saey.goal', goal);
     if (theme) localStorage.setItem('saey.theme', theme);
   }, [JSON.stringify(session), process.env.GOAL || 'general', process.env.THEME || '']);
+  let blocked = false; // OFFLINE=1: بعد التحميل الأول نقطع الاتصال بالخادم ونعيد تحميل الصفحة
   await ctx.route('**/*.supabase.co/**', async (route) => {
+    if (blocked) return route.abort('failed');
     const req = route.request();
     const url = new URL(req.url());
     const single = (req.headers()['accept'] || '').includes('vnd.pgrst.object');
@@ -93,6 +95,7 @@ const rpc = {
     page.on('console', (m) => { if (m.type() === 'error' && !/WebSocket|realtime|Failed to load resource|youtube|net::/.test(m.text())) errs.push('CONSOLE ' + m.text().slice(0, 200)); });
     await page.goto((process.env.BASE || 'http://localhost:4175') + r, { waitUntil: 'networkidle' }).catch((e) => errs.push('NAV ' + e.message));
     await page.waitForTimeout(Number(process.env.WAIT || 4000)); // بعد انتهاء المقدمة
+    if (process.env.OFFLINE) { blocked = true; await page.reload({ waitUntil: 'networkidle' }).catch((e) => errs.push('RELOAD ' + e.message)); await page.waitForTimeout(Number(process.env.WAIT || 4000)); blocked = false; }
     // CLICKS="ابدأ,إيقاف مؤقت" — يضغط عناصر حسب وصفها (accessibilityLabel) بالترتيب
     for (const label of (process.env.CLICKS ? process.env.CLICKS.split(',') : [])) {
       await page.locator(label.startsWith('text=') ? label : `[aria-label="${label}"]`).first().click({ timeout: 3000 }).catch((e) => errs.push('CLICK ' + label + ' ' + e.message.slice(0, 80)));

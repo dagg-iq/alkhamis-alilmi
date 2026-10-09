@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { daysUntil, lessonStates, nextDatedIndex, parseScheduleSettings, targetLabel, targetSchoolDay, weekdayOf } from './schedule';
+import { dateParts, daysUntil, lessonStates, nextDatedIndex, parseScheduleSettings, targetLabel, targetSchoolDay, weekdayOf } from './schedule';
 
 // ٢٠٢٦-١٠-١١ أحد، ١٢ اثنين، … ١٥ خميس، ١٦ جمعة، ١٧ سبت (شهر ١٠ = index 9)
 const at = (day: number, h: number, m = 0) => new Date(2026, 9, day, h, m);
@@ -59,5 +59,12 @@ describe('جداول الامتحانات', () => {
     expect(daysUntil('2026-10-14', at(12, 23))).toBe(2);
     expect(daysUntil('2026-10-11', at(12, 1))).toBe(-1);
     expect(weekdayOf('2026-10-14')).toBe(3);
+  });
+});
+
+describe('التاريخ بالأرقام', () => {
+  it('يوم/شهر والسنة منفصلة بلا أصفار زائدة', () => {
+    expect(dateParts('2026-10-09')).toEqual({ dm: '9/10', year: '2026', full: '9/10/2026' });
+    expect(dateParts('2027-01-21').full).toBe('21/1/2027');
   });
 });

@@ -1,7 +1,8 @@
 import { File, Paths } from 'expo-file-system';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as Print from 'expo-print';
-import { KATEX_CSS, PAGE_FONTS, renderMath } from './markdown';
+import { KATEX_INLINE_CSS } from './katex-css';
+import { PAGE_FONTS, renderMath } from './markdown';
 import { pdfName } from './pdf';
 import { callFunction } from './supabase';
 
@@ -70,8 +71,8 @@ img{display:inline-block}
 
 export function pageDocument(sections: string): string {
   return `<!doctype html><html dir="rtl" lang="ar"><head><meta charset="utf-8">
-<link rel="stylesheet" href="${KATEX_CSS}"><link rel="stylesheet" href="${PAGE_FONTS}">
-<style>${PAGE_CSS}</style></head><body>${sections}</body></html>`;
+<link rel="stylesheet" href="${PAGE_FONTS}">
+<style>${KATEX_INLINE_CSS}</style><style>${PAGE_CSS}</style></head><body>${sections}</body></html>`;
 }
 
 export interface ConvertResult { pdf: File; text: string }

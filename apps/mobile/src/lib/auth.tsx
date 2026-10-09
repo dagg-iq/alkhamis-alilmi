@@ -4,7 +4,9 @@ import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { clearLocalPrefs, flushPrefs, hydratePrefs } from './prefs';
-import { supabase } from './supabase';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { clearOfflineCache } from './offline';
+import { sessionStorageKey, supabase } from './supabase';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -37,10 +39,23 @@ export async function completeAuthFromUrl(url: string): Promise<boolean> {
   return false;
 }
 
+/** الجلسة المخزنة على الهاتف (حتى لو انتهت صلاحيتها) — لفتح التطبيق بلا إنترنت */
+async function storedSession(): Promise<Session | null> {
+  try {
+    const raw = await AsyncStorage.getItem(sessionStorageKey);
+    const s = raw ? JSON.parse(raw) : null;
+    return s?.user?.id && s.refresh_token ? (s as Session) : null;
+  } catch {
+    return null;
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
+  // فتحنا بجلسة قديمة لأن الإنترنت غير متاح: نحاول تجديدها كلما عاد الاتصال
+  const [stale, setStale] = useState(false);
 
   const loadProfile = useCallback(async (userId: string | undefined) => {
     if (!userId) {
@@ -63,8 +78,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     (async () => {
       try {
         const { data } = await supabase.auth.getSession();
-        setSession(data.session);
-        await loadProfile(data.session?.user.id);
+        let current = data.session;
+        if (!current) {
+          // بلا إنترنت تعذّر تجديد الجلسة المنتهية: لا نرمي الطالب لشاشة الدخول، نفتح بما هو محفوظ
+          current = await storedSession();
+          if (current) setStale(true);
+        }
+        setSession(current);
+        await loadProfile(current?.user.id);
       } catch {
         // بدون إنترنت أو خطأ: نكمل كضيف ونعرض شاشة الدخول
       } finally {
@@ -79,6 +100,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
     return () => sub.subscription.unsubscribe();
   }, [loadProfile]);
+
+  // الجلسة القديمة: نحاول التجديد كل ١٥ ثانية، فإن عاد الإنترنت نكمل عادياً
+  useEffect(() => {
+    if (!stale) return;
+    let alive = true;
+    const t = setInterval(async () => {
+      const { data, error } = await supabase.auth.refreshSession();
+      if (!alive) return;
+      if (data.session) {
+        setStale(false);
+        setSession(data.session);
+        loadProfile(data.session.user.id);
+      } else if (error && error.name !== 'AuthRetryableFetchError') {
+        // رُفض التجديد فعلاً (انتهت الجلسة أو أُلغيت): نعود لشاشة الدخول
+        setStale(false);
+        await supabase.auth.signOut({ scope: 'local' }).catch(() => {});
+        setSession(null);
+        setProfile(null);
+      }
+    }, 15000);
+    return () => { alive = false; clearInterval(t); };
+  }, [stale, loadProfile]);
 
   // متابعة تغيّر الحالة لحظياً (مثلاً عند موافقة الأدمن)
   const userId = session?.user.id;
@@ -116,6 +159,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await supabase.auth.signOut();
       setProfile(null);
       await clearLocalPrefs();
+      await clearOfflineCache().catch(() => {});
       // لا تبقى بيانات الطالب ظاهرة على الشاشة الرئيسية
       import('@/widgets/sync').then((m) => m.clearWidgets()).catch(() => {});
     },

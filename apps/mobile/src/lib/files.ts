@@ -1,4 +1,4 @@
-import { Directory, File, Paths } from 'expo-file-system';
+import { DownloadTask, Directory, File, Paths } from 'expo-file-system';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { router } from 'expo-router';
 import * as Sharing from 'expo-sharing';
@@ -74,11 +74,22 @@ export function isDownloaded(key: string): boolean {
   }
 }
 
-export async function downloadMaterial(key: string): Promise<File> {
+/** يحمّل ملزمة إلى الهاتف (تُفتح بعدها بلا إنترنت). يُكتب في ملف مؤقت ثم يُنقل، فلا يبقى ملف ناقص يُحسب محفوظاً */
+export async function downloadMaterial(key: string, onProgress?: (received: number, total: number) => void): Promise<File> {
   const local = localFileFor(key);
   if (local.exists) return local;
   const url = await signedUrl(key);
-  return File.downloadFileAsync(url, local);
+  const part = new File(materialsDir(), `${key.replace(/\//g, '_')}.part`);
+  if (part.exists) part.delete();
+  try {
+    await new DownloadTask(url, part, { onProgress: onProgress ? (p) => onProgress(p.bytesWritten, p.totalBytes) : undefined }).downloadAsync();
+    if (!part.exists || (part.size ?? 0) < 100) throw new Error('الملف المحمّل ناقص');
+    part.move(local);
+  } catch (e) {
+    try { if (part.exists) part.delete(); } catch { /* تجاهل */ }
+    throw e;
+  }
+  return local;
 }
 
 export function removeDownload(key: string) {

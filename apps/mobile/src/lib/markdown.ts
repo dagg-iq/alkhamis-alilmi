@@ -1,4 +1,5 @@
 import katex from 'katex';
+import { KATEX_INLINE_CSS } from './katex-css';
 import 'katex/contrib/mhchem';
 import { marked } from 'marked';
 
@@ -144,7 +145,6 @@ export interface PageOptions {
   print?: boolean;
 }
 
-export const KATEX_CSS = 'https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css';
 export const PAGE_FONTS = 'https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;700&family=Amiri:wght@400;700&family=Amiri+Quran&display=swap';
 
 /** صفحة HTML كاملة: للعرض داخل التطبيق وللتصدير PDF */
@@ -154,7 +154,7 @@ export function markdownPage(text: string, o: PageOptions): string {
   const body = renderMarkdown(text);
   return `<!doctype html><html dir="rtl" lang="ar"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<link rel="stylesheet" href="${KATEX_CSS}">
+<style>${KATEX_INLINE_CSS}</style>
 <link rel="stylesheet" href="${PAGE_FONTS}">
 <style>
 *{box-sizing:border-box}

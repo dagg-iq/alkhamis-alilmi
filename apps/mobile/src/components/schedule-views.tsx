@@ -1,5 +1,5 @@
 import {
-  WEEKDAYS, arDigits, daysUntil, lessonStates, nextDatedIndex, weekdayOf,
+  WEEKDAYS, arDigits, dateParts, daysUntil, lessonStates, nextDatedIndex, weekdayOf,
   type LessonState, type Schedule, type ScheduleItem, type ScheduleSettings, type Subject, type TargetDay,
 } from '@saey/shared';
 import { View } from 'react-native';
@@ -8,8 +8,6 @@ import { shortSubject } from '@/lib/queries';
 import { useTheme } from '@/lib/theme';
 import { Icon } from './icon';
 import { T } from './ui';
-
-const MONTHS = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
 
 export function timeRange(it: ScheduleItem): string {
   if (it.start_time && it.end_time) return `${fmtTime(it.start_time)} – ${fmtTime(it.end_time)}`;
@@ -111,16 +109,16 @@ export function DatedList({ items, subjects, now }: { items: ScheduleItem[]; sub
         const hot = i === next;
         const left = it.on_date ? daysUntil(it.on_date, now) : null;
         const past = left !== null && left < 0;
-        const [, m, d] = (it.on_date ?? '').split('-').map(Number);
+        const dp = it.on_date ? dateParts(it.on_date) : null;
         return (
           <View key={it.id} style={{
             flexDirection: 'row', alignItems: 'center', gap: 14, padding: 14, borderRadius: 20,
             backgroundColor: hot ? c.accent : c.card, borderWidth: 1, borderColor: hot ? c.accent : c.line, opacity: past ? 0.5 : 1,
           }}>
             {it.on_date ? (
-              <View style={{ width: 56, paddingVertical: 8, borderRadius: 14, alignItems: 'center', backgroundColor: hot ? 'rgba(255,255,255,0.2)' : c.soft }}>
-                <T display size={22} color={hot ? '#FFFFFF' : c.accent} style={{ lineHeight: 28 }}>{arDigits(d)}</T>
-                <T size={11} weight="bold" color={hot ? 'rgba(255,255,255,0.9)' : c.softInk}>{MONTHS[m - 1]}</T>
+              <View style={{ minWidth: 74, paddingVertical: 8, paddingHorizontal: 6, borderRadius: 14, alignItems: 'center', backgroundColor: hot ? 'rgba(255,255,255,0.2)' : c.soft }}>
+                <T display size={24} color={hot ? '#FFFFFF' : c.accent} style={{ lineHeight: 30 }}>{arDigits(dp!.dm)}</T>
+                <T size={12} weight="bold" color={hot ? 'rgba(255,255,255,0.9)' : c.softInk}>{arDigits(dp!.year)}</T>
               </View>
             ) : (
               <View style={{ width: 56, height: 56, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: c.soft }}>

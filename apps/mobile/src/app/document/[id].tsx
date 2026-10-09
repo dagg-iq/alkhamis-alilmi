@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { View } from 'react-native';
 import { Alert } from '@/lib/dialog';
 import { Icon } from '@/components/icon';
-import { Button, ErrorBox, Header, Loading, Screen, T } from '@/components/ui';
+import { Button, ErrorBox, ProgressBar, Header, Loading, Screen, T } from '@/components/ui';
 import { PdfThumb } from '@/components/pdf-thumb';
 import { downloadMaterial, isDownloaded, openPdf, removeDownload, sharePdf, signedUrl } from '@/lib/files';
 import { must, supabase } from '@/lib/supabase';
@@ -15,6 +15,7 @@ export default function DocumentScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { c } = useTheme();
   const [busy, setBusy] = useState<string | null>(null);
+  const [prog, setProg] = useState<{ got: number; total: number } | null>(null);
   const [, force] = useState(0);
   const q = useLoad(async () => must(supabase.from('documents').select('*, subjects(name)').eq('id', id).single()) as Promise<DocumentRow & { subjects: { name: string } }>, [id]);
 
@@ -50,10 +51,20 @@ export default function DocumentScreen() {
         <T display size={26} center>{d.title}</T>
         <T dim center>{d.subjects.name} · {DOCUMENT_KIND_LABELS[d.kind]}{d.pages ? ` · ${arDigits(d.pages)} صفحة` : ''}</T>
       </View>
+      {busy === 'save' && prog ? (
+        <View style={{ gap: 6 }}>
+          <ProgressBar value={prog.total ? prog.got / prog.total : 0} height={10} />
+          <T dim center size={13}>{arDigits(Math.round((prog.total ? prog.got / prog.total : 0) * 100))}٪ — {arDigits((prog.got / 1048576).toFixed(1))} من {arDigits((prog.total / 1048576).toFixed(1))} ميغا</T>
+        </View>
+      ) : null}
       <Button title={saved ? 'فتح' : 'تحميل وفتح'} icon={saved ? 'file' : 'download'} loading={busy === 'open'} onPress={() => run('open', () => openPdf(d.file_key, d.title))} />
+      {!saved ? (
+        <Button title="تحميل للهاتف فقط (للقراءة بلا إنترنت)" variant="secondary" icon="download" loading={busy === 'save'}
+          onPress={() => run('save', async () => { setProg({ got: 0, total: 0 }); await downloadMaterial(d.file_key, (got, total) => setProg({ got, total })); setProg(null); })} />
+      ) : null}
       <Button title="مشاركة" variant="secondary" icon="share" loading={busy === 'share'} onPress={() => run('share', () => sharePdf(d.file_key, d.title))} />
       {saved ? <Button title="حذف من الهاتف" variant="ghost" onPress={() => { removeDownload(d.file_key); force((n) => n + 1); }} /> : null}
-      <T dim size={12} center>{saved ? 'محفوظ على هاتفك — يفتح بدون إنترنت' : 'بعد التحميل يمكنك فتحه بدون إنترنت'}</T>
+      <T dim size={12} center>{saved ? 'محفوظ على هاتفك — يُفتح داخل التطبيق بدون إنترنت' : 'بعد التحميل يُفتح داخل التطبيق بدون إنترنت'}</T>
     </Screen>
   );
 }

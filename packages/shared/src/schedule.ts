@@ -144,3 +144,9 @@ export function weekdayOf(date: string): number {
   const [y, m, d] = date.split('-').map(Number);
   return new Date(Date.UTC(y, m - 1, d)).getUTCDay();
 }
+
+/** تاريخ YYYY-MM-DD ← أجزاء رقمية بصيغة يوم/شهر (٩/١٠) والسنة منفصلة (٢٠٢٦) */
+export function dateParts(date: string): { dm: string; year: string; full: string } {
+  const [y, m, d] = date.split('-').map(Number);
+  return { dm: `${d}/${m}`, year: String(y), full: `${d}/${m}/${y}` };
+}
