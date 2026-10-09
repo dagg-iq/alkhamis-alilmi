@@ -8,7 +8,7 @@ import {
 } from '../_shared/outline.ts';
 import { handler, HttpError, json } from '../_shared/cors.ts';
 import { admin, getCaller, getSetting } from '../_shared/supabase.ts';
-import { chunkText, embed, fileRef, generate, poolKeys, GeminiQuotaError, parseJson, uploadFile, MAIN_MODELS, modelChain } from '../_shared/gemini.ts';
+import { chunkText, embed, fileRef, firstAvailableSlot, generate, poolSlots, GeminiQuotaError, parseJson, uploadFile, MAIN_MODELS, modelChain } from '../_shared/gemini.ts';
 import { getObject } from '../_shared/storage.ts';
 
 // الفهرسة تُنفَّذ مرة واحدة للكتاب، فنفضّل الجودة: صفحات أقل في الطلب الواحد وأقوى نموذج متاح وصور بدقة عالية
@@ -36,7 +36,7 @@ const READ_PROMPT = (from: number, to: number) => `انسخ الصفحات من 
 - انسخ نص العنوان كما هو مطبوع. إن لم يبدأ في الصفحة عنوان فاجعل headings مصفوفة فارغة.`;
 
 /** يقرأ نطاق صفحات؛ إن فشل التحليل أو نقصت صفحات يقسّم النطاق ويعيد المحاولة حتى صفحة واحدة */
-async function readRange(fileUri: string, keyIndex: number, from: number, to: number, ai: AiSettings, deadline: number): Promise<ReadPage[]> {
+async function readRange(fileUri: string, slot: string, from: number, to: number, ai: AiSettings, deadline: number): Promise<ReadPage[]> {
   let pages: ReadPage[] = [];
   // الدالة محدودة الزمن (~١٥٠ ث): بعد المهلة لا نبدأ طلباً جديداً، والصفحات الناقصة تُقرأ في الاستدعاء التالي
   if (Date.now() > deadline) return [];
@@ -44,7 +44,7 @@ async function readRange(fileUri: string, keyIndex: number, from: number, to: nu
     const raw = await generate(modelChain(ai.ingest_model ?? ai.model, MAIN_MODELS), [{
       role: 'user',
       parts: [{ file_data: { mime_type: 'application/pdf', file_uri: fileUri } }, { text: READ_PROMPT(from, to) }],
-    }], { json: true, temperature: 0, maxOutputTokens: 32768, pool: 'admin', keyIndex, thinking: 'low', extraConfig: { mediaResolution: 'MEDIA_RESOLUTION_HIGH' } });
+    }], { json: true, temperature: 0, maxOutputTokens: 32768, pool: 'admin', slot, thinking: 'low', extraConfig: { mediaResolution: 'MEDIA_RESOLUTION_HIGH' } });
     const parsed = parseJson<ReadPage[] | { pages: ReadPage[] }>(raw);
     const list = Array.isArray(parsed) ? parsed : parsed.pages;
     pages = (Array.isArray(list) ? list : []).filter((p) => Number.isInteger(Number(p?.page)) && Number(p.page) >= from && Number(p.page) <= to)
@@ -71,7 +71,7 @@ async function readRange(fileUri: string, keyIndex: number, from: number, to: nu
   const rest = pages.filter((p) => p.page >= from && p.page <= to);
   const redo: ReadPage[] = [];
   const parts: [number, number][] = missing.length === to - from + 1 ? [[from, mid], [mid + 1, to]] : missing.map((n) => [n, n] as [number, number]);
-  for (const [a, b] of parts) redo.push(...await readRange(fileUri, keyIndex, a, b, ai, deadline));
+  for (const [a, b] of parts) redo.push(...await readRange(fileUri, slot, a, b, ai, deadline));
   const byPage = new Map<number, ReadPage>();
   for (const p of [...rest, ...redo]) byPage.set(p.page, p);
   return [...byPage.values()].sort((a, b) => a.page - b.page);
@@ -89,23 +89,35 @@ async function ingestBatch(doc: Record<string, any>, restart: boolean) {
 
   let fileUri: string | null = doc.gemini_file_uri;
   let pages: number | null = doc.pages;
-  // الروابط القديمة (قبل تعدد المفاتيح) لا نعرف مفتاحها: نعيد الرفع
-  const expired = !doc.gemini_file_expires_at || new Date(doc.gemini_file_expires_at) < new Date(Date.now() + 3600_000)
-    || !String(fileUri ?? '').startsWith('k')
-    || fileRef(String(fileUri)).keyIndex >= poolKeys('admin').length; // تغيّرت المفاتيح منذ الرفع
-  if (!fileUri || expired || !pages) {
-    const bytes = await getObject(doc.file_key);
-    if (!pages) {
-      const pdf = await PDFDocument.load(bytes, { ignoreEncryption: true, updateMetadata: false });
-      pages = pdf.getPageCount();
-    }
-    fileUri = await uploadFile(bytes, 'application/pdf', doc.title, 'admin');
+  const ai = await getSetting<AiSettings>('ai');
+  const chain = modelChain(ai.ingest_model ?? ai.model, MAIN_MODELS);
+  const slotNames = poolSlots('admin').map((s) => s.slot);
+  // الملف مرفوع لمفتاح محدد (لا يقرؤه غيره): نعيد الرفع إن انتهت مدته، أو أُزيل مفتاحه، أو انتهت حصة كل نماذجه اليوم
+  const slotOf = (u: string | null) => {
+    const r = fileRef(String(u ?? ''));
+    return r.slot ?? slotNames[r.keyIndex];
+  };
+  let bytes: Uint8Array | null = null;
+  const reupload = async (exclude: string[]) => {
+    const target = await firstAvailableSlot('admin', chain, exclude);
+    if (!target) throw new GeminiQuotaError('انتهت حصة كل المفاتيح اليوم');
+    bytes ??= await getObject(doc.file_key);
+    fileUri = await uploadFile(bytes, 'application/pdf', doc.title, 'admin', target, chain);
     await admin.from('documents').update({
       gemini_file_uri: fileUri,
       gemini_file_expires_at: new Date(Date.now() + 47 * 3600_000).toISOString(),
-      pages,
+      ...(pages ? { pages } : {}),
     }).eq('id', doc.id);
+  };
+  const stale = !fileUri || !doc.gemini_file_expires_at || new Date(doc.gemini_file_expires_at) < new Date(Date.now() + 3600_000)
+    || !slotOf(fileUri) || !slotNames.includes(slotOf(fileUri)!);
+  if (!pages) {
+    bytes = await getObject(doc.file_key);
+    const pdf = await PDFDocument.load(bytes, { ignoreEncryption: true, updateMetadata: false });
+    pages = pdf.getPageCount();
+    await admin.from('documents').update({ pages }).eq('id', doc.id);
   }
+  if (stale || !(await firstAvailableSlot('admin', chain, slotNames.filter((x) => x !== slotOf(fileUri))))) await reupload([]);
 
   const from = (doc.ingested_pages ?? 0) + 1;
   if (from > pages!) {
@@ -116,9 +128,20 @@ async function ingestBatch(doc: Record<string, any>, restart: boolean) {
   await admin.from('documents').update({ ingest_status: 'running', ingest_error: null }).eq('id', doc.id);
 
   try {
-    const ai = await getSetting<AiSettings>('ai');
-    const ref = fileRef(fileUri!);
-    const all = await readRange(ref.uri, ref.keyIndex, from, to, ai, started + 105_000);
+    // انتهت حصة مفتاح الملف أثناء القراءة ← نرفعه لمفتاح آخر ما زالت حصته متاحة ونكمل (بدل أن تتوقف الفهرسة)
+    let all: ReadPage[] = [];
+    const tried: string[] = [];
+    for (;;) {
+      const slot = slotOf(fileUri)!;
+      try {
+        all = await readRange(fileRef(fileUri!).uri, slot, from, to, ai, started + 105_000);
+        break;
+      } catch (e) {
+        if (!(e instanceof GeminiQuotaError) || Date.now() > started + 90_000) throw e;
+        tried.push(slot);
+        await reupload(tried);
+      }
+    }
     // نحفظ الصفحات المتتالية المقروءة فقط؛ ما بعد أول صفحة ناقصة يُعاد في الاستدعاء التالي
     const got = new Set(all.map((p) => p.page));
     let upTo = from - 1;
@@ -150,7 +173,7 @@ async function ingestBatch(doc: Record<string, any>, restart: boolean) {
     await admin.from('documents').update({ ingested_pages: upTo, ingest_status: done ? 'done' : 'running' }).eq('id', doc.id);
     return json({ done, ingested: upTo, pages, chunks: rows.length });
   } catch (e) {
-    const msg = e instanceof GeminiQuotaError ? 'انتهى رصيد Gemini المجاني مؤقتاً، أكمل لاحقاً.' : String((e as Error).message ?? e).slice(0, 300);
+    const msg = e instanceof GeminiQuotaError ? `انتهت حصة Gemini على كل المفاتيح${e.message.includes('حتى') ? ` (${e.message.match(/حتى .+$/)?.[0]})` : ''}. اضغط «إكمال» بعدها ويكمل من حيث توقف.` : String((e as Error).message ?? e).slice(0, 300);
     await admin.from('documents').update({ ingest_status: 'error', ingest_error: msg }).eq('id', doc.id);
     throw new HttpError(e instanceof GeminiQuotaError ? 503 : 500, msg);
   }
@@ -215,7 +238,7 @@ async function buildOutline(doc: Record<string, any>) {
     await admin.from('documents').update({ outline_status: 'done', outline_error: null }).eq('id', doc.id);
     return json({ done: true, chapters: chapters.length, topics: flat.filter((r) => r.level === 2).length });
   } catch (e) {
-    const msg = e instanceof GeminiQuotaError ? 'انتهى رصيد Gemini المجاني مؤقتاً، أعد بناء الفهرس لاحقاً.' : String((e as Error).message ?? e).slice(0, 300);
+    const msg = e instanceof GeminiQuotaError ? `انتهت حصة Gemini على كل المفاتيح${e.message.includes('حتى') ? ` (${e.message.match(/حتى .+$/)?.[0]})` : ''}. أعد بناء الفهرس بعدها.` : String((e as Error).message ?? e).slice(0, 300);
     await admin.from('documents').update({ outline_status: 'error', outline_error: msg }).eq('id', doc.id);
     throw new HttpError(e instanceof GeminiQuotaError ? 503 : e instanceof HttpError ? e.status : 500, msg);
   }

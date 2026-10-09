@@ -3,7 +3,7 @@
 import { PDFDocument } from 'npm:pdf-lib@1.17.1';
 import { handler, HttpError, json } from '../_shared/cors.ts';
 import { admin, getCaller, getSetting } from '../_shared/supabase.ts';
-import { embed, generate, GeminiQuotaError, MAIN_MODELS, modelChain, parseJson, toBase64 } from '../_shared/gemini.ts';
+import { ADMIN_VAR, DAILY_PER_MODEL, embed, FALLBACK_MODELS, generate, GeminiQuotaError, MAIN_MODELS, modelChain, parseJson, STUDENT_VARS, toBase64 } from '../_shared/gemini.ts';
 import { getObject } from '../_shared/storage.ts';
 
 interface Video { youtube_id: string; title: string; duration_sec: number | null; channel?: string | null }
@@ -387,9 +387,14 @@ ${cur.text}
       return json({ ...(Array.isArray(parsed) ? parsed[0] : parsed) as Record<string, unknown>, pages });
     }
 
+    // المفاتيح المضافة (أسماؤها فقط) لتبويب «الاستخدام»
+    if (body.action === 'key_slots') {
+      return json({ slots: [ADMIN_VAR, ...STUDENT_VARS].filter((v) => Deno.env.get(v)), per_model: DAILY_PER_MODEL, models: MAIN_MODELS, fallback: FALLBACK_MODELS });
+    }
+
     // ٥) فحص المفاتيح: أيها يعمل وأيها مرفوض ولماذا
     if (body.action === 'check_keys') {
-      const vars = ['GEMINI_ADMIN_API_KEY', 'GEMINI_API_KEY', 'GEMINI_API_KEY_2', 'GEMINI_API_KEY_3', 'GEMINI_API_KEY_4'];
+      const vars = [ADMIN_VAR, ...STUDENT_VARS.filter((v) => Deno.env.get(v) || ['GEMINI_API_KEY', 'GEMINI_API_KEY_2', 'GEMINI_API_KEY_3', 'GEMINI_API_KEY_4'].includes(v))];
       const results: { name: string; ok: boolean; detail: string }[] = [];
       for (const v of vars) {
         const key = Deno.env.get(v);

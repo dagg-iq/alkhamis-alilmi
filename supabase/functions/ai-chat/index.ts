@@ -344,7 +344,10 @@ Deno.serve(handler(async (req) => {
         .eq('user_id', caller.id).eq('day', new Date().toISOString().slice(0, 10)).eq('count', used)
         .then(({ error }) => { if (error) console.error('refund', error.message); });
     }
-    if (e instanceof GeminiQuotaError) throw new HttpError(503, 'المساعد مشغول الآن بسبب كثرة الأسئلة، جرّب بعد دقيقة.');
+    if (e instanceof GeminiQuotaError) {
+      const when = e.message.match(/حتى (.+)$/)?.[1];
+      throw new HttpError(503, when ? `انتهت حصة المساعد اليوم على كل المفاتيح. يعود ${when} إن شاء الله.` : 'المساعد مشغول الآن بسبب كثرة الأسئلة، جرّب بعد دقيقة.');
+    }
     throw e;
   }
   if (!answer) answer = 'لم أستطع الإجابة على هذا السؤال. حاول صياغته بطريقة أخرى.';

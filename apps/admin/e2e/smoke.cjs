@@ -38,6 +38,22 @@ const data = {
     { id: 'e1', schedule_id: 'sc2', day: null, on_date: '2026-11-02', sort: 1, start_time: '09:00', end_time: '11:00', subject_id: 's0', title: null, teacher: null, place: 'القاعة ٣', note: 'يُحضر الطالب الحاسبة' },
     { id: 'e2', schedule_id: 'sc2', day: null, on_date: '2026-11-04', sort: 2, start_time: '09:00', end_time: '11:00', subject_id: 's1', title: null, teacher: null, place: null, note: null },
   ],
+  ai_key_usage: [
+    ...['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash'].map((m) => ({ day: t.slice(0, 10), slot: 'GEMINI_API_KEY', model: m, requests: 20, errors: 1, last_status: 429, last_error: 'Quota exceeded', last_at: t })),
+    { day: t.slice(0, 10), slot: 'GEMINI_API_KEY', model: 'gemini-3.5-flash', requests: 7, errors: 0, last_status: 200, last_error: null, last_at: t },
+    { day: t.slice(0, 10), slot: 'GEMINI_API_KEY_2', model: 'gemini-3.8-flash', requests: 3, errors: 1, last_status: 429, last_error: 'per minute', last_at: t },
+    { day: t.slice(0, 10), slot: 'GEMINI_API_KEY', model: 'gemini-embedding-001', requests: 40, errors: 0, last_status: 200, last_error: null, last_at: t },
+  ],
+  ai_key_blocks: [
+    ...['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash'].map((m) => ({ slot: 'GEMINI_API_KEY', model: m, blocked_until: new Date(Date.now() + 3 * 3600e3).toISOString(), reason: 'انتهت الحصة اليومية — تعود ٣:٢٩ ص' })),
+    { slot: 'GEMINI_API_KEY_2', model: 'gemini-3.8-flash', blocked_until: new Date(Date.now() + 40e3).toISOString(), reason: 'حد الدقيقة' },
+    { slot: 'GEMINI_ADMIN_API_KEY', model: '*', blocked_until: new Date(Date.now() + 6 * 3600e3).toISOString(), reason: 'Your project has been denied access. Please contact support.' },
+  ],
+  ai_usage: [
+    { user_id: 'p2', day: t.slice(0, 10), count: 14, profiles: { full_name: 'محمد جاسم علي', sections: { name: 'أ' } } },
+    { user_id: UID, day: t.slice(0, 10), count: 5, profiles: { full_name: 'علي حسين كاظم', sections: { name: 'أ' } } },
+    { user_id: 'p2', day: '2026-10-07', count: 20, profiles: { full_name: 'محمد جاسم علي', sections: { name: 'أ' } } },
+  ],
   messages: [], app_settings: [{ key: 'grading', value: { individual_exempt: 90 } }, { key: 'schedule', value: { school_days: [0, 1, 2, 3, 4], start: '08:00', end: '12:00', switch_after: '09:00' } }], grades: [],
 };
 (async () => {
@@ -82,6 +98,7 @@ const data = {
           { name: 'GEMINI_ADMIN_API_KEY', ok: false, detail: '403: Method doesn\'t allow unregistered callers' },
           { name: 'GEMINI_API_KEY', ok: true, detail: 'يعمل' }, { name: 'GEMINI_API_KEY_2', ok: false, detail: 'يعمل لكن حصته انتهت مؤقتاً' },
           { name: 'YOUTUBE_API_KEY', ok: true, detail: 'يعمل' }] }
+        : b.action === 'key_slots' ? { slots: ['GEMINI_ADMIN_API_KEY', 'GEMINI_API_KEY', 'GEMINI_API_KEY_2', 'GEMINI_API_KEY_3', 'GEMINI_API_KEY_4'], per_model: 20, models: ['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite'], fallback: ['gemini-2.5-flash', 'gemini-2.5-flash-lite'] }
         : b.action === 'classify_document' ? { subject_id: 's0', kind: 'malzama', chapter_id: 'c1', teacher_id: null, new_teacher: 'أحمد السوداني', title: 'ملزمة الفيزياء — الفصل الأول', scanned: true, pages: 48 }
         : b.action === 'classify_lectures' ? { items: [
           { youtube_id: 'dQw4w9WgXcQ', subject_id: 's0', chapter_id: 'c1', teacher_id: null, new_teacher: 'احمد السوداني', lecture_number: 3, title: 'المحاضرة ٣ — ربط التوالي', skip: false },

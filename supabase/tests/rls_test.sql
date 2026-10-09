@@ -201,6 +201,24 @@ do $$ begin
     raise exception 'طالب كتب في الفهرس!';
   exception when insufficient_privilege then null;
   end;
+  -- ١٠. استخدام مفاتيح Gemini: للأدمن فقط، والتسجيل من الخادم فقط
+  assert (select count(*) from public.ai_key_usage) = 0, 'طالب يرى استخدام المفاتيح';
+  begin
+    perform public.ai_log_call('GEMINI_API_KEY', 'x', true);
+    raise exception 'طالب يسجّل استخداماً!';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+reset role;
+select public.ai_log_call('GEMINI_API_KEY', 'gemini-3.8-flash', true, 200, null);
+select public.ai_log_call('GEMINI_API_KEY', 'gemini-3.8-flash', false, 429, 'quota');
+insert into public.ai_key_blocks (slot, model, blocked_until, reason) values ('GEMINI_API_KEY', 'gemini-3.8-flash', now() + interval '3 hours', 'test');
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000a');
+do $$ begin
+  assert (select requests from public.ai_key_usage where slot = 'GEMINI_API_KEY' and model = 'gemini-3.8-flash') = 1, 'العداد';
+  assert (select errors from public.ai_key_usage where slot = 'GEMINI_API_KEY' and model = 'gemini-3.8-flash') = 1, 'عداد الأخطاء';
+  assert (select count(*) from public.ai_key_blocks) = 1, 'الأدمن لا يرى الأقفال';
 end $$;
 reset role;
 

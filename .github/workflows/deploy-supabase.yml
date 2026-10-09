@@ -51,6 +51,10 @@ jobs:
           GEMINI_API_KEY_2: ${{ secrets.GEMINI_API_KEY_2 }}
           GEMINI_API_KEY_3: ${{ secrets.GEMINI_API_KEY_3 }}
           GEMINI_API_KEY_4: ${{ secrets.GEMINI_API_KEY_4 }}
+          GEMINI_API_KEY_5: ${{ secrets.GEMINI_API_KEY_5 }}
+          GEMINI_API_KEY_6: ${{ secrets.GEMINI_API_KEY_6 }}
+          GEMINI_API_KEY_7: ${{ secrets.GEMINI_API_KEY_7 }}
+          GEMINI_API_KEY_8: ${{ secrets.GEMINI_API_KEY_8 }}
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
           FCM_SERVICE_ACCOUNT: ${{ secrets.FCM_SERVICE_ACCOUNT }}
           PUSH_WEBHOOK_SECRET: ${{ secrets.PUSH_WEBHOOK_SECRET }}
@@ -63,7 +67,7 @@ jobs:
         run: |
           # نكتب فقط الأسرار الموجودة (الفارغة لا تمسح القيم القديمة)
           : > secrets.env
-          for k in GEMINI_API_KEY GEMINI_API_KEY_2 GEMINI_API_KEY_3 GEMINI_API_KEY_4 GEMINI_ADMIN_API_KEY YOUTUBE_API_KEY FCM_SERVICE_ACCOUNT PUSH_WEBHOOK_SECRET R2_ACCOUNT_ID R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_BUCKET S3_ENDPOINT S3_REGION; do
+          for k in GEMINI_API_KEY GEMINI_API_KEY_2 GEMINI_API_KEY_3 GEMINI_API_KEY_4 GEMINI_API_KEY_5 GEMINI_API_KEY_6 GEMINI_API_KEY_7 GEMINI_API_KEY_8 GEMINI_ADMIN_API_KEY YOUTUBE_API_KEY FCM_SERVICE_ACCOUNT PUSH_WEBHOOK_SECRET R2_ACCOUNT_ID R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_BUCKET S3_ENDPOINT S3_REGION; do
             v="${!k}"
             if [ -n "$v" ]; then
               # القيمة في سطر واحد (ملف JSON لحساب Firebase متعدد الأسطر)

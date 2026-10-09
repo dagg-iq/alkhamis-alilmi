@@ -1,24 +1,42 @@
+import { admin } from './supabase.ts';
+
 const API = 'https://generativelanguage.googleapis.com';
 
 /**
- * مجموعات المفاتيح:
- * - الطلاب: GEMINI_API_KEY و GEMINI_API_KEY_2..4 (كل مفتاح من مشروع منفصل بحصته الخاصة)
- * - لوحة التحكم: GEMINI_ADMIN_API_KEY (الفهرسة والتصنيف) — حتى لا تأكل من حصة الطلاب
+ * المفاتيح («خانات» بأسماء أسرارها، ولا نحفظ المفتاح نفسه في أي مكان):
+ * - الطلاب: GEMINI_API_KEY ثم GEMINI_API_KEY_2 … GEMINI_API_KEY_8 (كل مفتاح من مشروع/حساب مختلف بحصته الخاصة)
+ * - لوحة التحكم: GEMINI_ADMIN_API_KEY أولاً ثم مفاتيح الطلاب احتياطاً
+ *
+ * حصة Google المجانية لكل مشروع: ٢٠ طلباً يومياً و٥ في الدقيقة **لكل نموذج**.
+ * لذلك الترتيب: كل نماذج المفتاح الأول (3.8 ← 3.7 ← … ← 3.1) ثم المفتاح الثاني… ثم 2.5 احتياطاً على كل المفاتيح.
+ * النموذج الذي تنتهي حصته يُقفل في قاعدة البيانات حتى الوقت الذي تحدده Google (retryDelay)،
+ * فلا تضيع طلبات عليه من أي دالة أو طالب آخر.
  */
 export type Pool = 'student' | 'admin';
-const STUDENT_VARS = ['GEMINI_API_KEY', 'GEMINI_API_KEY_2', 'GEMINI_API_KEY_3', 'GEMINI_API_KEY_4'];
+export const STUDENT_VARS = ['GEMINI_API_KEY', 'GEMINI_API_KEY_2', 'GEMINI_API_KEY_3', 'GEMINI_API_KEY_4', 'GEMINI_API_KEY_5', 'GEMINI_API_KEY_6', 'GEMINI_API_KEY_7', 'GEMINI_API_KEY_8'];
+export const ADMIN_VAR = 'GEMINI_ADMIN_API_KEY';
+export const DAILY_PER_MODEL = 20;
 
-function studentKeys(): string[] {
-  return STUDENT_VARS.map((v) => Deno.env.get(v) ?? '').filter(Boolean);
+export interface KeySlot { slot: string; key: string }
+
+/** المفاتيح المضافة فعلاً بالترتيب (بلا تكرار لنفس المفتاح) */
+export function poolSlots(pool: Pool = 'student'): KeySlot[] {
+  const vars = pool === 'admin' ? [ADMIN_VAR, ...STUDENT_VARS] : STUDENT_VARS;
+  const seen = new Set<string>();
+  const out: KeySlot[] = [];
+  for (const v of vars) {
+    const key = (Deno.env.get(v) ?? '').trim();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push({ slot: v, key });
+  }
+  if (!out.length) throw new Error('GEMINI_API_KEY is not set');
+  return out;
 }
 
+/** للتوافق: المفاتيح فقط */
 export function poolKeys(pool: Pool = 'student'): string[] {
-  const students = studentKeys();
-  const adminKey = Deno.env.get('GEMINI_ADMIN_API_KEY');
-  // اللوحة: مفتاحها أولاً، ومفاتيح الطلاب احتياطاً فقط إذا تعطل (حتى لا يتوقف العمل)
-  const keys = pool === 'admin' ? (adminKey ? [adminKey, ...students.filter((k) => k !== adminKey)] : students) : students;
-  if (!keys.length) throw new Error('GEMINI_API_KEY is not set');
-  return keys;
+  return poolSlots(pool).map((s) => s.key);
 }
 
 export type Part =
@@ -36,26 +54,24 @@ export interface GenerateOptions {
   thinking?: 'minimal' | 'low' | 'medium' | 'high';
   /** مجموعة المفاتيح (الافتراضي: الطلاب) */
   pool?: Pool;
-  /** مفتاح محدد (ملف رُفع إلى Gemini بمفتاح معيّن لا يقرؤه غيره) */
+  /** مفتاح محدد باسم خانته (ملف رُفع إلى Gemini بمفتاح معيّن لا يقرؤه غيره) */
+  slot?: string;
+  /** للتوافق مع الروابط القديمة: رقم المفتاح في المجموعة */
   keyIndex?: number;
-  /** كل مفتاح يبدأ بنموذج مختلف (الافتراضي). false = الأسرع أولاً على كل المفاتيح */
+  /** لم يعد مستخدماً (الترتيب دائماً: المفتاح الأول بكل نماذجه ثم الذي بعده) */
   spread?: boolean;
   /** إعدادات إضافية لـ generationConfig (مثل mediaResolution للفيديو) */
   extraConfig?: Record<string, unknown>;
 }
 
-// النماذج المشغولة مؤقتاً: نتخطاها مباشرة بدل انتظارها في كل سؤال (تبقى في ذاكرة الدالة ما دامت تعمل)
-const busyUntil = new Map<string, number>();
-
 export class GeminiQuotaError extends Error {}
 
-/**
- * سلاسل النماذج: الأقوى أولاً، وإذا كان مشغولاً (503) أو انتهت حصته (429) أو أُوقف (404)
- * ننتقل للتالي تلقائياً — فلا يرى الطالب «المساعد مشغول» إلا إذا تعطلت كلها.
- * (gemini-2.5 أُوقفت للحسابات الجديدة، و Pro غير متاح في الطبقة المجانية)
- */
+/** النماذج بالترتيب على كل مفتاح (الأقوى أولاً) */
 export const MAIN_MODELS = ['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite'];
-export const LITE_MODELS = ['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-3.8-flash', 'gemini-3.5-flash'];
+/** التحية والأسئلة القصيرة: الخفيفة أولاً (توفّر حصة النماذج القوية) */
+export const LITE_MODELS = ['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.5-flash'];
+/** الاحتياط الأخير بعد انتهاء كل النماذج على كل المفاتيح */
+export const FALLBACK_MODELS = ['gemini-2.5-flash', 'gemini-2.5-flash-lite'];
 
 /** النموذج من الإعدادات أولاً (يقبل عدة أسماء مفصولة بفواصل)، ثم الافتراضيات */
 export function modelChain(setting: string | undefined | null, defaults: string[] = MAIN_MODELS): string[] {
@@ -63,31 +79,88 @@ export function modelChain(setting: string | undefined | null, defaults: string[
   return [...new Set([...fromSetting, ...defaults])];
 }
 
-/**
- * ترتيب المحاولات: كل مفتاح يبدأ بنموذج مختلف (مفتاح ١ ← النموذج ١، مفتاح ٢ ← النموذج ٢…)،
- * ثم تدور الجولة التالية. المشغول (503/429) يُتخطى لدقائق.
- */
-function attempts(keys: string[], models: string[], spread: boolean, pinned?: number, keyMajor = false): { k: number; m: string }[] {
-  const ks = pinned !== undefined ? [pinned] : keys.map((_, i) => i);
-  const out: { k: number; m: string }[] = [];
-  if (keyMajor) {
-    // كل النماذج على المفتاح الأول، ثم الذي بعده
-    for (const k of ks) for (const m of models) out.push({ k, m });
-    return out;
-  }
-  if (!spread) {
-    // الأسرع أولاً على كل المفاتيح (للتحية والأسئلة القصيرة)
-    for (const m of models) for (const k of ks) out.push({ k, m });
-    return out;
-  }
-  for (let r = 0; r < models.length; r++) {
-    for (const k of ks) out.push({ k, m: models[(k + r) % models.length] });
-  }
+// ───────────────── أقفال النماذج المشتركة (قاعدة البيانات + نسخة في الذاكرة لثوانٍ) ─────────────────
+const blocks = new Map<string, number>(); // "slot|model" ← حتى متى
+let blocksLoadedAt = 0;
+const bk = (slot: string, model: string) => `${slot}|${model}`;
+
+export async function refreshBlocks(force = false) {
+  if (!force && Date.now() - blocksLoadedAt < 15_000) return;
+  try {
+    const { data } = await admin.from('ai_key_blocks').select('slot, model, blocked_until').gt('blocked_until', new Date().toISOString());
+    blocks.clear();
+    for (const r of (data ?? []) as { slot: string; model: string; blocked_until: string }[]) blocks.set(bk(r.slot, r.model), Date.parse(r.blocked_until));
+    blocksLoadedAt = Date.now();
+  } catch { /* الجدول غير موجود بعد: نعمل بالذاكرة فقط */ }
+}
+
+function blockedUntil(slot: string, model: string): number {
+  const now = Date.now();
+  const a = blocks.get(bk(slot, model)) ?? 0;
+  const b = blocks.get(bk(slot, '*')) ?? 0;
+  const t = Math.max(a, b);
+  return t > now ? t : 0;
+}
+
+async function block(slot: string, model: string, ms: number, reason: string) {
+  const until = Date.now() + ms;
+  if ((blocks.get(bk(slot, model)) ?? 0) >= until) return;
+  blocks.set(bk(slot, model), until);
+  try {
+    await admin.from('ai_key_blocks').upsert({ slot, model, blocked_until: new Date(until).toISOString(), reason: reason.slice(0, 200), updated_at: new Date().toISOString() });
+  } catch { /* تجاهل */ }
+}
+
+async function logCall(slot: string, model: string, ok: boolean, status?: number, error?: string) {
+  try {
+    await admin.rpc('ai_log_call', { p_slot: slot, p_model: model, p_ok: ok, p_status: status ?? null, p_error: error ?? null });
+  } catch { /* العداد اختياري */ }
+}
+
+/** بداية اليوم التالي في حصة Google بحسب طلب صاحب المشروع: ٣ فجراً بغداد = منتصف الليل UTC */
+function msToNextDay(): number {
+  const n = new Date();
+  return Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate() + 1) - n.getTime();
+}
+
+/** مدة الانتظار التي تطلبها Google بعد 429: retryDelay أو «Please retry in 3h35m54s» */
+export function retryAfterMs(detail: string): number | null {
+  const d = detail.match(/"retryDelay"\s*:\s*"(\d+(?:\.\d+)?)s"/);
+  if (d) return Math.ceil(Number(d[1]) * 1000);
+  const m = detail.match(/retry in\s*(?:(\d+)h)?\s*(?:(\d+)m)?\s*(?:([\d.]+)s)?/i);
+  if (m && (m[1] || m[2] || m[3])) return ((Number(m[1] ?? 0) * 60 + Number(m[2] ?? 0)) * 60 + Number(m[3] ?? 0)) * 1000;
+  return null;
+}
+
+/** حصة يومية (لا دقيقة): نقفل النموذج حتى تجدّدها */
+export const isDailyQuota = (detail: string) => /PerDay|per_day|per day|daily/i.test(detail);
+
+/** ترتيب المحاولات: كل نماذج المفتاح الأول ثم الثاني…، ثم نماذج الاحتياط بنفس الطريقة */
+export function attemptOrder(slots: string[], models: string[], fallback: string[] = FALLBACK_MODELS): { slot: string; m: string }[] {
+  const out: { slot: string; m: string }[] = [];
+  for (const slot of slots) for (const m of models) out.push({ slot, m });
+  const fb = fallback.filter((m) => !models.includes(m));
+  for (const slot of slots) for (const m of fb) out.push({ slot, m });
   return out;
 }
 
-// مفتاح مرفوض (غير صالح أو موقوف): نتجاهله كله لفترة
-const badKeyUntil = new Map<string, number>();
+/** هل لهذا المفتاح نموذج متاح الآن؟ (لنقل ملف الفهرسة إلى مفتاح آخر عند انتهاء حصة الأول) */
+export async function slotAvailable(slot: string, models: string[] = MAIN_MODELS): Promise<boolean> {
+  await refreshBlocks(true);
+  return [...models, ...FALLBACK_MODELS].some((m) => !blockedUntil(slot, m));
+}
+
+/** أول مفتاح فيه نموذج متاح (عدا المستثنى) */
+export async function firstAvailableSlot(pool: Pool, models: string[] = MAIN_MODELS, exclude: string[] = []): Promise<string | null> {
+  await refreshBlocks(true);
+  for (const s of poolSlots(pool)) {
+    if (exclude.includes(s.slot)) continue;
+    if ([...models, ...FALLBACK_MODELS].some((m) => !blockedUntil(s.slot, m))) return s.slot;
+  }
+  return null;
+}
+
+const AR_TIME = (t: number) => new Date(t).toLocaleTimeString('ar-IQ', { hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Baghdad' });
 
 export async function generate(model: string | string[], contents: Content[], opts: GenerateOptions = {}): Promise<string> {
   const body: Record<string, unknown> = {
@@ -102,72 +175,88 @@ export async function generate(model: string | string[], contents: Content[], op
   if (opts.system) body.system_instruction = { parts: [{ text: opts.system }] };
   const config = body.generationConfig as Record<string, unknown>;
 
-  const keys = poolKeys(opts.pool);
+  const all = poolSlots(opts.pool);
+  const keyOf = new Map(all.map((s) => [s.slot, s.key]));
+  const pinned = opts.slot ?? (opts.keyIndex !== undefined ? all[opts.keyIndex]?.slot : undefined);
+  if (pinned && !keyOf.has(pinned)) throw new GeminiQuotaError(`key ${pinned} not available`);
+  const slots = pinned ? [pinned] : all.map((s) => s.slot);
   const models = Array.isArray(model) ? model : modelChain(model);
-  const all = attempts(keys, models, opts.spread ?? true, opts.keyIndex, opts.pool === 'admin');
+  await refreshBlocks();
+  const order = attemptOrder(slots, models);
   const failures: string[] = [];
-  const now = Date.now();
-  const tag = (a: { k: number; m: string }) => `${opts.pool ?? 'student'}:${a.k}:${a.m}`;
-  const free = all.filter((a) => (busyUntil.get(tag(a)) ?? 0) <= now);
-  const order = free.length ? [...free, ...all.filter((a) => !free.includes(a))] : all;
-  const missing = new Set<string>(); // نموذج غير موجود لهذا المفتاح
   let busy = false;
+  let tried = 0;
   for (const a of order) {
-    if (missing.has(tag(a))) continue;
-    if ((badKeyUntil.get(keys[a.k]) ?? 0) > Date.now() && opts.keyIndex === undefined) continue;
+    // مقفل (حصته انتهت أو مشغول): نتخطاه، ونعدّه «مشغولاً» حتى تكون الرسالة للطالب صحيحة
+    if (blockedUntil(a.slot, a.m)) { if (!blockedUntil(a.slot, '*')) busy = true; continue; }
+    tried++;
     let thinking = opts.thinking;
     for (let attempt = 0; attempt < 2; attempt++) {
       if (thinking) config.thinkingConfig = { thinkingLevel: thinking };
       else delete config.thinkingConfig;
-      const res = await fetch(`${API}/v1beta/models/${a.m}:generateContent`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': keys[a.k] },
-        body: JSON.stringify(body),
-      });
+      let res: Response;
+      try {
+        res = await fetch(`${API}/v1beta/models/${a.m}:generateContent`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-goog-api-key': keyOf.get(a.slot)! },
+          body: JSON.stringify(body),
+        });
+      } catch (e) {
+        busy = true;
+        failures.push(`${a.slot}/${a.m}: network ${String((e as Error).message ?? e).slice(0, 60)}`);
+        break;
+      }
       if (res.ok) {
         const data = await res.json();
         const parts = data?.candidates?.[0]?.content?.parts ?? [];
         const text = parts.filter((p: { thought?: boolean }) => !p.thought).map((p: { text?: string }) => p.text ?? '').join('').trim();
+        await logCall(a.slot, a.m, true, 200);
         if (text) return text;
         break; // جواب فارغ (حظر أو قطع): نجرب غيره
       }
       const status = res.status;
-      const detail = (await res.text()).slice(0, 300);
-      failures.push(`key${a.k + 1}/${a.m}: ${status} ${(detail.match(/"message":\s*"([^"]{0,120})/)?.[1] ?? '').trim()}`);
-      if (status === 404) { missing.add(tag(a)); break; }
-      if (status === 400 && thinking && attempt === 0) {
+      const detail = (await res.text()).slice(0, 4000);
+      const msg = (detail.match(/"message":\s*"([^"]{0,200})/)?.[1] ?? '').trim();
+      failures.push(`${a.slot}/${a.m}: ${status} ${msg.slice(0, 120)}`);
+      await logCall(a.slot, a.m, false, status, msg || detail.slice(0, 200));
+      if (status === 404) { await block(a.slot, a.m, 6 * 3600_000, 'النموذج غير متاح لهذا المفتاح'); break; }
+      if (status === 400 && thinking && attempt === 0 && /thinking/i.test(detail)) {
         thinking = undefined; // نموذج لا يدعم مستوى التفكير: نعيد بدونه
         continue;
       }
-      if (status === 429 || status === 503) {
-        // مشغول أو انتهت حصة هذا المفتاح لهذا النموذج: ننتقل فوراً ونتخطاه لفترة
+      if (status === 429) {
+        // انتهت حصة هذا النموذج على هذا المفتاح: نقفله حتى الوقت الذي تحدده Google وننتقل للتالي
         busy = true;
-        busyUntil.set(tag(a), Date.now() + (status === 429 ? 10 : 2) * 60_000);
+        const wait = retryAfterMs(detail) ?? (isDailyQuota(detail) ? msToNextDay() : 60_000);
+        await block(a.slot, a.m, wait + 2000, isDailyQuota(detail) || wait > 10 * 60_000 ? `انتهت الحصة اليومية — تعود ${AR_TIME(Date.now() + wait)}` : 'حد الدقيقة');
         break;
       }
-      if (status === 500 && attempt === 0) {
-        busy = true;
-        continue;
-      }
-      if (status >= 500) {
-        // 500/502/504: مشكلة مؤقتة عند Google ← النموذج أو المفتاح التالي
-        busy = true;
-        busyUntil.set(tag(a), Date.now() + 60_000);
-        break;
-      }
-      if (status === 400 || status === 401 || status === 403) {
-        console.error(`Gemini key ${a.k} ${a.m} ${status}: ${detail}`);
-        // نعطّل المفتاح كله فقط إذا كان المفتاح نفسه مرفوضاً — لا بسبب ملف أو فيديو لا يصل إليه
-        if (status === 401 || /API_KEY_INVALID|API key not valid|SERVICE_DISABLED|has been suspended|denied access|project has been denied/i.test(detail)) {
-          badKeyUntil.set(keys[a.k], Date.now() + 30 * 60_000);
+      if (status === 503) { busy = true; await block(a.slot, a.m, 2 * 60_000, 'مشغول عند Google'); break; }
+      if (status === 500 && attempt === 0) { busy = true; continue; }
+      if (status >= 500) { busy = true; await block(a.slot, a.m, 60_000, `خطأ ${status} عند Google`); break; }
+      if (status === 401 || status === 403) {
+        console.error(`Gemini ${a.slot} ${a.m} ${status}: ${detail.slice(0, 300)}`);
+        // المفتاح نفسه مرفوض (غير صالح/موقوف/المشروع محجوب): نقفل المفتاح كله
+        if (status === 401 || /API_KEY_INVALID|API key not valid|SERVICE_DISABLED|has been suspended|denied access|PERMISSION_DENIED.*project/i.test(detail)) {
+          await block(a.slot, '*', 6 * 3600_000, msg || `مرفوض ${status}`);
         }
-        if (opts.keyIndex !== undefined) throw new Error(`Gemini ${a.m} ${status}: ${detail}`);
+        if (pinned) throw new Error(`Gemini ${a.m} ${status}: ${msg || detail.slice(0, 200)}`);
         break;
       }
-      throw new Error(`Gemini ${a.m} ${status}: ${detail}`);
+      if (status === 400) {
+        if (/API_KEY_INVALID|API key not valid/i.test(detail)) { await block(a.slot, '*', 6 * 3600_000, 'مفتاح غير صالح'); break; }
+        // طلب غير مقبول (محتوى/ملف): لا علاقة له بالحصة
+        if (pinned) throw new Error(`Gemini ${a.m} ${status}: ${msg || detail.slice(0, 200)}`);
+        break;
+      }
+      throw new Error(`Gemini ${a.m} ${status}: ${msg || detail.slice(0, 200)}`);
     }
   }
-  if (busy) throw new GeminiQuotaError('all models busy');
+  if (busy || !tried) {
+    await refreshBlocks(true);
+    const next = Math.min(...order.map((a) => blockedUntil(a.slot, a.m)).filter(Boolean));
+    throw new GeminiQuotaError(Number.isFinite(next) ? `كل النماذج مشغولة أو انتهت حصتها حتى ${AR_TIME(next)}` : 'all models busy');
+  }
   throw new Error(`Gemini لم يُجب. ${[...new Set(failures)].slice(0, 6).join(' | ') || 'جواب فارغ'}`);
 }
 
@@ -180,21 +269,41 @@ function normalize(v: number[]): number[] {
 }
 
 export async function embed(texts: string[], taskType: 'RETRIEVAL_DOCUMENT' | 'RETRIEVAL_QUERY', pool: Pool = 'student'): Promise<number[][]> {
-  const keys = poolKeys(pool);
+  const slots = poolSlots(pool);
+  await refreshBlocks();
   const out: number[][] = [];
   for (let i = 0; i < texts.length; i += 50) {
     const batch = texts.slice(i, i + 50);
-    let res: Response | null = null;
-    const usable = keys.filter((k) => (badKeyUntil.get(k) ?? 0) <= Date.now());
-    for (const k of usable.length ? usable : keys) {
-      res = await fetchEmbed(k, batch, taskType);
-      if (![400, 401, 403, 429].includes(res.status) && res.status < 500) break;
+    let done = false;
+    let quota = false;
+    let lastErr = '';
+    const usable = slots.filter((s) => !blockedUntil(s.slot, EMBED_MODEL));
+    for (const s of usable.length ? usable : slots) {
+      const res = await fetchEmbed(s.key, batch, taskType).catch(() => null);
+      if (!res) { lastErr = 'network'; continue; }
+      if (res.ok) {
+        const data = await res.json();
+        for (const e of data.embeddings) out.push(normalize(e.values));
+        await logCall(s.slot, EMBED_MODEL, true, 200);
+        done = true;
+        break;
+      }
+      const detail = (await res.text()).slice(0, 2000);
+      lastErr = `${res.status}: ${detail.slice(0, 200)}`;
+      await logCall(s.slot, EMBED_MODEL, false, res.status, detail.slice(0, 200));
+      if (res.status === 429) {
+        quota = true;
+        await block(s.slot, EMBED_MODEL, (retryAfterMs(detail) ?? (isDailyQuota(detail) ? msToNextDay() : 60_000)) + 2000, 'حصة التضمين');
+      } else if (res.status === 401 || res.status === 403) {
+        await block(s.slot, '*', 6 * 3600_000, `مرفوض ${res.status}`);
+      } else if (res.status < 500 && res.status !== 400) {
+        break;
+      }
     }
-    if (!res) throw new Error('no key');
-    if (res.status === 429) throw new GeminiQuotaError('quota');
-    if (!res.ok) throw new Error(`Gemini embed ${res.status}: ${await res.text()}`);
-    const data = await res.json();
-    for (const e of data.embeddings) out.push(normalize(e.values));
+    if (!done) {
+      if (quota) throw new GeminiQuotaError('embed quota');
+      throw new Error(`Gemini embed ${lastErr}`);
+    }
   }
   return out;
 }
@@ -216,23 +325,33 @@ function fetchEmbed(k: string, batch: string[], taskType: string) {
 
 /**
  * رفع ملف كبير (PDF) إلى Gemini File API — يبقى ٤٨ ساعة، ولا يقرؤه إلا نفس المفتاح.
- * يعيد «k<رقم>|<الرابط>» حتى نستخدم المفتاح نفسه عند القراءة (انظر fileRef).
+ * يعيد «s:<اسم الخانة>|<الرابط>» حتى نستخدم المفتاح نفسه عند القراءة (انظر fileRef).
+ * prefer: خانة نريد الرفع إليها (مثلاً عند نقل الفهرسة لمفتاح ما زالت حصته متاحة).
  */
-export async function uploadFile(bytes: Uint8Array, mimeType: string, displayName: string, pool: Pool = 'admin'): Promise<string> {
-  const keys = poolKeys(pool);
+export async function uploadFile(bytes: Uint8Array, mimeType: string, displayName: string, pool: Pool = 'admin', prefer?: string, models: string[] = MAIN_MODELS): Promise<string> {
+  await refreshBlocks(true);
+  const slots = poolSlots(pool);
+  // المفضَّل أولاً، ثم من لديه نماذج متاحة، ثم البقية
+  const ranked = [...slots].sort((a, b) => {
+    const score = (s: KeySlot) => (s.slot === prefer ? 0 : [...models, ...FALLBACK_MODELS].some((m) => !blockedUntil(s.slot, m)) ? 1 : 2);
+    return score(a) - score(b);
+  });
   let last: unknown;
-  for (let k = 0; k < keys.length; k++) {
+  for (const s of ranked) {
+    if (blockedUntil(s.slot, '*')) continue;
     try {
-      return `k${k}|${await uploadWith(keys[k], bytes, mimeType, displayName)}`;
+      return `s:${s.slot}|${await uploadWith(s.key, bytes, mimeType, displayName)}`;
     } catch (e) {
       last = e;
     }
   }
-  throw last;
+  throw last ?? new GeminiQuotaError('no key available for upload');
 }
 
-/** يفك «k<رقم>|<الرابط>» (والروابط القديمة بلا رقم ← المفتاح الأول) */
-export function fileRef(stored: string): { uri: string; keyIndex: number } {
+/** يفك «s:<خانة>|<الرابط>» أو الصيغة القديمة «k<رقم>|<الرابط>» */
+export function fileRef(stored: string): { uri: string; slot?: string; keyIndex: number } {
+  const s = stored.match(/^s:([A-Z0-9_]+)\|(.+)$/);
+  if (s) return { uri: s[2], slot: s[1], keyIndex: -1 };
   const m = stored.match(/^k(\d+)\|(.+)$/);
   return m ? { uri: m[2], keyIndex: Number(m[1]) } : { uri: stored, keyIndex: 0 };
 }

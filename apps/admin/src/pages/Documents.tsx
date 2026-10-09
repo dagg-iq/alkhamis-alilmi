@@ -109,6 +109,7 @@ export default function Documents() {
                         : doc.ingest_status === 'error' ? <span className="pill bad" title={doc.ingest_error ?? ''}>خطأ — أعد المحاولة</span>
                           : doc.ingest_status === 'running' ? <span className="pill warn">ناقصة ({doc.ingested_pages}/{doc.pages ?? '?'})</span>
                             : <span className="pill">غير مفهرسة</span>}
+                    {!ingesting[doc.id] && (doc.ingest_error || doc.outline_error) ? <div className="small" style={{ color: 'var(--bad)', marginTop: 4, maxWidth: 260 }}>{doc.ingest_error ?? doc.outline_error}</div> : null}
                   </td>
                   <td>
                     <div className="row" style={{ justifyContent: 'flex-end', flexWrap: 'nowrap' }}>

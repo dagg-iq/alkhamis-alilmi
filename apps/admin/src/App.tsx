@@ -18,6 +18,7 @@ import Schedules from './pages/Schedules';
 import Settings from './pages/Settings';
 import Students from './pages/Students';
 import Tasks from './pages/Tasks';
+import Usage from './pages/Usage';
 
 
 /** أيقونات خطية للقائمة (٢٤×٢٤، بسماكة ١٫٨) */
@@ -34,6 +35,7 @@ const ICON_PATHS: Record<string, ReactNode> = {
   '/tasks': <><rect x="4" y="3.5" width="16" height="17.5" rx="3" /><path d="M8.5 12l2.2 2.2L15.5 9.5" /><path d="M9 18h6" /></>,
   '/news': <><path d="M4 5h13v14H6a2 2 0 0 1-2-2z" /><path d="M17 9h3v8a2 2 0 0 1-2 2" /><path d="M7.5 9h6M7.5 12.5h6M7.5 16h3" /></>,
   '/settings': <><path d="M4 7h9M17 7h3M4 17h3M11 17h9" /><circle cx="15" cy="7" r="2.2" /><circle cx="9" cy="17" r="2.2" /></>,
+  '/usage': <><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" /></>,
   '/audit': <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3.2 2" /></>,
 };
 function NavIcon({ to }: { to: string }) {
@@ -56,6 +58,7 @@ const NAV: { to: string; label: string; g: Group; end?: boolean; badge?: boolean
   { to: '/schedules', label: 'الجداول', g: 'plan' },
   { to: '/tasks', label: 'الواجبات والامتحانات', g: 'plan' },
   { to: '/news', label: 'الأخبار', g: 'plan' },
+  { to: '/usage', label: 'الاستخدام', g: 'system', admin: true },
   { to: '/settings', label: 'الإعدادات', g: 'system', admin: true },
   { to: '/audit', label: 'سجل العمليات', g: 'system', admin: true },
 ];
@@ -127,6 +130,7 @@ export default function App() {
           <Route path="/tasks" element={<Tasks />} />
           <Route path="/chat" element={<Chat />} />
           {isAdmin ? <Route path="/settings" element={<Settings />} /> : null}
+          {isAdmin ? <Route path="/usage" element={<Usage />} /> : null}
           {isAdmin ? <Route path="/audit" element={<Audit />} /> : null}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
