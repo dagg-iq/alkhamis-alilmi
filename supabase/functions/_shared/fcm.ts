@@ -72,7 +72,7 @@ export async function sendFcm(messages: FcmMessage[]): Promise<string[]> {
             android: {
               priority: 'high',
               notification: {
-                channel_id: m.channelId, sound: 'default', color: '#2346F5', visibility: 'PUBLIC', notification_priority: 'PRIORITY_HIGH',
+                channel_id: m.channelId, sound: 'default', color: '#2346F5', visibility: m.channelId === 'chat' ? 'PRIVATE' : 'PUBLIC', notification_priority: 'PRIORITY_HIGH',
                 default_vibrate_timings: true, ...(m.image ? { image: m.image } : {}), ...(m.tag ? { tag: m.tag } : {}),
               },
             },

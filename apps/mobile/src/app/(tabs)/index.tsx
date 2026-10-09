@@ -34,15 +34,20 @@ export default function Home() {
     const now = new Date();
     const endOfToday = new Date(now);
     endOfToday.setHours(23, 59, 59, 999);
+    // فلاتر الوقت ثابتة طوال اليوم (بداية اليوم) حتى يطابق الاستعلام المحفوظ بلا إنترنت، ثم نفلتر بالساعة هنا
+    const startOfToday = new Date(now);
+    startOfToday.setHours(0, 0, 0, 0);
+    // جزء واحد يفشل بلا إنترنت (لم يُحفظ بعد) لا يُفرغ الرئيسية كلها
+    const soft = <T,>(p: Promise<T>, fallback: T) => p.catch(() => fallback);
     const [subjects, progress, grades, exams, tasks, done, posts, unreadNotifs, sched] = await Promise.all([
       loadSubjects(),
       loadSubjectProgress(me.id),
       loadMyGrades(me.id),
-      must(supabase.from('tasks').select('*').eq('type', 'exam').gte('due_at', now.toISOString()).order('due_at').limit(1)),
-      must(supabase.from('tasks').select('*').neq('type', 'exam').lte('due_at', endOfToday.toISOString()).order('due_at').limit(20)),
-      must(supabase.from('task_status').select('task_id').eq('user_id', me.id)),
-      must(supabase.from('posts').select('*').order('is_pinned', { ascending: false }).order('published_at', { ascending: false }).limit(1)),
-      supabase.from('notifications').select('id', { count: 'exact', head: true }).is('read_at', null),
+      soft(must(supabase.from('tasks').select('*').eq('type', 'exam').gte('due_at', startOfToday.toISOString()).order('due_at').limit(10)), [] as Task[]),
+      soft(must(supabase.from('tasks').select('*').neq('type', 'exam').lte('due_at', endOfToday.toISOString()).order('due_at').limit(20)), [] as Task[]),
+      soft(must(supabase.from('task_status').select('task_id').eq('user_id', me.id)), [] as { task_id: string }[]),
+      soft(must(supabase.from('posts').select('*').order('is_pinned', { ascending: false }).order('published_at', { ascending: false }).limit(1)), [] as Post[]),
+      supabase.from('notifications').select('id', { count: 'exact', head: true }).is('read_at', null).then((r) => r, () => ({ count: 0 })),
       loadSchedules().catch(() => null),
     ]);
     const doneIds = new Set((done as { task_id: string }[]).map((d) => d.task_id));
@@ -50,7 +55,7 @@ export default function Home() {
       subjects,
       progress,
       grades,
-      nextExam: (exams as Task[])[0] ?? null,
+      nextExam: (exams as Task[]).find((t) => t.due_at && new Date(t.due_at) >= now) ?? null,
       todayTasks: (tasks as Task[]).filter((t) => !doneIds.has(t.id)).slice(0, 4),
       post: (posts as Post[])[0] ?? null,
       unreadNotifs: unreadNotifs.count ?? 0,

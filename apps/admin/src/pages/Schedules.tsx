@@ -169,7 +169,13 @@ function Editor({ id: initialId, data, onClose }: { id: string | null; data: Edi
   useEffect(() => {
     if (!initialId) return;
     must(supabase.from('schedule_items').select('*').eq('schedule_id', initialId)).then((items) => {
-      setRows((items as ScheduleItem[]).map(toRow));
+      const loadedRows = (items as ScheduleItem[]).map(toRow);
+      // الحصص الفارغة لا تُحفظ؛ نعيدها صفوفاً فارغة في مكانها حتى لا تتزحزح الحصص عند التعديل
+      for (const d of new Set(loadedRows.filter((r) => r.day !== null).map((r) => r.day!))) {
+        const have = new Set(loadedRows.filter((r) => r.day === d).map((r) => r.sort));
+        for (let n = 1; n <= Math.max(...have); n++) if (!have.has(n)) loadedRows.push(blank({ day: d, sort: n }));
+      }
+      setRows(loadedRows);
       setLoaded(true);
     }).catch((e) => toast(e instanceof Error ? e.message : 'تعذّر التحميل', true));
   }, [initialId, toast]);
@@ -180,9 +186,11 @@ function Editor({ id: initialId, data, onClose }: { id: string | null; data: Edi
   const setCount = (d: number, n: number) => setRows((rs) => {
     const mine = rs.filter((r) => r.day === d).sort((a, b) => a.sort - b.sort);
     const others = rs.filter((r) => r.day !== d);
+    // بلا إعادة ترقيم: كل حصة تبقى في رقمها (وإلا تنتقل المواد لحصص أخرى وأوقاتها باقية)
     const next = mine.slice(0, n);
-    while (next.length < n) next.push(blank({ day: d, sort: next.length + 1 }));
-    return [...others, ...next.map((r, i) => ({ ...r, sort: i + 1 }))];
+    let sort = next.reduce((m, r) => Math.max(m, r.sort), 0);
+    while (next.length < n) next.push(blank({ day: d, sort: ++sort }));
+    return [...others, ...next];
   });
   const removeRow = (r: Row) => setRows((rs) => {
     const left = rs.filter((x) => x.id !== r.id);

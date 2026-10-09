@@ -62,6 +62,9 @@ export function useDownload(): DownloadState {
 }
 
 const apkFile = (version: number) => new File(Paths.cache, `saey-${version}.apk`);
+// يُحمَّل إلى ملف مؤقت ثم يُنقل عند الاكتمال، فلا يُعدّ تحميل انقطع (أُغلق التطبيق) ملفاً جاهزاً
+const partFile = (version: number) => new File(Paths.cache, `saey-${version}.apk.part`);
+let cancelled = false;
 
 /** يبدأ التحميل (أو يكمل إن كان جارياً). التقدم يظهر في النافذة وفي إشعار، ويستمر والتطبيق مصغّر ما دام النظام يبقيه حياً */
 export async function startDownload(info: UpdateInfo): Promise<void> {
@@ -72,10 +75,13 @@ export async function startDownload(info: UpdateInfo): Promise<void> {
     return;
   }
   if (dest.exists) dest.delete();
+  const part = partFile(info.version);
+  if (part.exists) part.delete();
+  cancelled = false;
   setState({ status: 'downloading', version: info.version, received: 0, total: info.sizeMb ? info.sizeMb * 1048576 : 0, error: undefined });
   let lastNotify = 0;
   try {
-    task = new DownloadTask(info.url, dest, {
+    task = new DownloadTask(info.url, part, {
       onProgress: ({ bytesWritten, totalBytes }) => {
         setState({ received: bytesWritten, total: totalBytes > 0 ? totalBytes : state.total });
         const now = Date.now();
@@ -87,18 +93,23 @@ export async function startDownload(info: UpdateInfo): Promise<void> {
     });
     await task.downloadAsync();
     task = null;
-    if (!dest.exists || (dest.size ?? 0) < 1_000_000) throw new Error('الملف المحمّل ناقص');
+    if (cancelled) return;
+    const expected = state.total;
+    if (!part.exists || (part.size ?? 0) < 1_000_000 || (expected > 0 && (part.size ?? 0) < expected * 0.9)) throw new Error('الملف المحمّل ناقص');
+    part.move(dest);
     setState({ status: 'ready', received: dest.size ?? 0, total: dest.size ?? 0 });
     notifyDownload('اكتمل تحميل تحديث سعي', 'اضغط هنا للتثبيت', true);
   } catch (e) {
     task = null;
-    try { if (dest.exists) dest.delete(); } catch { /* تجاهل */ }
+    try { if (part.exists) part.delete(); } catch { /* تجاهل */ }
+    if (cancelled) return; // ألغاه الطالب: ليس خطأ
     setState({ status: 'error', error: e instanceof Error ? e.message : 'تعذّر التحميل' });
     notifyDownload('تعذّر تحميل التحديث', 'افتح سعي وأعد المحاولة', true);
   }
 }
 
 export function cancelDownload() {
+  cancelled = true;
   try { task?.cancel(); } catch { /* تجاهل */ }
   task = null;
   setState({ status: 'idle', received: 0, total: 0, error: undefined });

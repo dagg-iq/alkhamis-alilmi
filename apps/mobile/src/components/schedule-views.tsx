@@ -68,7 +68,7 @@ export function WeekGrid({ items, subjects, settings, target }: { items: Schedul
   const rows = Math.max(1, ...items.map((i) => i.sort || 0), ...days.map((d) => items.filter((i) => i.day === d).length));
   const cell = (d: number, r: number) => {
     const list = items.filter((i) => i.day === d);
-    return list.find((i) => i.sort === r + 1) ?? list[r];
+    return list.find((i) => i.sort === r + 1) ?? (list.some((i) => i.sort) ? undefined : list[r]); // حصة فارغة تبقى فارغة
   };
   return (
     <View style={{ borderRadius: 20, overflow: 'hidden', borderWidth: 1, borderColor: c.line, backgroundColor: c.card }}>

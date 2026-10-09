@@ -1,6 +1,6 @@
 import { arDigits } from '@saey/shared';
 import Constants from 'expo-constants';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Linking, Share, View } from 'react-native';
 import { Alert } from '@/lib/dialog';
 import { DeveloperCard } from '@/components/rich-text';
@@ -29,6 +29,8 @@ export default function About() {
   const [checking, setChecking] = useState(false);
   const [info, setInfo] = useState<UpdateInfo | null>(null);
   const version = Constants.expoConfig?.version ?? '1.0.0';
+  // جاء من إشعار «تعذّر التحميل»: نجلب معلومات النسخة فيظهر زر «إعادة المحاولة» مباشرة
+  useEffect(() => { if (d.status === 'error') checkForUpdate(true).then((u) => u && setInfo(u)).catch(() => {}); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
 
   const check = async () => {
     if (checking) return;
@@ -94,7 +96,7 @@ export default function About() {
           </View>
         </Row>
         {info && d.status === 'idle' ? <Button title="حمّل التحديث" icon="download" onPress={() => startDownload(info)} /> : <DownloadStatus info={info} />}
-        {!info && d.status === 'idle' ? <Button title={checking ? 'يتحقق…' : 'التحقق من التحديثات'} variant="secondary" icon="refresh" loading={checking} onPress={check} /> : null}
+        {!info && d.status !== 'downloading' ? <Button title={checking ? 'يتحقق…' : 'التحقق من التحديثات'} variant="secondary" icon="refresh" loading={checking} onPress={check} /> : null}
       </Card>
 
       <SectionTitle title="المطوّر" />

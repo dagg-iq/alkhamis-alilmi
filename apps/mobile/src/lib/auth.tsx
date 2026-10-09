@@ -5,7 +5,7 @@ import * as WebBrowser from 'expo-web-browser';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { clearLocalPrefs, flushPrefs, hydratePrefs } from './prefs';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { clearOfflineCache } from './offline';
+import { clearOfflineCache, setCacheUser } from './offline';
 import { sessionStorageKey, supabase } from './supabase';
 
 WebBrowser.maybeCompleteAuthSession();
@@ -50,6 +50,22 @@ async function storedSession(): Promise<Session | null> {
   }
 }
 
+const LAST_USER = 'saey.lastUser';
+
+/** بيانات الحساب السابق على هذا الهاتف (المحفوظ بلا إنترنت، الهدف والمظهر، الويدجت) لا تنتقل لحساب آخر */
+async function clearDeviceData() {
+  await clearLocalPrefs().catch(() => {});
+  await clearOfflineCache().catch(() => {});
+  import('@/widgets/sync').then((m) => m.clearWidgets()).catch(() => {});
+}
+
+/** دخول حساب غير الحساب السابق (مثلاً بعد خروج بانتهاء الجلسة): نمسح بيانات السابق قبل أي شيء */
+async function switchDeviceUser(userId: string) {
+  const last = await AsyncStorage.getItem(LAST_USER).catch(() => null);
+  if (last && last !== userId) await clearDeviceData();
+  if (last !== userId) await AsyncStorage.setItem(LAST_USER, userId).catch(() => {});
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
   const [session, setSession] = useState<Session | null>(null);
@@ -62,6 +78,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setProfile(null);
       return;
     }
+    setCacheUser(userId);
+    await switchDeviceUser(userId);
     try {
       const { data } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
       // الهدف والمظهر وإعدادات المؤقت من حسابه، قبل أن تظهر الشاشات
@@ -82,7 +100,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!current) {
           // بلا إنترنت تعذّر تجديد الجلسة المنتهية: لا نرمي الطالب لشاشة الدخول، نفتح بما هو محفوظ
           current = await storedSession();
-          if (current) setStale(true);
+          if (current) { setStale(true); setCacheUser(current.user.id); }
         }
         setSession(current);
         await loadProfile(current?.user.id);
@@ -93,7 +111,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setReady(true);
       }
     })();
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event, s) => {
+      // بلا إنترنت يرسل supabase-js جلسة فارغة في البداية بعد فشل التجديد؛ نتجاهلها (نفتح بالجلسة المخزنة)
+      // ولا نعتبر الخروج إلا عند SIGNED_OUT الصريح
+      if (!s && event !== 'SIGNED_OUT') return;
+      if (event === 'SIGNED_OUT') {
+        setCacheUser(null);
+        setTimeout(() => { clearDeviceData(); AsyncStorage.removeItem(LAST_USER).catch(() => {}); }, 0);
+      }
       setSession(s);
       // لا نستدعي supabase داخل المستمع مباشرة (توصية supabase-js)
       setTimeout(() => loadProfile(s?.user.id), 0);
@@ -158,10 +183,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await flushPrefs().catch(() => {});
       await supabase.auth.signOut();
       setProfile(null);
-      await clearLocalPrefs();
-      await clearOfflineCache().catch(() => {});
-      // لا تبقى بيانات الطالب ظاهرة على الشاشة الرئيسية
-      import('@/widgets/sync').then((m) => m.clearWidgets()).catch(() => {});
+      setCacheUser(null);
+      // لا تبقى بيانات الطالب ظاهرة (المحفوظ، الهدف، الويدجت)
+      await clearDeviceData();
+      await AsyncStorage.removeItem(LAST_USER).catch(() => {});
     },
     refreshProfile: () => loadProfile(session?.user.id),
   }), [ready, session, profile, loadProfile]);

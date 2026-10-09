@@ -64,6 +64,7 @@ export default function Timer() {
   const sessions = useLoad(async () => {
     const since = new Date();
     since.setDate(since.getDate() - 60);
+    since.setHours(0, 0, 0, 0); // ثابت طوال اليوم (يطابق المحفوظ بلا إنترنت)
     return must(supabase.from('study_sessions').select('started_at, minutes, subject_id')
       .gte('started_at', since.toISOString()).order('started_at', { ascending: false })) as Promise<Session[]>;
   });

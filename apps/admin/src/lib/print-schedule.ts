@@ -48,7 +48,7 @@ function weeklyTable(ctx: Ctx): string {
   const rows = Math.max(1, ...days.map((d) => items.filter((i) => i.day === d).length), ...items.map((i) => i.sort || 0));
   const cell = (d: number, r: number) => {
     const list = items.filter((i) => i.day === d).sort((a, b) => a.sort - b.sort);
-    return list.find((i) => i.sort === r + 1) ?? list[r];
+    return list.find((i) => i.sort === r + 1) ?? (list.some((i) => i.sort) ? undefined : list[r]); // حصة فارغة تبقى فارغة
   };
   const timeOf = (r: number) => {
     const it = days.map((d) => cell(d, r)).find((x) => x?.start_time);

@@ -7,6 +7,8 @@ export interface KV {
   get(key: string): Promise<string | null>;
   set(key: string, value: string): Promise<void>;
   remove(keys: string[]): Promise<void>;
+  /** كل المفاتيح (للمسح الكامل) */
+  keys?(): Promise<readonly string[]>;
 }
 
 export interface OfflineFetchOptions {
@@ -14,6 +16,11 @@ export interface OfflineFetchOptions {
   store: KV;
   /** مفتاح anon: الطلبات به (بلا جلسة) لا تُحفظ حتى لا تحل ردود فارغة محل بيانات الطالب */
   anonKey: string;
+  /**
+   * صاحب البيانات المحفوظة (معرّف الطالب). المفتاح مبني عليه لا على رمز الدخول، لأن الرمز يتغير كل ساعة،
+   * وبلا إنترنت بعد انتهائه يرسل supabase-js مفتاح anon بدل رمز الطالب — فنقرأ المحفوظ له رغم ذلك (ولا نحفظ).
+   */
+  userId: () => string | null;
   onState?: (offline: boolean) => void;
   maxEntries?: number;
   maxBytes?: number;
@@ -58,7 +65,13 @@ export function createCachingFetch(o: OfflineFetchOptions): typeof fetch {
   async function readIndex(): Promise<Index> {
     try { return JSON.parse((await o.store.get(INDEX)) ?? '[]') as Index; } catch { return []; }
   }
-  async function remember(key: string, entry: Entry) {
+  // الكتابة في الفهرس بالتتابع: الشاشات تطلب عدة استعلامات معاً، والكتابة المتزامنة كانت تُضيّع مفاتيح من الفهرس
+  let chain: Promise<void> = Promise.resolve();
+  function remember(key: string, entry: Entry): Promise<void> {
+    chain = chain.then(() => rememberNow(key, entry)).catch(() => {});
+    return chain;
+  }
+  async function rememberNow(key: string, entry: Entry) {
     const raw = JSON.stringify(entry);
     if (raw.length > 400_000) return; // أكبر من اللازم
     await o.store.set(key, raw);
@@ -85,12 +98,15 @@ export function createCachingFetch(o: OfflineFetchOptions): typeof fetch {
     const table = path.startsWith('/rest/v1/') ? path.slice(9).split('/')[0] : '';
     const rpc = path.startsWith('/rest/v1/rpc/') ? path.slice(13) : '';
     const token = headerOf(init, 'authorization').replace(/^Bearer\s+/i, '');
-    const cacheable = !!table && token !== '' && token !== o.anonKey && (
+    const uid = o.userId();
+    const readable = !!table && !!uid && (
       ((method === 'GET' || method === 'HEAD') && !SKIP_TABLES.has(table)) ||
       (method === 'POST' && !!rpc && READ_RPC.has(rpc))
     );
+    // نحفظ فقط ما جاء برمز الطالب نفسه (رد anon قد يكون فارغاً بسبب RLS فيمحو بياناته)
+    const storable = readable && token !== '' && token !== o.anonKey;
 
-    if (!cacheable) {
+    if (!readable) {
       try {
         const res = await o.base(input, init);
         setOffline(false);
@@ -102,13 +118,16 @@ export function createCachingFetch(o: OfflineFetchOptions): typeof fetch {
     }
 
     const body = method === 'POST' && typeof init?.body === 'string' ? init.body : '';
-    const key = `${PREFIX}${hash(`${method}|${url}|${headerOf(init, 'accept')}|${body}`)}`;
+    const key = `${PREFIX}${hash(`${uid}|${method}|${url}|${headerOf(init, 'accept')}|${body}`)}`;
+    const cached = async (): Promise<Entry | null> => {
+      try { const raw = await o.store.get(key); return raw ? (JSON.parse(raw) as Entry) : null; } catch { return null; }
+    };
 
-    // مهلة: إن تأخر الخادم كثيراً نعرض المحفوظ (إلا إذا طلب المتصل إلغاءً بنفسه)
+    // مهلة: إن تأخر الخادم كثيراً نعرض المحفوظ — فقط إن وُجد محفوظ (وإلا ننتظر الخادم مهما تأخر)
     let ctl: AbortController | null = null;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let reqInit = init;
-    if (!init?.signal && typeof AbortController !== 'undefined') {
+    if (!init?.signal && typeof AbortController !== 'undefined' && (await o.store.get(key).catch(() => null))) {
       ctl = new AbortController();
       timer = setTimeout(() => ctl?.abort(), timeoutMs);
       reqInit = { ...init, signal: ctl.signal };
@@ -117,7 +136,7 @@ export function createCachingFetch(o: OfflineFetchOptions): typeof fetch {
       const res = await o.base(input, reqInit);
       if (timer) clearTimeout(timer);
       setOffline(false);
-      if (res.ok && res.status !== 204 && method !== 'HEAD') {
+      if (!storable) { /* لا نحفظ */ } else if (res.ok && res.status !== 204 && method !== 'HEAD') {
         res.clone().text().then((b) => remember(key, {
           s: res.status, ct: res.headers.get('content-type') ?? 'application/json', cr: res.headers.get('content-range') ?? '', b,
         })).catch(() => {});
@@ -129,8 +148,7 @@ export function createCachingFetch(o: OfflineFetchOptions): typeof fetch {
       if (timer) clearTimeout(timer);
       if (!isNetworkError(e)) throw e;
       setOffline(true);
-      let hit: Entry | null = null;
-      try { const raw = await o.store.get(key); hit = raw ? (JSON.parse(raw) as Entry) : null; } catch { hit = null; }
+      const hit = await cached();
       if (!hit) throw e;
       const headers: Record<string, string> = { 'x-saey-cache': '1' };
       if (hit.ct) headers['content-type'] = hit.ct;
@@ -141,9 +159,10 @@ export function createCachingFetch(o: OfflineFetchOptions): typeof fetch {
   return impl as typeof fetch;
 }
 
-/** يمسح كل المحفوظ (عند تسجيل الخروج: لا يرى حساب آخر بيانات هذا الحساب) */
+/** يمسح كل المحفوظ (عند تسجيل الخروج: لا يرى حساب آخر بيانات هذا الحساب) — حتى المفاتيح التي سقطت من الفهرس */
 export async function clearOfflineEntries(store: KV): Promise<void> {
   let idx: Index = [];
   try { idx = JSON.parse((await store.get(INDEX)) ?? '[]') as Index; } catch { /* لا شيء */ }
-  await store.remove([...idx.map((x) => x[0]), INDEX]);
+  const all = store.keys ? (await store.keys().catch(() => [] as readonly string[])).filter((k) => k.startsWith(PREFIX)) : [];
+  await store.remove([...new Set([...idx.map((x) => x[0]), ...all, INDEX])]);
 }

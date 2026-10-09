@@ -50,7 +50,7 @@ describe('تطبيع الفهرس', () => {
   it('فصلان ببداية واحدة لا يتداخلان، وأرقام نصية أو خاطئة لا تكسر شيئاً', () => {
     const out = normalizeOutline([{ title: 'أ', start_page: '5' }, { title: 'ب', start_page: 5 }, { title: 'ج', start_page: 'x' }, null, 7], 20);
     expect(out.map((c) => c.start_page)).toEqual([1, 5, 6]); // مقدمة + أ + ب
-    expect(out.at(-1)!.end_page).toBe(20);
+    expect(out[out.length - 1].end_page).toBe(20);
     out.forEach((c) => expect(c.end_page).toBeGreaterThanOrEqual(c.start_page));
   });
   it('ناتج فارغ أو غير صالح ← فهرس احتياطي يغطي كل الصفحات', () => {
@@ -65,7 +65,7 @@ describe('تطبيع الفهرس', () => {
     const out = normalizeOutline([{ title: 'أ', start_page: 4 }, { title: 'ب', start_page: 20 }, { title: 'ج', start_page: 20 }, { title: 'د', start_page: 33 }], 50);
     expect(out[0].start_page).toBe(1);
     for (let i = 1; i < out.length; i++) expect(out[i].start_page).toBe(out[i - 1].end_page + 1);
-    expect(out.at(-1)!.end_page).toBe(50);
+    expect(out[out.length - 1].end_page).toBe(50);
   });
 });
 

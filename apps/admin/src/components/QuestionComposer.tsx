@@ -92,7 +92,7 @@ export function QuestionComposer({ subjects, sections, onClose, onSaved }: { sub
 
   return (
     <Modal title="إضافة أسئلة" onClose={onClose}>
-      <Tabs<Mode> value={mode} onChange={setMode} options={[
+      <Tabs<Mode> value={mode} onChange={(m) => !busy && setMode(m)} options={[
         { key: 'images', label: 'من صور' }, { key: 'pdf', label: 'ملف PDF' }, { key: 'text', label: 'كتابة نص' },
       ]} />
 
@@ -100,15 +100,15 @@ export function QuestionComposer({ subjects, sections, onClose, onSaved }: { sub
         <>
           <p className="small dim" style={{ margin: 0 }}>ارفع صور ورقة الأسئلة بالترتيب (حتى ١٠). تُنشر كما هي، أو يعيد الذكاء الاصطناعي بناء الورقة بنفس تنسيقها كملف PDF منظّم.</p>
           <label className="row" style={{ gap: 8, cursor: 'pointer', alignItems: 'flex-start' }}>
-            <input type="checkbox" checked={ai} onChange={(e) => setAiPref(e.target.checked)} style={{ marginTop: 4 }} />
+            <input type="checkbox" checked={ai} disabled={busy} onChange={(e) => setAiPref(e.target.checked)} style={{ marginTop: 4 }} />
             <span><b>تحويل بالذكاء الاصطناعي (اختياري)</b><br /><span className="small dim">{ai ? 'يعيد كتابة الورقة بخط واضح ومعادلات منسّقة (يستهلك حصة Gemini وقد يستغرق دقيقة).' : 'بدونه: كل صورة تصبح صفحة كما هي، سريع ولا يستهلك شيئاً.'}</span></span>
           </label>
           <div className="row">
             <label className="btn primary" style={{ cursor: 'pointer' }}>
               + اختر الصور
-              <input type="file" accept="image/*" multiple hidden onChange={(e) => { const picked = Array.from(e.target.files ?? []); e.target.value = ''; setFiles((fs) => [...fs, ...picked].slice(0, 10)); reset(); }} />
+              <input type="file" accept="image/*" multiple hidden disabled={busy} onChange={(e) => { const picked = Array.from(e.target.files ?? []); e.target.value = ''; setFiles((fs) => [...fs, ...picked].slice(0, 10)); reset(); }} />
             </label>
-            {files.length ? <button className="btn sm" onClick={() => { setFiles([]); reset(); }}>مسح الكل</button> : null}
+            {files.length ? <button className="btn sm" disabled={busy} onClick={() => { setFiles([]); reset(); }}>مسح الكل</button> : null}
           </div>
           {files.length ? (
             <div className="sc-thumbs">
@@ -117,9 +117,9 @@ export function QuestionComposer({ subjects, sections, onClose, onSaved }: { sub
                   <img src={u} alt={`صفحة ${i + 1}`} />
                   <b>{i + 1}</b>
                   <div className="sc-thumb-act">
-                    <button onClick={() => move(i, -1)} disabled={i === 0} aria-label="تقديم">→</button>
-                    <button onClick={() => move(i, 1)} disabled={i === files.length - 1} aria-label="تأخير">←</button>
-                    <button onClick={() => { setFiles(files.filter((_, j) => j !== i)); reset(); }} aria-label="حذف">×</button>
+                    <button onClick={() => move(i, -1)} disabled={busy || i === 0} aria-label="تقديم">→</button>
+                    <button onClick={() => move(i, 1)} disabled={busy || i === files.length - 1} aria-label="تأخير">←</button>
+                    <button disabled={busy} onClick={() => { setFiles(files.filter((_, j) => j !== i)); reset(); }} aria-label="حذف">×</button>
                   </div>
                 </div>
               ))}

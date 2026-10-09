@@ -79,10 +79,9 @@ jobs:
             fi
             openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -pass env:SIGNING_PASSPHRASE -in "$ENC" -out "$RUNNER_TEMP/saey.keystore"
             {
+              # كلمة السر لا تُكتب هنا (كانت ستصل لكل الخطوات التالية)؛ تُمرَّر لخطوة البناء وحدها
               echo "SAEY_KEYSTORE=$RUNNER_TEMP/saey.keystore"
-              echo "SAEY_STORE_PASSWORD=$SIGNING_PASSPHRASE"
               echo "SAEY_KEY_ALIAS=saey"
-              echo "SAEY_KEY_PASSWORD=$SIGNING_PASSPHRASE"
             } >> "$GITHUB_ENV"
             SAEY_KEYSTORE="$RUNNER_TEMP/saey.keystore" SAEY_STORE_PASSWORD="$SIGNING_PASSPHRASE" SAEY_KEY_ALIAS=saey SAEY_KEY_PASSWORD="$SIGNING_PASSPHRASE" node scripts/apply-signing.js
           else
@@ -93,6 +92,8 @@ jobs:
         working-directory: apps/mobile/android
         env:
           APK_BUILD: ${{ github.run_number }}
+          SAEY_STORE_PASSWORD: ${{ secrets.SIGNING_PASSPHRASE }}
+          SAEY_KEY_PASSWORD: ${{ secrets.SIGNING_PASSPHRASE }}
         run: |
           # سطر جديد أولاً: آخر سطر في الملف بلا نهاية سطر، والإلحاق المباشر كان يفسد قيمة watchedDirectories
           printf '\norg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g\n' >> gradle.properties

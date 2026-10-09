@@ -73,6 +73,32 @@ export const PAGE_CSS = `
 .sc-pages .katex{font-size:1.05em;direction:ltr;unicode-bidi:isolate}
 .sc-pages img{display:inline-block}`;
 
+const SAFE_TAGS = new Set(['SECTION', 'DIV', 'P', 'SPAN', 'B', 'STRONG', 'I', 'EM', 'U', 'BR', 'HR', 'TABLE', 'THEAD', 'TBODY', 'TFOOT', 'TR', 'TH', 'TD',
+  'UL', 'OL', 'LI', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'IMG', 'SUP', 'SUB', 'SMALL', 'CENTER', 'COLGROUP', 'COL', 'CAPTION']);
+const DROP_TAGS = new Set(['SCRIPT', 'STYLE', 'IFRAME', 'OBJECT', 'EMBED', 'SVG', 'MATH', 'LINK', 'META', 'BASE', 'FORM', 'INPUT', 'BUTTON', 'TEXTAREA', 'SELECT', 'VIDEO', 'AUDIO', 'NOSCRIPT', 'TEMPLATE']);
+const SAFE_ATTRS = new Set(['style', 'class', 'colspan', 'rowspan', 'dir', 'align', 'width', 'height', 'border', 'data-page', 'data-box']);
+
+/**
+ * HTML القادم من الذكاء الاصطناعي يُعرض داخل اللوحة (حيث جلسة المشرف)، فنبقي وسوم التنسيق فقط
+ * ونحذف أي سكربت أو حدث (onload…) أو رابط javascript: — ورقة مصوّرة قد تحمل نصاً يوجّه النموذج لكتابة ذلك.
+ */
+export function sanitizeHtml(html: string): string {
+  const doc = new DOMParser().parseFromString(`<body>${html}</body>`, 'text/html'); // مستند خامل: لا يُنفَّذ فيه شيء
+  const walk = (el: Element) => {
+    for (const child of Array.from(el.children)) {
+      if (DROP_TAGS.has(child.tagName)) { child.remove(); continue; }
+      if (!SAFE_TAGS.has(child.tagName)) { walk(child); child.replaceWith(...Array.from(child.childNodes)); continue; }
+      for (const a of Array.from(child.attributes)) {
+        const v = a.value.toLowerCase();
+        if (!SAFE_ATTRS.has(a.name.toLowerCase()) || (a.name === 'style' && /url\(|expression|javascript:|@import/.test(v))) child.removeAttribute(a.name);
+      }
+      walk(child);
+    }
+  };
+  walk(doc.body);
+  return doc.body.innerHTML;
+}
+
 /** استدعاء الدالة وتجهيز HTML النهائي للصفحات */
 export async function convertImages(files: File[], onStep: (s: string) => void): Promise<{ html: string; pages: Prepared[] }> {
   onStep('تجهيز الصور…');
@@ -81,7 +107,7 @@ export async function convertImages(files: File[], onStep: (s: string) => void):
   onStep('الذكاء الاصطناعي يعيد بناء الورقة بنفس تنسيقها… (قد يستغرق دقيقة)');
   const { html } = await callFunction<{ html: string }>('scan-convert', { images: pages.map((p) => p.b64) });
   onStep('تجهيز الأشكال والمعادلات…');
-  return { html: renderMath(fillFigures(html, pages)), pages };
+  return { html: renderMath(fillFigures(sanitizeHtml(html), pages)), pages };
 }
 
 /** كل عنصر .page ← صورة ← صفحة PDF (بنسبة الصفحة نفسها) */
