@@ -11,7 +11,8 @@ Deno.serve(handler(async (req) => {
 
   if (!regenerate) {
     const { data: existing } = await admin.from('quiz_questions').select('*').eq('chapter_id', chapterId);
-    if (existing && existing.length >= 5) return json({ questions: existing });
+    // أي اختبار محفوظ يُعاد كما هو (كان أقل من ٥ أسئلة يُولَّد من جديد مع كل طالب فتتكرر الأسئلة)
+    if (existing && existing.length) return json({ questions: existing });
   } else if (caller.role === 'student') {
     throw new HttpError(403, 'إعادة التوليد للأدمن والمشرفين فقط.');
   }
@@ -61,6 +62,11 @@ ${context ? `اعتمد على هذا المحتوى من الملازم:\n${con
   if (!questions.length) throw new HttpError(500, 'تعذّر إنشاء الاختبار، حاول مرة أخرى.');
 
   if (regenerate) await admin.from('quiz_questions').delete().eq('chapter_id', chapterId);
+  else {
+    // طالب آخر فتح الفصل نفسه في اللحظة نفسها وحُفظ اختباره قبلنا: نعيده بدل إضافة نسخة مكررة
+    const { data: again } = await admin.from('quiz_questions').select('*').eq('chapter_id', chapterId);
+    if (again && again.length) return json({ questions: again });
+  }
   const { data: saved, error } = await admin.from('quiz_questions').insert(questions.map((q) => ({
     chapter_id: chapterId, question: q.question, choices: q.choices, answer: q.answer, explanation: q.explanation ?? null,
   }))).select('*');
