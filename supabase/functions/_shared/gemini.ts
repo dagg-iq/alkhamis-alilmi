@@ -73,10 +73,12 @@ export const LITE_MODELS = ['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'g
 /** الاحتياط الأخير بعد انتهاء كل النماذج على كل المفاتيح */
 export const FALLBACK_MODELS = ['gemini-2.5-flash', 'gemini-2.5-flash-lite'];
 
-/** النموذج من الإعدادات أولاً (يقبل عدة أسماء مفصولة بفواصل)، ثم الافتراضيات */
-export function modelChain(setting: string | undefined | null, defaults: string[] = MAIN_MODELS): string[] {
-  const fromSetting = (setting ?? '').split(',').map((m) => m.trim()).filter((m) => m && !m.startsWith('gemini-2.'));
-  return [...new Set([...fromSetting, ...defaults])];
+/**
+ * سلسلة النماذج: ثابتة بالترتيب أعلاه. إعداد النموذج القديم في لوحة التحكم حُذف ويُتجاهل
+ * (قيمة قديمة مثل gemini-2.5-flash كانت ستقدّم نموذجاً ضعيفاً على الأقوى).
+ */
+export function modelChain(_setting: string | undefined | null, defaults: string[] = MAIN_MODELS): string[] {
+  return [...new Set(defaults)];
 }
 
 // ───────────────── أقفال النماذج المشتركة (قاعدة البيانات + نسخة في الذاكرة لثوانٍ) ─────────────────

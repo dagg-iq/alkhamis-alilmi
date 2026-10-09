@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Empty, Tabs } from '../components/ui';
+import { Empty, Field, Tabs, check, useAction } from '../components/ui';
 import { useLoad } from '../lib/hooks';
 import { callFunction, must, supabase } from '../lib/supabase';
 
@@ -54,6 +54,20 @@ export default function Usage() {
   const [view, setView] = useState<View>('keys');
   const [now, setNow] = useState(Date.now());
   const [open, setOpen] = useState<Record<string, boolean>>({});
+  // تشغيل المساعد وحد الأسئلة اليومي لكل طالب (النماذج تُختار تلقائياً بالترتيب، فلا إعداد لها)
+  const { run, busy } = useAction();
+  const [aiCfg, setAiCfg] = useState<{ enabled: boolean; daily_limit: number } | null>(null);
+  useEffect(() => {
+    supabase.from('app_settings').select('value').eq('key', 'ai').maybeSingle().then(({ data }) => {
+      const v = (data?.value ?? {}) as { enabled?: boolean; daily_limit?: number };
+      setAiCfg({ enabled: v.enabled !== false, daily_limit: v.daily_limit ?? 20 });
+    });
+  }, []);
+  const saveAi = () => run(async () => {
+    if (!aiCfg) return;
+    if (!Number.isFinite(aiCfg.daily_limit) || aiCfg.daily_limit < 0 || aiCfg.daily_limit > 500) throw new Error('عدد الأسئلة اليومية غير صحيح.');
+    await check(supabase.from('app_settings').upsert({ key: 'ai', value: { enabled: aiCfg.enabled, daily_limit: Math.round(aiCfg.daily_limit) }, updated_at: new Date().toISOString() }));
+  }, 'حُفظ');
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 30_000); return () => clearInterval(t); }, []);
 
   const q = useLoad(async () => {
@@ -147,6 +161,21 @@ export default function Usage() {
         {' '}بـ٥ مفاتيح ≈ {ar(5 * calc.models.length * calc.per)}، وبـ٧ مفاتيح ≈ {ar(7 * calc.models.length * calc.per)} طلباً يومياً (منها {ar(2 * calc.per)} لكل مفتاح من 2.5 الاحتياطي).
         {' '}فهرسة كتاب ≈ عدد صفحاته ÷ ٦ طلباً (كتاب ٢٣٢ صفحة ≈ ٤٠ طلباً). كل مفتاح يجب أن يكون من <b>حساب Google مختلف</b> (مفاتيح الحساب الواحد تتشارك نفس الحصة).
       </div>
+
+      {aiCfg ? (
+        <div className="card" style={{ marginTop: 14, display: 'flex', gap: 16, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+          <label className="check" style={{ marginBottom: 10 }}><input type="checkbox" checked={aiCfg.enabled} onChange={(e) => setAiCfg({ ...aiCfg, enabled: e.target.checked })} /> المساعد الذكي مفعّل للطلاب</label>
+          <div style={{ width: 220 }}>
+            <Field label="عدد الأسئلة اليومية لكل طالب">
+              <input className="input" type="number" min={0} max={500} value={aiCfg.daily_limit} onChange={(e) => setAiCfg({ ...aiCfg, daily_limit: Number(e.target.value.replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))) })} />
+            </Field>
+          </div>
+          <button className="btn primary" onClick={saveAi} disabled={busy}>حفظ</button>
+          <span className="small dim" style={{ flexBasis: '100%' }}>
+            مع {ar(calc.capacity)} طلباً يومياً: حد {ar(aiCfg.daily_limit)} سؤالاً يكفي {ar(Math.floor(calc.capacity / Math.max(1, aiCfg.daily_limit)))} طالباً يستخدمون حدهم كاملاً (والفهرسة تأخذ من نفس السعة).
+          </span>
+        </div>
+      ) : null}
 
       <Tabs<View> value={view} onChange={setView} options={[
         { key: 'keys', label: 'المفاتيح والنماذج' },
