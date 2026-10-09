@@ -72,6 +72,7 @@ export function OutlineEditor({ doc, onClose }: { doc: DocumentRow; onClose: () 
   const rebuild = () => run(async () => {
     if (!(await askConfirm('إعادة بناء الفهرس بالذكاء الاصطناعي؟ سيُستبدل الفهرس الحالي وتعديلاتك عليه.'))) return;
     const r = await buildDocumentOutline(doc.id);
+    embedDocumentOutline(doc.id).catch(() => {}); // الربط بين الملفات في الخلفية
     toast(`بُني الفهرس: ${r.chapters} فصل و${r.topics} موضوع`);
     await load();
   });

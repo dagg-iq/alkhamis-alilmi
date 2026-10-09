@@ -19,6 +19,7 @@ function q(t: string) {
   const b: any = {
     select: () => b, order: () => b, limit: () => b, single: () => { b._single = true; return b; }, maybeSingle: () => { b._single = true; return b; },
     eq: (c: string, v: any) => { filters.push((r) => r[c] === v); return b; }, gt: () => b, gte: () => b, lte: () => b,
+    is: (c: string, v: any) => { filters.push((r) => (r[c] ?? null) === v); return b; },
     in: (c: string, v: any[]) => { filters.push((r) => v.includes(r[c])); return b; },
     update: (p: any) => { op = 'update'; payload = p; return b; }, delete: () => { op = 'delete'; return b; },
     upsert: (p: any) => { op = 'upsert'; payload = p; return b; }, insert: (p: any) => { op = 'insert'; payload = p; return b; },
@@ -53,6 +54,8 @@ globalThis.fetch = (async (url: string, init: any) => {
   }
   calls++;
   const body = JSON.parse(init.body);
+  // بناء الفهرس: نجعل الذكاء الاصطناعي يفشل ← يجب أن يُبنى من عناوين الصفحات
+  if (body.contents[0].parts.length === 1) return new Response(JSON.stringify({ error: { code: 400, message: 'bad' } }), { status: 400 });
   const prompt: string = body.contents[0].parts[1].text;
   const [, from, to] = prompt.match(/من (\d+) إلى (\d+)/)!.map(Number);
   const pdf = await PDFDocument.load(Uint8Array.from(atob(body.contents[0].parts[0].inline_data.data), (c) => c.charCodeAt(0)));
@@ -99,6 +102,11 @@ await call({ action: 'read', from: 3, to: 5, total: 5, pdf: await sub(3, 5) });
 check('إعادة القراءة لا تكرر', db.content_chunks.length === 5 && db.document_pages.length === 5, String(db.content_chunks.length));
 r = await call({ action: 'read', from: 3, to: 99, total: 5, pdf: 'x' });
 check('طلب غير صحيح يُرفض', r.status === 400);
+r = await call({ action: 'outline' });
+check('الفهرس يُبنى من العناوين عند فشل الذكاء الاصطناعي', r.status === 200 && db.document_outline.length >= 1 && db.document_outline[0].title === 'الفصل الأول' && db.documents[0].outline_status === 'done', JSON.stringify(r.json));
+check('بلا متجهات في طلب البناء (حتى لا يتجاوز الوقت)', db.document_outline.every((o) => o.embedding === null));
+r = await call({ action: 'embed_outline' });
+check('الربط يُحسب بطلب منفصل', r.status === 200 && db.document_outline.every((o) => Array.isArray(o.embedding)), JSON.stringify(r.json));
 r = await call({ action: 'restart' });
 check('إعادة من البداية تمسح كل شيء', db.document_pages.length === 0 && db.content_chunks.length === 0 && db.documents[0].ingested_pages === 0);
 if (failed) { console.error(`${failed} فشل`); Deno.exit(1); }

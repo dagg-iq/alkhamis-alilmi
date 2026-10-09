@@ -62,7 +62,11 @@ export interface GenerateOptions {
   spread?: boolean;
   /** إعدادات إضافية لـ generationConfig (مثل mediaResolution للفيديو) */
   extraConfig?: Record<string, unknown>;
+  /** آخر وقت مسموح (Date.now()): بعده يُقطع الطلب ويُرمى GeminiTimeoutError (دوال الخادم محدودة ~١٥٠ ث) */
+  deadline?: number;
 }
+
+export class GeminiTimeoutError extends Error {}
 
 export class GeminiQuotaError extends Error {}
 
@@ -231,13 +235,22 @@ export async function generate(model: string | string[], contents: Content[], op
       if (thinking) config.thinkingConfig = { thinkingLevel: thinking };
       else delete config.thinkingConfig;
       let res: Response;
+      const left = opts.deadline ? opts.deadline - Date.now() : Infinity;
+      if (left < 3000) throw new GeminiTimeoutError('انتهت المهلة');
+      const ctl = Number.isFinite(left) ? new AbortController() : null;
+      const timer = ctl ? setTimeout(() => ctl.abort(), left) : undefined;
       try {
         res = await fetch(`${API}/v1beta/models/${a.m}:generateContent`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-goog-api-key': keyOf.get(a.slot)! },
           body: JSON.stringify(body),
+          ...(ctl ? { signal: ctl.signal } : {}),
         });
+        if (res.ok && timer) { const t = await res.text(); clearTimeout(timer); res = new Response(t, { status: res.status }); }
+        else if (timer) clearTimeout(timer);
       } catch (e) {
+        if (timer) clearTimeout(timer);
+        if (ctl?.signal.aborted) throw new GeminiTimeoutError('انتهت المهلة');
         busy = true;
         failures.push(`${a.slot}/${a.m}: network ${String((e as Error).message ?? e).slice(0, 60)}`);
         break;

@@ -8,7 +8,7 @@ import {
 } from '../_shared/outline.ts';
 import { handler, HttpError, json } from '../_shared/cors.ts';
 import { admin, getCaller, getSetting } from '../_shared/supabase.ts';
-import { chunkText, embed, toBase64, fileRef, firstAvailableSlot, generate, poolSlots, slotRank, strongestSlot, GeminiQuotaError, parseJson, uploadFile, MAIN_MODELS, modelChain } from '../_shared/gemini.ts';
+import { chunkText, embed, GeminiTimeoutError, toBase64, fileRef, firstAvailableSlot, generate, poolSlots, slotRank, strongestSlot, GeminiQuotaError, parseJson, uploadFile, MAIN_MODELS, modelChain } from '../_shared/gemini.ts';
 import { getObject } from '../_shared/storage.ts';
 
 // الفهرسة تُنفَّذ مرة واحدة للكتاب، فنفضّل الجودة: صفحات أقل في الطلب الواحد وأقوى نموذج متاح وصور بدقة عالية
@@ -283,6 +283,8 @@ ${digests ? `\nمطلع كل صفحة (للمساعدة في تحديد حدود
 - اجعل المواضيع تغطي الأقسام المهمة (تعريف، قانون، مثال محلول، تمارين) بدقة، من ٣ إلى ٣٠ موضوعاً لكل فصل بحسب حجمه.`;
 
 async function buildOutline(doc: Record<string, any>) {
+  // حد وقت الدالة ~١٥٠ ث: الذكاء الاصطناعي له ٨٥ ث، وإن تأخر يُبنى الفهرس من عناوين الصفحات فوراً
+  const started = Date.now();
   await admin.from('documents').update({ outline_status: 'running', outline_error: null }).eq('id', doc.id);
   try {
     const { data: rows } = await admin.from('document_pages').select('page, headings, digest').eq('document_id', doc.id).order('page');
@@ -298,13 +300,13 @@ async function buildOutline(doc: Record<string, any>) {
       const digests = pages.length <= 350 ? pages.filter((p) => p.digest).map((p) => `ص${p.page}: ${p.digest}`).join('\n') : '';
       const raw = await generate(modelChain(ai.ingest_model ?? ai.model, MAIN_MODELS), [{
         role: 'user', parts: [{ text: OUTLINE_PROMPT(doc.title, kind, total, headingLines(collapsed), digests) }],
-      }], { json: true, temperature: 0, maxOutputTokens: 32768, pool: 'admin', thinking: 'medium' });
+      }], { json: true, temperature: 0, maxOutputTokens: 16384, pool: 'admin', thinking: 'low', deadline: started + 85_000 });
       chapters = normalizeOutline(parseJson(raw), total);
       // نتيجة هزيلة (فصل واحد كبير) والعناوين تقول غير ذلك ← نفضّل بناءً مباشراً من العناوين
       if (chapters.length <= 1 && collapsed.filter((h) => h.level === 1).length >= 2) chapters = outlineFromHeadings(collapsed, total);
     } catch (e) {
       if (e instanceof HttpError) throw e;
-      console.error('outline ai failed', String((e as Error).message ?? e).slice(0, 200));
+      console.error('outline ai failed', e instanceof GeminiTimeoutError ? 'timeout' : String((e as Error).message ?? e).slice(0, 200));
       chapters = collapsed.length ? outlineFromHeadings(collapsed, total) : fallbackOutline(total);
     }
 
@@ -312,17 +314,11 @@ async function buildOutline(doc: Record<string, any>) {
     const ids = flat.map(() => crypto.randomUUID());
     const chapterId = new Map<number, string>();
     flat.forEach((r, i) => { if (r.level === 1) chapterId.set(r.chapter, ids[i]); });
-    let vectors: number[][] = [];
-    try {
-      vectors = await embed(flat.map((r) => `${doc.title} — ${r.title}`), 'RETRIEVAL_DOCUMENT', 'admin');
-    } catch (e) {
-      if (e instanceof GeminiQuotaError) throw e;
-      console.error('outline embed failed', String((e as Error).message ?? e).slice(0, 200)); // الفهرس يعمل بدون الربط الدلالي
-    }
+    // متجهات الربط بين الملفات تُحسب بطلب منفصل (embed_outline) حتى لا يتجاوز هذا الطلب حد الوقت
     await admin.from('document_outline').delete().eq('document_id', doc.id);
     const { error } = await admin.from('document_outline').insert(flat.map((r, i) => ({
       id: ids[i], document_id: doc.id, parent_id: r.level === 2 ? chapterId.get(r.chapter) : null, level: r.level, title: r.title,
-      start_page: r.start_page, end_page: r.end_page, sort: r.sort, embedding: vectors[i] ?? null,
+      start_page: r.start_page, end_page: r.end_page, sort: r.sort, embedding: null,
     })));
     if (error) throw error;
     await admin.from('documents').update({ outline_status: 'done', outline_error: null }).eq('id', doc.id);
@@ -341,7 +337,10 @@ async function embedOutline(doc: Record<string, any>) {
   if (!rows.length) return json({ done: true, embedded: 0 });
   try {
     const vectors = await embed(rows.map((r) => `${doc.title} — ${r.title}`), 'RETRIEVAL_DOCUMENT', 'admin');
-    for (let i = 0; i < rows.length; i++) await admin.from('document_outline').update({ embedding: vectors[i] }).eq('id', rows[i].id);
+    // ١٠ تحديثات معاً (كتاب كبير فيه مئات العناوين)
+    for (let i = 0; i < rows.length; i += 10) {
+      await Promise.all(rows.slice(i, i + 10).map((r, j) => admin.from('document_outline').update({ embedding: vectors[i + j] }).eq('id', r.id)));
+    }
     return json({ done: true, embedded: rows.length });
   } catch (e) {
     throw new HttpError(e instanceof GeminiQuotaError ? 503 : 500, e instanceof GeminiQuotaError ? 'انتهى رصيد Gemini مؤقتاً، أعد المحاولة لاحقاً.' : String((e as Error).message ?? e).slice(0, 200));

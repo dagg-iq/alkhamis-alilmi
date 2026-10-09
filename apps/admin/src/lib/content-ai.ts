@@ -95,7 +95,10 @@ export async function ingestDocument(
   if (stop) throw stop;
   if (failed.length) throw new Error(`تعذّرت قراءة ${failed.length} صفحة (${failed.slice(0, 8).join('، ')}${failed.length > 8 ? '…' : ''}). اضغط «إكمال» لإعادة محاولة الناقصة فقط.`);
   onProgress?.(1, 1, 'outline');
-  return buildDocumentOutline(documentId);
+  const out = await buildDocumentOutline(documentId);
+  // الربط بين الكتاب والملازم (طلب منفصل؛ فشله لا يمنع الفهرس)
+  await embedDocumentOutline(documentId).catch(() => {});
+  return out;
 }
 
 /** أساتذة جدد بالاسم (إن لم يوجدوا) ← خريطة الاسم إلى المعرّف */

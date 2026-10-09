@@ -88,5 +88,17 @@ check('موعد التجدد من ١٢:١٦ ظهراً', new Date(g.nextIraqRese
 check('موعد التجدد من ٢:٥٠ فجراً (23:50 UTC) بعد ١٠ دقائق', g.nextIraqReset(Date.UTC(2026, 9, 10, 23, 50)) - Date.UTC(2026, 9, 10, 23, 50) === 600_000);
 check('fileRef الجديد والقديم', g.fileRef('s:GEMINI_API_KEY_3|https://x/f').slot === 'GEMINI_API_KEY_3' && g.fileRef('k1|https://x/f').keyIndex === 1);
 
+// ٦) المهلة: طلب بطيء يُقطع عند deadline ويُرمى GeminiTimeoutError
+await g.refreshBlocks(true);
+for (const k of Object.keys(blocksTable)) delete blocksTable[k];
+await g.refreshBlocks(true);
+const realFetch = globalThis.fetch;
+globalThis.fetch = ((_u: string, init: any) => new Promise((_res, rej) => { init.signal?.addEventListener('abort', () => rej(new DOMException('aborted', 'AbortError'))); })) as typeof fetch;
+const t0 = Date.now();
+let kind = '';
+try { await g.generate(g.MAIN_MODELS, [{ role: 'user', parts: [{ text: 'س' }] }], { pool: 'admin', deadline: Date.now() + 4000 }); } catch (e) { kind = e instanceof g.GeminiTimeoutError ? 'timeout' : String(e); }
+globalThis.fetch = realFetch;
+check('المهلة تقطع الطلب البطيء', kind === 'timeout' && Date.now() - t0 < 6000, `${kind} ${Date.now() - t0}ms`);
+
 if (failed) { console.error(`${failed} فشل`); Deno.exit(1); }
 console.log('ALL GEMINI TESTS PASSED');
