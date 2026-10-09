@@ -158,7 +158,7 @@ export async function generate(model: string | string[], contents: Content[], op
       if (status === 400 || status === 401 || status === 403) {
         console.error(`Gemini key ${a.k} ${a.m} ${status}: ${detail}`);
         // نعطّل المفتاح كله فقط إذا كان المفتاح نفسه مرفوضاً — لا بسبب ملف أو فيديو لا يصل إليه
-        if (status === 401 || /API_KEY_INVALID|API key not valid|SERVICE_DISABLED|has been suspended/i.test(detail)) {
+        if (status === 401 || /API_KEY_INVALID|API key not valid|SERVICE_DISABLED|has been suspended|denied access|project has been denied/i.test(detail)) {
           badKeyUntil.set(keys[a.k], Date.now() + 30 * 60_000);
         }
         if (opts.keyIndex !== undefined) throw new Error(`Gemini ${a.m} ${status}: ${detail}`);
