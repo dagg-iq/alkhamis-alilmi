@@ -6,9 +6,10 @@ import { useState } from 'react';
 import { View } from 'react-native';
 import { Alert } from '@/lib/dialog';
 import { RichText, markdownHtml } from '@/components/rich-text';
+import { PdfThumb } from '@/components/pdf-thumb';
 import { Button, Card, Chip, ErrorBox, Field, Header, IconButton, Loading, Row, Screen, T } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
-import { openPdf } from '@/lib/files';
+import { downloadMaterial, isDownloaded, openPdf, signedUrl } from '@/lib/files';
 import { must, supabase } from '@/lib/supabase';
 import { useTheme } from '@/lib/theme';
 import { useLoad } from '@/lib/use-load';
@@ -24,6 +25,14 @@ export default function QuestionsScreen() {
   const q = useLoad(async () =>
     must(supabase.from('question_sets').select('*, subjects(name)').eq('id', id).single()) as Promise<QuestionSet & { subjects: { name: string } }>,
   [id]);
+
+  // أسئلة PDF (بلا نص): معاينة الصفحة الأولى + فتح الملف
+  const pdfKey = q.data?.pdf_key;
+  const preview = useLoad(async () => {
+    if (!pdfKey) return null;
+    if (isDownloaded(pdfKey)) return { base64: await downloadMaterial(pdfKey).then((f) => f.base64()) };
+    return { url: await signedUrl(pdfKey) };
+  }, [pdfKey]);
 
   if (q.loading) return <Screen><Header /><Loading /></Screen>;
   if (q.error || !q.data) return <Screen><Header /><ErrorBox message={q.error ?? ''} onRetry={q.reload} /></Screen>;
@@ -86,15 +95,21 @@ export default function QuestionsScreen() {
           <Button title="حفظ التعديل" onPress={() => save()} loading={busy === 'save'} />
         </View>
       ) : (
-        <Card style={{ padding: 18 }}>
-          {s.content_md ? <RichText text={s.content_md} size={16} /> : <T dim>لا يوجد نص — افتح الملف الأصلي.</T>}
-        </Card>
+        s.content_md || !s.pdf_key ? (
+          <Card style={{ padding: 18 }}>
+            {s.content_md ? <RichText text={s.content_md} size={16} /> : <T dim>لا يوجد نص بعد.</T>}
+          </Card>
+        ) : (
+          <View style={{ alignItems: 'center', paddingVertical: 8 }}>
+            {preview.data ? <PdfThumb {...preview.data} width={260} /> : null}
+          </View>
+        )
       )}
 
       <View style={{ gap: 10 }}>
         {isStaff && s.status === 'draft' ? <Button title="نشر للطلاب" icon="send" onPress={() => save(true)} loading={busy === 'publish'} /> : null}
         {s.pdf_key ? (
-          <Button title="صور الورقة الأصلية (PDF)" variant="secondary" icon="file" loading={busy === 'pdf'}
+          <Button title={s.content_md ? 'الورقة الأصلية (PDF)' : 'فتح الأسئلة'} variant={s.content_md ? 'secondary' : 'primary'} icon="file" loading={busy === 'pdf'}
             onPress={async () => {
               setBusy('pdf');
               try { await openPdf(s.pdf_key!, s.title); } catch (e) { Alert.alert('تعذّر الفتح', e instanceof Error ? e.message : ''); }

@@ -136,7 +136,7 @@ export default function ScanResult() {
         <Choice icon="image" title="حفظ كصور" body="صورة لكل صفحة" onPress={() => save('image')} />
       </Sheet>
       <ConversationPicker visible={!!sendAs} onClose={() => setSendAs(null)} onPick={send} title={sendAs === 'pdf' ? 'إرسال PDF إلى' : 'إرسال الصور إلى'} />
-      {isStaff ? <SetsSheet visible={panel === 'sets'} onClose={() => setPanel(null)} file={file} title={title} /> : null}
+      {isStaff ? <SetsSheet visible={panel === 'sets'} onClose={() => setPanel(null)} file={file} title={title} subjectId={result.subjectId} kind={result.kind} /> : null}
     </View>
   );
 }
@@ -170,10 +170,11 @@ function Choice({ icon, title, body, onPress }: { icon: IconName; title: string;
 }
 
 /** إضافة الملف إلى الأسئلة المتوقعة أو الامتحانات السابقة (للأدمن والمشرفين) */
-function SetsSheet({ visible, onClose, file, title }: { visible: boolean; onClose: () => void; file: File; title: string }) {
+function SetsSheet({ visible, onClose, file, title, subjectId: presetSubject, kind: presetKind }: { visible: boolean; onClose: () => void; file: File; title: string; subjectId?: string; kind?: QuestionKind }) {
   const me = useMe();
-  const [kind, setKind] = useState<QuestionKind>('expected');
-  const [subjectId, setSubjectId] = useState<string | null>(null);
+  const [kind, setKind] = useState<QuestionKind>(presetKind ?? 'expected');
+  const [subjectId, setSubjectId] = useState<string | null>(presetSubject ?? null);
+  const [publish, setPublish] = useState(true);
   const [period, setPeriod] = useState<Period>('month1');
   const [sectionId, setSectionId] = useState<string | null>(null);
   const [name, setName] = useState(title);
@@ -189,7 +190,7 @@ function SetsSheet({ visible, onClose, file, title }: { visible: boolean; onClos
       const key = await uploadFile(file.uri, 'material', 'application/pdf');
       const { data, error } = await supabase.from('question_sets').insert({
         subject_id: subjectId, kind, period, section_id: kind === 'school_exam' ? sectionId : null,
-        title: name.trim() || title, content_md: null, pdf_key: key, scan_keys: [], status: 'published', created_by: me.id,
+        title: name.trim() || title, content_md: null, pdf_key: key, scan_keys: [], status: publish ? 'published' : 'draft', created_by: me.id,
       }).select('id').single();
       if (error) throw new Error(error.message);
       tap('success');
@@ -229,8 +230,9 @@ function SetsSheet({ visible, onClose, file, title }: { visible: boolean; onClos
           </View>
         ) : null}
         <Field label="العنوان" value={name} onChangeText={setName} />
+        <Segmented options={[{ key: 'pub', label: 'نشر للطلاب' }, { key: 'draft', label: 'مسودة' }]} value={publish ? 'pub' : 'draft'} onChange={(k) => setPublish(k === 'pub')} />
       </ScrollView>
-      <Button title="إضافة ونشر للطلاب" icon="send" onPress={add} loading={busy} />
+      <Button title={publish ? 'إضافة ونشر للطلاب' : 'إضافة كمسودة'} icon="send" onPress={add} loading={busy} />
     </Sheet>
   );
 }

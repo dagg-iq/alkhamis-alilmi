@@ -8,8 +8,8 @@ import { useCallback, useMemo, useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { Alert } from '@/lib/dialog';
 import { Icon } from '@/components/icon';
-import { Card, ChipRow, Empty, ErrorBox, Header, IconButton, Loading, ProgressBar, Row, Screen, Segmented, T } from '@/components/ui';
-import { useMe } from '@/lib/auth';
+import { Button, Card, ChipRow, Empty, ErrorBox, Header, IconButton, Loading, ProgressBar, Row, Screen, Segmented, T } from '@/components/ui';
+import { useAuth, useMe } from '@/lib/auth';
 import { isDownloaded } from '@/lib/files';
 import { must, supabase } from '@/lib/supabase';
 import { useTheme } from '@/lib/theme';
@@ -27,6 +27,7 @@ export default function SubjectScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { c } = useTheme();
   const me = useMe();
+  const { isStaff } = useAuth();
   const [tab, setTab] = useState<Tab>('lectures');
   const [bookId, setBookId] = useState<string | null>(null);
   const [open, setOpen] = useState<Record<string, boolean>>({});
@@ -186,6 +187,11 @@ export default function SubjectScreen() {
           </View>
         ))
       )}
+
+      {isStaff && (tab === 'expected' || tab === 'school_exam') ? (
+        <Button title="إضافة أسئلة (صور أو تحويل ذكي)" icon="scan" variant="secondary"
+          onPress={() => router.push({ pathname: '/scan', params: { subjectId: id, kind: tab } })} />
+      ) : null}
 
       {(tab === 'expected' || tab === 'school_exam') && (
         kindSets.length === 0

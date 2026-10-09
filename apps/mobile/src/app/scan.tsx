@@ -1,8 +1,8 @@
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, ScrollView, View } from 'react-native';
+import { Pressable, ScrollView, Switch, View } from 'react-native';
 import { Icon } from '@/components/icon';
 import { Button, Card, Field, Header, Screen, T } from '@/components/ui';
 import { Alert } from '@/lib/dialog';
@@ -13,6 +13,8 @@ import { useTheme } from '@/lib/theme';
 /** تصوير ورقة (أسئلة، ملزمة…) ← الذكاء الاصطناعي يعيدها ملف PDF بنفس تنسيقها */
 export default function Scan() {
   const { c } = useTheme();
+  const params = useLocalSearchParams<{ subjectId?: string; kind?: string }>();
+  const [ai, setAi] = useState(true);
   const [photos, setPhotos] = useState<string[]>([]);
   const [title, setTitle] = useState('');
   const [step, setStep] = useState<string | null>(null);
@@ -27,8 +29,8 @@ export default function Scan() {
     if (!photos.length) return Alert.alert('صوّر الورقة أولاً', 'اضغط «صوّر صفحة» أو اختر الصور من المعرض.');
     const name = title.trim() || 'ورقة سعي';
     try {
-      const r = await convertPhotos(photos, name, setStep);
-      setScanResult({ file: r.pdf, text: r.text, title: name });
+      const r = await convertPhotos(photos, name, setStep, ai);
+      setScanResult({ file: r.pdf, text: r.text, title: name, subjectId: params.subjectId, kind: params.kind === 'school_exam' ? 'school_exam' : params.kind === 'expected' ? 'expected' : undefined });
       router.replace('/scan-result');
     } catch (e) {
       Alert.alert('تعذّر التحويل', e instanceof Error ? e.message : 'حاول مرة أخرى.');
@@ -39,7 +41,7 @@ export default function Scan() {
 
   return (
     <Screen>
-      <Header title="تحويل ورقة إلى PDF" subtitle="صوّر الورقة فتعود ملف PDF بنفس شكلها" />
+      <Header title="تحويل ورقة إلى PDF" subtitle={ai ? 'صوّر الورقة فتعود ملف PDF بنفس شكلها' : 'صوّر الورقة فتصير ملف PDF'} />
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }} style={{ flexGrow: 0, height: 160 }}>
         {photos.map((p, i) => (
           <View key={p}>
@@ -65,8 +67,15 @@ export default function Scan() {
       <T dim size={12}>حتى ٨ صفحات في المرة، بالترتيب. صوّر في إضاءة جيدة والورقة مستوية وقصّ الأطراف.</T>
 
       <Field label="اسم الملف (اختياري)" value={title} onChangeText={setTitle} placeholder="مثال: أسئلة الفيزياء — الشهر الأول" />
-      {step ? <Card tone="soft"><T weight="bold" color={c.softInk}>{step}</T><T dim size={12}>قد يستغرق دقيقة، لا تغلق التطبيق.</T></Card> : null}
-      <Button title="حوّل إلى PDF" icon="scan" onPress={run} loading={!!step} disabled={!photos.length} />
+      <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+        <View style={{ flex: 1 }}>
+          <T weight="bold">تحسين بالذكاء الاصطناعي</T>
+          <T dim size={12}>{ai ? 'يعيد كتابة الورقة بخط واضح ومعادلات منسّقة (أبطأ).' : 'بدونه: كل صورة تصبح صفحة كما هي (سريع).'}</T>
+        </View>
+        <Switch value={ai} onValueChange={setAi} trackColor={{ true: c.accent, false: c.line }} />
+      </Card>
+      {step ? <Card tone="soft"><T weight="bold" color={c.softInk}>{step}</T>{ai ? <T dim size={12}>قد يستغرق دقيقة، لا تغلق التطبيق.</T> : null}</Card> : null}
+      <Button title={ai ? 'حوّل إلى PDF' : 'جهّز الملف'} icon="scan" onPress={run} loading={!!step} disabled={!photos.length} />
     </Screen>
   );
 }

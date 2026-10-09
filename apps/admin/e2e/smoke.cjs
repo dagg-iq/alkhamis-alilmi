@@ -56,6 +56,7 @@ const data = {
         if (v.startsWith('eq.') && !['select', 'order', 'limit'].includes(k)) body = body.filter((row) => !(k in row) || String(row[k]) === v.slice(3));
       }
     }
+    if (req.method() === 'POST' && url.pathname.endsWith('/rest/v1/question_sets')) console.log('INSERT question_sets', req.postData());
     if (url.pathname.endsWith('/functions/v1/files')) {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ key: 'materials/test.pdf', url: 'https://yjxhprmtyuqnbgraocar.supabase.co/storage/v1/fake-put' }) });
     }
@@ -106,14 +107,37 @@ const data = {
     }
     if (process.env.TAB) await page.getByRole('tab', { name: process.env.TAB }).click();
     if (process.env.SCAN) {
-      await page.getByRole('button', { name: /من صور/ }).click();
+      const noAi = process.env.AI === '0';
+      await page.getByRole('button', { name: /إضافة أسئلة/ }).click();
+      const box = page.getByRole('checkbox');
+      if ((await box.isChecked()) === noAi) await box.click();
       await page.setInputFiles('input[type=file][multiple]', process.env.SCAN.split(','));
       await page.locator('input.input').first().fill('أسئلة الفيزياء — الشهر الأول');
-      await page.getByRole('button', { name: 'حوّل إلى PDF' }).click();
+      await page.getByRole('button', { name: noAi ? 'جهّز الملف' : 'حوّل إلى PDF' }).click();
       await page.waitForSelector('.sc-prev img', { timeout: 30000 });
       await page.waitForTimeout(500);
       const [dl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'تنزيل PDF' }).click()]);
-      await dl.saveAs('/tmp/claude-0/converted.pdf');
+      await dl.saveAs(`/tmp/claude-0/converted${noAi ? '-raw' : ''}.pdf`);
+      await page.screenshot({ path: `shots/admin_composer${noAi ? '_raw' : ''}.png`, fullPage: true });
+      await page.getByRole('button', { name: 'حفظ ونشر للطلاب' }).click();
+      await page.waitForTimeout(1200);
+    }
+    if (process.env.MODE_PDF) {
+      await page.getByRole('button', { name: /إضافة أسئلة/ }).click();
+      await page.getByRole('tab', { name: 'ملف PDF' }).click();
+      await page.setInputFiles('input[type=file][accept="application/pdf"]', process.env.MODE_PDF);
+      await page.locator('input.input').first().fill('ملف جاهز');
+      await page.screenshot({ path: 'shots/admin_composer_pdf.png', fullPage: true });
+      await page.getByRole('button', { name: 'حفظ ونشر للطلاب' }).click();
+      await page.waitForTimeout(1200);
+    }
+    if (process.env.MODE_TEXT) {
+      await page.getByRole('button', { name: /إضافة أسئلة/ }).click();
+      await page.getByRole('tab', { name: 'كتابة نص' }).click();
+      await page.fill('textarea', 'س١: احسب $C=\\frac{Q}{V}$');
+      await page.locator('input.input').first().fill('نص تجريبي');
+      await page.getByRole('button', { name: 'حفظ كمسودة' }).click();
+      await page.waitForTimeout(1200);
     }
     if (process.env.UPLOAD) {
       await page.setInputFiles('input[type=file]', process.env.UPLOAD.split(','));

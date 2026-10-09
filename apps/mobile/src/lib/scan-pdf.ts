@@ -77,10 +77,29 @@ export function pageDocument(sections: string): string {
 
 export interface ConvertResult { pdf: File; text: string }
 
-export async function convertPhotos(uris: string[], title: string, onStep?: (s: string) => void): Promise<ConvertResult> {
+/** بلا ذكاء اصطناعي: كل صورة صفحة كما هي (تتوسط الصفحة بنسبتها الأصلية) */
+const RAW_CSS = `
+*{box-sizing:border-box}html,body{margin:0;background:#fff}
+.raw{width:100%;height:1040px;display:flex;align-items:center;justify-content:center;page-break-after:always;overflow:hidden}
+.raw:last-child{page-break-after:auto}
+.raw img{max-width:100%;max-height:100%}
+@page{size:A4;margin:0}`;
+export const rawDocument = (images: string[]) =>
+  `<!doctype html><html dir="rtl"><head><meta charset="utf-8"><style>${RAW_CSS}</style></head><body>${images.map((b64) => `<div class="raw"><img src="data:image/jpeg;base64,${b64}"></div>`).join('')}</body></html>`;
+
+export async function convertPhotos(uris: string[], title: string, onStep?: (s: string) => void, ai = true): Promise<ConvertResult> {
   onStep?.('تجهيز الصور…');
   const pages: Prepared[] = [];
   for (const u of uris) pages.push(await prepare(u));
+
+  if (!ai) {
+    onStep?.('إنشاء ملف PDF…');
+    const { uri } = await Print.printToFileAsync({ html: rawDocument(pages.map((p) => p.base64)), width: 595, height: 842 });
+    const dest = new File(Paths.cache, pdfName(title));
+    if (dest.exists) dest.delete();
+    await new File(uri).copy(dest);
+    return { pdf: dest, text: '' };
+  }
 
   onStep?.('الذكاء الاصطناعي يعيد بناء الورقة بنفس تنسيقها…');
   const { html } = await callFunction<{ html: string }>('scan-convert', { images: pages.map((p) => p.base64) });

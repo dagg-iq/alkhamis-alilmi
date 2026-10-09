@@ -4,7 +4,7 @@ import {
 } from '@saey/shared';
 import { useState } from 'react';
 import { askConfirm } from '../components/dialog';
-import { ScanConvert } from '../components/ScanConvert';
+import { QuestionComposer } from '../components/QuestionComposer';
 import { Empty, Field, Markdown, Modal, Tabs, check, useAction } from '../components/ui';
 import { useLoad } from '../lib/hooks';
 import { must, signedUrl, supabase } from '../lib/supabase';
@@ -36,7 +36,7 @@ export default function Questions() {
     if (!edit.title?.trim()) throw new Error('اكتب العنوان');
     const row = {
       subject_id: edit.subject_id, kind: edit.kind, period: edit.period, section_id: edit.section_id || null,
-      title: edit.title.trim(), source: edit.source || null, content_md: edit.content_md ?? '', status: status ?? edit.status ?? 'draft',
+      title: edit.title.trim(), source: edit.source || null, content_md: edit.content_md || (edit.pdf_key ? null : ''), status: status ?? edit.status ?? 'draft',
     };
     await check(edit.id ? supabase.from('question_sets').update(row).eq('id', edit.id) : supabase.from('question_sets').insert(row));
     setEdit(null);
@@ -49,16 +49,13 @@ export default function Questions() {
     <>
       <div className="head">
         <h1>الأسئلة</h1>
-        <div className="row">
-        <button className="btn primary" onClick={() => setScan(true)}>+ من صور (تحويل ذكي إلى PDF)</button>
-        <button className="btn" onClick={() => { setPreview(false); setEdit({ subject_id: d.subjects[0]?.id, kind: 'expected', period: 'month1', title: '', content_md: '' }); }}>+ كتابة نص يدوياً</button>
-        </div>
+        <button className="btn primary" onClick={() => setScan(true)}>+ إضافة أسئلة</button>
       </div>
       <Tabs<Filter> value={filter} onChange={setFilter} options={[
         { key: 'draft', label: 'مسودات تنتظر المراجعة', count: d.sets.filter((s) => s.status === 'draft').length },
         { key: 'published', label: 'المنشورة' },
       ]} />
-      <p className="small dim">الأسئلة المحوّلة من صور (هنا أو من التطبيق) تحفظ كملف PDF بنفس تنسيق الورقة. اختر «مسودات» لمراجعة ما لم يُنشر بعد.</p>
+      <p className="small dim">«إضافة أسئلة» تقبل صوراً (مع تحويل ذكي اختياري إلى PDF أو بدونه) أو ملف PDF جاهزاً أو نصاً. اختر «مسودات» لمراجعة ما لم يُنشر بعد.</p>
       {list.length === 0 ? <Empty>لا يوجد شيء هنا</Empty> : (
         <div className="table-wrap">
           <table>
@@ -73,7 +70,7 @@ export default function Questions() {
                   <td className="small dim">{new Date(s.created_at).toLocaleDateString('ar-IQ')}</td>
                   <td>
                     <div className="row" style={{ justifyContent: 'flex-end', flexWrap: 'nowrap' }}>
-                      {s.pdf_key ? <button className="btn sm" onClick={() => run(async () => { window.open(await signedUrl(s.pdf_key!), '_blank'); })}>الصور</button> : null}
+                      {s.pdf_key ? <button className="btn sm" onClick={() => run(async () => { window.open(await signedUrl(s.pdf_key!), '_blank'); })}>فتح الملف</button> : null}
                       <button className="btn sm" onClick={() => { setPreview(true); setEdit(s as Draft); }}>{s.status === 'draft' ? 'مراجعة' : 'تعديل'}</button>
                       <button className="btn danger sm" onClick={async () => (await askConfirm('حذف؟')) && run(async () => { await check(supabase.from('question_sets').delete().eq('id', s.id)); await q.reload(); }, 'تم الحذف')}>حذف</button>
                     </div>
@@ -85,7 +82,7 @@ export default function Questions() {
         </div>
       )}
 
-      {scan ? <ScanConvert subjects={d.subjects} sections={d.sections} onClose={() => setScan(false)} onSaved={q.reload} /> : null}
+      {scan ? <QuestionComposer subjects={d.subjects} sections={d.sections} onClose={() => setScan(false)} onSaved={q.reload} /> : null}
 
       {edit ? (
         <Modal title={edit.id ? 'مراجعة الأسئلة' : 'أسئلة جديدة'} onClose={() => setEdit(null)}>
@@ -115,6 +112,8 @@ export default function Questions() {
             </Field>
             <Field label="المصدر"><input className="input" value={edit.source ?? ''} onChange={(e) => setEdit({ ...edit, source: e.target.value })} placeholder="مثلاً: ملزمة الأستاذ…" /></Field>
           </div>
+          {edit.pdf_key ? <div className="row"><button className="btn" onClick={() => run(async () => { window.open(await signedUrl(edit.pdf_key!), '_blank'); })}>فتح ملف الأسئلة</button></div> : null}
+          {edit.pdf_key && !edit.content_md ? <p className="small dim">هذه الأسئلة ملف PDF؛ يمكنك تعديل بياناتها أعلاه ونشرها. لتغيير الملف نفسه احذفها وأضفها من جديد.</p> : <>
           <div className="tabs">
             <button className={!preview ? 'on' : ''} onClick={() => setPreview(false)}>تحرير</button>
             <button className={preview ? 'on' : ''} onClick={() => setPreview(true)}>معاينة</button>
@@ -126,6 +125,7 @@ export default function Questions() {
               <textarea className="input" style={{ minHeight: 320 }} value={edit.content_md ?? ''} onChange={(e) => setEdit({ ...edit, content_md: e.target.value })} />
             </Field>
           )}
+          </>}
           <div className="row">
             <button className="btn primary" onClick={() => save('published')} disabled={busy}>حفظ ونشر للطلاب</button>
             <button className="btn" onClick={() => save('draft')} disabled={busy}>حفظ كمسودة</button>

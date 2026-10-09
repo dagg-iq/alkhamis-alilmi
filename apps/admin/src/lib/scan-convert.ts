@@ -102,3 +102,22 @@ export async function pagesToPdf(root: HTMLElement): Promise<{ blob: Blob; previ
   if (!previews.length) throw new Error('لا توجد صفحات');
   return { blob: new Blob([(await pdf.save()) as BlobPart], { type: 'application/pdf' }), previews };
 }
+
+/** بدون ذكاء اصطناعي: كل صورة صفحة PDF كما هي (بنسبتها الأصلية، عرض ٥٩٥) */
+export async function imagesToPdf(files: File[], onStep?: (s: string) => void): Promise<{ blob: Blob; previews: string[] }> {
+  const { PDFDocument } = await import('pdf-lib');
+  const pdf = await PDFDocument.create();
+  const previews: string[] = [];
+  for (let i = 0; i < files.length; i++) {
+    onStep?.(`تجهيز الصورة ${i + 1} من ${files.length}…`);
+    const p = await prepareImage(files[i]);
+    const jpg = p.canvas.toDataURL('image/jpeg', 0.88);
+    previews.push(jpg);
+    const img = await pdf.embedJpg(Uint8Array.from(atob(jpg.split(',')[1]), (c) => c.charCodeAt(0)));
+    const w = 595;
+    const h = Math.round((p.canvas.height / p.canvas.width) * w);
+    pdf.addPage([w, h]).drawImage(img, { x: 0, y: 0, width: w, height: h });
+  }
+  if (!previews.length) throw new Error('لا توجد صور');
+  return { blob: new Blob([(await pdf.save()) as BlobPart], { type: 'application/pdf' }), previews };
+}
