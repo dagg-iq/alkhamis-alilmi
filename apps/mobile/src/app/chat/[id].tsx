@@ -107,6 +107,7 @@ export default function ChatScreen() {
   }, [id, loadImages, loadReactions, markRead]);
 
   // اللحظي
+  const firstSub = useRef(false);
   useEffect(() => {
     const channel = supabase.channel(`conv:${id}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `conversation_id=eq.${id}` }, (p) => {
@@ -133,8 +134,26 @@ export default function ChatScreen() {
         const r = (p.new && 'message_id' in p.new ? p.new : p.old) as Reaction;
         if (r?.message_id) loadReactions([r.message_id]);
       })
-      .subscribe();
+      .subscribe((status) => {
+        // بعد انقطاع (الهاتف نام أو التطبيق في الخلفية) يعود الاتصال لكن الرسائل التي وصلت أثناءه لا تُرسل؛ نجلبها
+        if (status !== 'SUBSCRIBED') return;
+        if (!firstSub.current) { firstSub.current = true; return; }
+        supabase.from('messages').select('*').eq('conversation_id', id).order('created_at', { ascending: false }).limit(PAGE)
+          .then(({ data }) => {
+            const fresh = (data ?? []) as Message[];
+            if (!fresh.length) return;
+            setMessages((prev) => {
+              const byId = new Map(prev.filter((x) => !String(x.id).startsWith('tmp-')).map((x) => [x.id, x]));
+              for (const m of fresh) byId.set(m.id, m);
+              const pend = prev.filter((x) => String(x.id).startsWith('tmp-'));
+              return [...pend, ...[...byId.values()].sort((a, b) => (a.created_at < b.created_at ? 1 : -1))];
+            });
+            loadImages(fresh);
+            markRead();
+          });
+      });
     return () => {
+      firstSub.current = false;
       supabase.removeChannel(channel);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

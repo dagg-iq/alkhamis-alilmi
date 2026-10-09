@@ -338,6 +338,12 @@ Deno.serve(handler(async (req) => {
         thinking: level,
       });
   } catch (e) {
+    // لم يُجب المساعد: نعيد للطالب السؤال الذي حُسب من رصيده
+    if (used !== null) {
+      await admin.from('ai_usage').update({ count: Math.max(0, used - 1) })
+        .eq('user_id', caller.id).eq('day', new Date().toISOString().slice(0, 10)).eq('count', used)
+        .then(({ error }) => { if (error) console.error('refund', error.message); });
+    }
     if (e instanceof GeminiQuotaError) throw new HttpError(503, 'المساعد مشغول الآن بسبب كثرة الأسئلة، جرّب بعد دقيقة.');
     throw e;
   }

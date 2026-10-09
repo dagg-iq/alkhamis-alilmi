@@ -60,6 +60,12 @@ begin
   exception when insufficient_privilege then null;
   end;
   insert into public.tasks (title, type) values ('حل تمارين الفصل', 'homework');
+  -- ولا يحوّل مهمته الخاصة إلى مهمة عامة بالتعديل
+  begin
+    update public.tasks set scope = 'school' where title = 'حل تمارين الفصل';
+    raise exception 'طالب حوّل مهمته إلى عامة!';
+  exception when insufficient_privilege then null;
+  end;
   -- يرسل رسالة في محادثة المدرسة مع تاغ للأدمن
   select id into cid from public.conversations where type = 'school';
   insert into public.messages (conversation_id, body, mentions) values (cid, 'السلام عليكم @الأدمن', array['00000000-0000-0000-0000-00000000000a']::uuid[]);
