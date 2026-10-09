@@ -19,20 +19,24 @@ import Settings from './pages/Settings';
 import Students from './pages/Students';
 import Tasks from './pages/Tasks';
 
-const NAV = [
-  { to: '/', label: 'نظرة عامة', end: true },
-  { to: '/students', label: 'الطلاب', badge: true },
-  { to: '/assistant', label: 'مساعد المحتوى' },
-  { to: '/content', label: 'المواد والفصول' },
-  { to: '/lectures', label: 'المحاضرات' },
-  { to: '/documents', label: 'الملازم' },
-  { to: '/questions', label: 'الأسئلة' },
-  { to: '/news', label: 'الأخبار' },
-  { to: '/schedules', label: 'الجداول' },
-  { to: '/tasks', label: 'الواجبات والامتحانات' },
-  { to: '/chat', label: 'الدردشة' },
-  { to: '/settings', label: 'الإعدادات', admin: true },
-  { to: '/audit', label: 'سجل العمليات', admin: true },
+type Group = 'home' | 'people' | 'content' | 'plan' | 'system';
+const GROUP_TITLES: Record<Group, string> = { home: '', people: 'الطلاب والتواصل', content: 'المحتوى التعليمي', plan: 'الجداول والمتابعة', system: 'النظام' };
+
+// كل قسم بلون: يسهل تمييزه في القائمة
+const NAV: { to: string; label: string; g: Group; end?: boolean; badge?: boolean; admin?: boolean }[] = [
+  { to: '/', label: 'نظرة عامة', g: 'home', end: true },
+  { to: '/students', label: 'الطلاب', g: 'people', badge: true },
+  { to: '/chat', label: 'الدردشة', g: 'people' },
+  { to: '/assistant', label: 'مساعد المحتوى', g: 'content' },
+  { to: '/content', label: 'المواد والفصول', g: 'content' },
+  { to: '/lectures', label: 'المحاضرات', g: 'content' },
+  { to: '/documents', label: 'الملازم', g: 'content' },
+  { to: '/questions', label: 'الأسئلة', g: 'content' },
+  { to: '/schedules', label: 'الجداول', g: 'plan' },
+  { to: '/tasks', label: 'الواجبات والامتحانات', g: 'plan' },
+  { to: '/news', label: 'الأخبار', g: 'plan' },
+  { to: '/settings', label: 'الإعدادات', g: 'system', admin: true },
+  { to: '/audit', label: 'سجل العمليات', g: 'system', admin: true },
 ];
 
 export default function App() {
@@ -73,11 +77,14 @@ export default function App() {
       {menu ? <div className="scrim" onClick={() => setMenu(false)} role="presentation" /> : null}
       <nav className={`side${menu ? ' open' : ''}`} aria-label="القائمة">
         <div className="brand"><Logo size={34} /><b>سعي</b><span className="pill accent">لوحة التحكم</span></div>
-        {NAV.filter((n) => !n.admin || isAdmin).map((n) => (
-          <NavLink key={n.to} to={n.to} end={n.end}>
-            {n.label}
-            {n.badge && pending.data ? <span className="count">{pending.data}</span> : null}
-          </NavLink>
+        {NAV.filter((n) => !n.admin || isAdmin).map((n, i, list) => (
+          <div key={n.to} className="nav-item" data-g={n.g}>
+            {i === 0 || list[i - 1].g !== n.g ? (GROUP_TITLES[n.g] ? <div className="nav-group">{GROUP_TITLES[n.g]}</div> : null) : null}
+            <NavLink to={n.to} end={n.end}>
+              {n.label}
+              {n.badge && pending.data ? <span className="count">{pending.data}</span> : null}
+            </NavLink>
+          </div>
         ))}
         <div className="foot">
           <span className="small dim">{profile?.full_name}</span>

@@ -3,7 +3,8 @@ import { handler, HttpError, json } from '../_shared/cors.ts';
 import { admin, getCaller, getSetting } from '../_shared/supabase.ts';
 import { type Content, embed, generate, GeminiQuotaError, LITE_MODELS, modelChain } from '../_shared/gemini.ts';
 
-interface AiSettings { daily_limit?: number; model?: string; lite_model?: string; enabled?: boolean }
+interface AiSettings { daily_limit?: number; model?: string; lite_model?: string; enabled?: boolean; thinking_hard?: Level; thinking_explain?: Level }
+type Level = 'minimal' | 'low' | 'medium' | 'high'
 
 const SYSTEM = `أنت «سعي AI»، مدرّس خصوصي ذكي داخل تطبيق «سعي» لطلاب الصف الخامس الإعدادي العلمي في العراق.
 
@@ -71,6 +72,9 @@ const WANTS_CONTENT = /محاضر|فيديو|ملزم|ملازم|ملخص|ملف
 // أسئلة عن الطالب نفسه أو تحتاج الفهرس: لا تُحفظ إجاباتها للآخرين
 const PERSONAL = /درج|معدل|خطة|خطه|انصح|نصيح|وضعي|اسمي|انا |أنا |عني|حسب|هدف|اعفاء|إعفاء|ساعدني|شنو اسوي|محاضر|ملزم|ملازم/;
 const WANTS_CONTENT_STRICT = /محاضر|فيديو|ملزم|ملازم|ملف|pdf|استاذ|أستاذ/i;
+// مستوى التفكير حسب صعوبة الطلب: توليد أسئلة وحل مسائل ← تفكير عميق، الشرح والمقارنة ← متوسط، الباقي سريع
+const HARD = /اسئل|أسئل|سؤال.*(امتحان|وزاري)|امتحان|اختبار|مسأل|مسائل|مسئل|احسب|برهن|اثبت|أثبت|استنتج|استخرج|حل\s/;
+const EXPLAIN = /اشرح|شرح|وضح|فسر|علل|قارن|لماذا|لخص|ملخص|الفرق بين/;
 const CACHE_DAYS = 30;
 // رقم نسخة الكاش: نرفعه عند تغيير التعليمات حتى لا تعود أجوبة قديمة (مثل «أنا من جوجل»)
 const CACHE_V = 'v2';
@@ -321,11 +325,17 @@ Deno.serve(handler(async (req) => {
     (contents[contents.length - 1].parts[0] as { text: string }).text = `(رسالة سابقة: ${(prev.parts[0] as { text: string }).text})\n\n${(contents[contents.length - 1].parts[0] as { text: string }).text}`;
   }
 
+  const level: Level = HARD.test(text) ? (settings.thinking_hard ?? 'high') : EXPLAIN.test(text) ? (settings.thinking_explain ?? 'medium') : 'low';
   let answer: string;
   try {
     answer = identityQ ? IDENTITY_ANSWER : cached ? cached.answer : small
       ? await generate(modelChain(settings.lite_model, LITE_MODELS), contents, { system: SYSTEM + about, temperature: 0.4, maxOutputTokens: 1024, thinking: 'minimal', spread: false })
-      : await generate(modelChain(settings.model), contents, { system: SYSTEM + about, temperature: 0.3, maxOutputTokens: 8192, thinking: 'low' });
+      : await generate(modelChain(settings.model), contents, {
+        system: SYSTEM + about, temperature: 0.3,
+        // التفكير يُحسب من حد الإخراج، فنوسّع الحد للطلبات الصعبة
+        maxOutputTokens: level === 'high' ? 24576 : 8192,
+        thinking: level,
+      });
   } catch (e) {
     if (e instanceof GeminiQuotaError) throw new HttpError(503, 'المساعد مشغول الآن بسبب كثرة الأسئلة، جرّب بعد دقيقة.');
     throw e;

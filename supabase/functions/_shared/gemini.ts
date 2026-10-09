@@ -54,7 +54,7 @@ export class GeminiQuotaError extends Error {}
  * ننتقل للتالي تلقائياً — فلا يرى الطالب «المساعد مشغول» إلا إذا تعطلت كلها.
  * (gemini-2.5 أُوقفت للحسابات الجديدة، و Pro غير متاح في الطبقة المجانية)
  */
-export const MAIN_MODELS = ['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite'];
+export const MAIN_MODELS = ['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite'];
 export const LITE_MODELS = ['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-3.8-flash', 'gemini-3.5-flash'];
 
 /** النموذج من الإعدادات أولاً (يقبل عدة أسماء مفصولة بفواصل)، ثم الافتراضيات */
