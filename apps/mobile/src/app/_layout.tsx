@@ -14,6 +14,7 @@ import { UpdateSheet } from '@/components/update-sheet';
 import { isConfigured } from '@/lib/supabase';
 import { AppThemeProvider, fontAssets, useTheme } from '@/lib/theme';
 import { Intro } from '@/components/intro';
+import { PortalProvider } from '@/components/portal';
 import { MessageBanner } from '@/components/message-banner';
 import { NotConfigured } from '@/components/not-configured';
 import { useWidgetSync } from '@/widgets/sync';
@@ -115,6 +116,7 @@ function Navigator() {
       else if (d.post_id) router.push(`/news/${d.post_id}`);
       else if (d.task_id) router.push('/planner');
       else if (d.url === '/timer') router.push('/timer');
+      else if (d.url === '/about') router.push('/about');
       else router.push('/notifications');
     });
   }, []);
@@ -127,6 +129,7 @@ function Navigator() {
 
   return (
     <ThemeProvider value={navTheme}>
+      <PortalProvider>
       <StatusBar style={dark ? 'light' : 'dark'} />
       {/* ملء الشاشة: نخفي أزرار أندرويد السفلية (تظهر بالسحب من الأسفل) */}
       {Platform.OS === 'android' ? <NavigationBar hidden /> : null}
@@ -142,6 +145,7 @@ function Navigator() {
       {ready ? <MessageBanner myId={approvedId} /> : null}
       <UpdateSheet enabled={ready && introDone && !!approvedId} />
       {!introDone ? <Intro ready={ready} onDone={() => setIntroDone(true)} /> : null}
+      </PortalProvider>
     </ThemeProvider>
   );
 }

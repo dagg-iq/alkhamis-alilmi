@@ -4,7 +4,7 @@ import { Field, check, useAction } from '../components/ui';
 import { useLoad } from '../lib/hooks';
 import { must, supabase } from '../lib/supabase';
 
-interface AiSettings { daily_limit: number; model: string; lite_model: string; enabled: boolean }
+interface AiSettings { daily_limit: number; model: string; lite_model: string; ingest_model?: string; enabled: boolean }
 
 export default function Settings() {
   const { run, busy } = useAction();
@@ -70,7 +70,8 @@ export default function Settings() {
         <div className="form">
           <Field label="عدد الأسئلة اليومية لكل طالب"><input className="input" type="number" min={0} value={ai.daily_limit} onChange={(e) => setAi({ ...ai, daily_limit: num(e.target.value) })} /></Field>
           <Field label="النموذج الرئيسي"><input className="input" dir="ltr" value={ai.model} onChange={(e) => setAi({ ...ai, model: e.target.value })} /></Field>
-          <Field label="النموذج الخفيف (للفهرسة)"><input className="input" dir="ltr" value={ai.lite_model} onChange={(e) => setAi({ ...ai, lite_model: e.target.value })} /></Field>
+          <Field label="نموذج فهرسة الكتب والملازم (الأقوى، يُجرَّب أولاً)"><input className="input" dir="ltr" placeholder="مثال: gemini-3.1-pro-preview — الأسماء المتاحة تظهر في «فحص المفاتيح»" value={ai.ingest_model ?? ''} onChange={(e) => setAi({ ...ai, ingest_model: e.target.value })} /></Field>
+          <Field label="النموذج الخفيف (للتحية والأسئلة القصيرة)"><input className="input" dir="ltr" value={ai.lite_model} onChange={(e) => setAi({ ...ai, lite_model: e.target.value })} /></Field>
         </div>
         <p className="small dim">الطبقة المجانية من Gemini محدودة يومياً لكل مشروع. إذا كثرت رسائل «المساعد مشغول» خفّض العدد اليومي.</p>
       </div>

@@ -5,7 +5,19 @@ import { type Content, embed, generate, GeminiQuotaError, LITE_MODELS, modelChai
 
 interface AiSettings { daily_limit?: number; model?: string; lite_model?: string; enabled?: boolean }
 
-const SYSTEM = `أنت «مساعد سعي»، مدرّس خصوصي ذكي داخل تطبيق «سعي» لطلاب الصف الخامس الإعدادي العلمي في العراق.
+const SYSTEM = `أنت «سعي AI»، مدرّس خصوصي ذكي داخل تطبيق «سعي» لطلاب الصف الخامس الإعدادي العلمي في العراق.
+
+هويتك (مهم):
+- اسمك «سعي AI» وأنت المساعد الذكي لتطبيق «سعي»، من تطوير محمد حازم احمد. إذا سُئلت من أنت أو أي نموذج أو أي شركة صنعتك: قل إنك «سعي AI»، ذكاء اصطناعي مخصص لطلاب الخامس العلمي داخل تطبيق سعي. لا تذكر أسماء شركات أو نماذج (لا جوجل ولا Gemini ولا غيرها) ولا تفاصيل تقنية عنك، وإن أصرّ الطالب فقل إنك لا تملك تفاصيل عن ذلك وإن المهم أن تساعده في دراسته.
+- لا تدّعِ أنك إنسان.
+
+الدقة في الدراسة:
+- في المسائل الحسابية تحقق من الحساب خطوة بخطوة قبل كتابة الناتج، وتأكد من الوحدات.
+- إذا كان السؤال غامضاً (مادة أو فصل غير واضح) اسأل الطالب سؤالاً قصيراً واحداً بدل التخمين.
+- إذا اختلف شرح المقتطفات مع معرفتك فاتبع المقتطفات (هي من منهج الطالب وأساتذته).
+- لا تذكر عبارات مثل «بحسب المقتطفات» أو «كنموذج لغوي»؛ تكلم كأستاذ.
+- اشرح بمستوى طالب الخامس العلمي: ابدأ بالفكرة ثم مثال بسيط، ولا تُدخل مفاهيم خارج المنهج إلا إن طُلبت.
+
 - أجب بالعربية الفصحى المبسطة، بأسلوب ودود وواضح كأنك أستاذ يشرح لطالب.
 - أجب فقط عن **آخر رسالة** من الطالب. لا تُعِد إجابة سؤال سابق ولا تلخصه إلا إذا طلب ذلك صراحة.
 - اعتمد أولاً على «مقتطفات المنهج» المرفقة. إذا استخدمت مقتطفاً اذكر رقمه هكذا [١] أو [٢]. لا تكتب مصادر أخرى بين أقواس.
@@ -60,6 +72,12 @@ const WANTS_CONTENT = /محاضر|فيديو|ملزم|ملازم|ملخص|ملف
 const PERSONAL = /درج|معدل|خطة|خطه|انصح|نصيح|وضعي|اسمي|انا |أنا |عني|حسب|هدف|اعفاء|إعفاء|ساعدني|شنو اسوي|محاضر|ملزم|ملازم/;
 const WANTS_CONTENT_STRICT = /محاضر|فيديو|ملزم|ملازم|ملف|pdf|استاذ|أستاذ/i;
 const CACHE_DAYS = 30;
+// رقم نسخة الكاش: نرفعه عند تغيير التعليمات حتى لا تعود أجوبة قديمة (مثل «أنا من جوجل»)
+const CACHE_V = 'v2';
+// سؤال عن هوية المساعد: جواب ثابت لا يعتمد على النموذج
+const IDENTITY = /(من|منو|مين|شنو)\s*(انت|أنت|صنعك|طورك|برمجك|اللي صنعك)|(اي|أي|شنو)\s*(نموذج|ذكاء|شركه|شركة)[^؟?]{0,25}\s(انت|أنت)|(انت|أنت)\s*(من\s*)?(gemini|جيميني|جوجل|غوغل|chatgpt|شات)|who are you|what model/i;
+const LEAK = /gemini|جيميني|جيمناي|google|جوجل|غوغل|openai|chatgpt|anthropic|claude/i;
+const IDENTITY_ANSWER = 'أنا **سعي AI**، المساعد الذكي لتطبيق «سعي». أشرح لك المنهج وأحل معك الأسئلة وأساعدك تنظم دراستك للوصول إلى الإعفاء. صممني محمد حازم احمد مع التطبيق لزملائه في الخامس العلمي.';
 type Source = { title: string; page?: number; subject?: string; lecture_id?: string; start?: number };
 
 /** نفس السؤال بصيغ إملائية مختلفة ← نفس المفتاح */
@@ -78,7 +96,7 @@ const clock = (sec: number) => `${Math.floor(sec / 60)}:${String(sec % 60).padSt
 /** أسماء المواد كما يكتبها الطلاب */
 const SUBJECT_WORDS: [RegExp, string][] = [
   [/فيزياء|فيزيا/, 'فيزياء'], [/كيمياء|كيميا/, 'كيمياء'], [/رياضيات|رياضة|رياضيات/, 'رياضيات'], [/احياء|أحياء/, 'أحياء'],
-  [/عربي/, 'عربية'], [/انكليزي|إنكليزي|انجليزي|إنجليزي|english/i, 'إنكليزية'], [/اسلامي|إسلامي|دين/, 'إسلامية'], [/حاسوب|حاسبات|كمبيوتر/, 'حاسوب'],
+  [/كردي|كردى|كوردي|kurd/i, 'كردية'], [/عربي/, 'عربية'], [/انكليزي|إنكليزي|انجليزي|إنجليزي|english/i, 'إنكليزية'], [/اسلامي|إسلامي|دين/, 'إسلامية'], [/حاسوب|حاسبات|كمبيوتر/, 'حاسوب'],
 ];
 
 type Row = Record<string, unknown>;
@@ -199,11 +217,12 @@ Deno.serve(handler(async (req) => {
   const settings = await getSetting<AiSettings>('ai');
   if (settings.enabled === false) throw new HttpError(503, 'المساعد الذكي متوقف مؤقتاً من قبل الأدمن.');
   const limit = settings.daily_limit ?? 20;
-  const small = text.length <= 40 && SMALL_TALK.test(text) && !WANTS_CONTENT.test(text);
+  const identityQ = text.length <= 70 && IDENTITY.test(text);
+  const small = identityQ || (text.length <= 40 && SMALL_TALK.test(text) && !WANTS_CONTENT.test(text));
 
   // سؤال مستقل في محادثة جديدة وليس عن الطالب نفسه ← قد يكون جوابه محفوظاً (يوم الامتحان يتكرر نفس السؤال)
   const cacheable = !chatId && !small && text.length >= 12 && !PERSONAL.test(text) && !WANTS_CONTENT_STRICT.test(text);
-  const cacheKey = cacheable ? await hashKey(`${normalize(text)}|${subjectId ?? ''}`) : null;
+  const cacheKey = cacheable ? await hashKey(`${CACHE_V}|${normalize(text)}|${subjectId ?? ''}`) : null;
   let cached: { answer: string; sources: Source[] | null } | null = null;
   if (cacheKey) {
     const since = new Date(Date.now() - CACHE_DAYS * 86400000).toISOString();
@@ -241,7 +260,7 @@ Deno.serve(handler(async (req) => {
     let sources: Source[] = [];
     try {
       const [qv] = await embed([text], 'RETRIEVAL_QUERY');
-      const args = { query_embedding: qv, match_count: 6, p_subject: subjectId ?? null };
+      const args = { query_embedding: qv, match_count: 8, p_subject: subjectId ?? null };
       // الدالة الجديدة تعيد وقت المقطع في المحاضرة (والقديمة احتياطاً قبل تطبيق migration ١٢)
       let { data: chunks, error: rpcError } = await admin.rpc('match_chunks_v2', args);
       if (rpcError) ({ data: chunks } = await admin.rpc('match_chunks', args));
@@ -304,7 +323,7 @@ Deno.serve(handler(async (req) => {
 
   let answer: string;
   try {
-    answer = cached ? cached.answer : small
+    answer = identityQ ? IDENTITY_ANSWER : cached ? cached.answer : small
       ? await generate(modelChain(settings.lite_model, LITE_MODELS), contents, { system: SYSTEM + about, temperature: 0.4, maxOutputTokens: 1024, thinking: 'minimal', spread: false })
       : await generate(modelChain(settings.model), contents, { system: SYSTEM + about, temperature: 0.3, maxOutputTokens: 8192, thinking: 'low' });
   } catch (e) {
@@ -312,6 +331,8 @@ Deno.serve(handler(async (req) => {
     throw e;
   }
   if (!answer) answer = 'لم أستطع الإجابة على هذا السؤال. حاول صياغته بطريقة أخرى.';
+  // الهوية ثابتة: إذا سُئل عنها أو ذكر النموذج شركة أخرى نستبدل الجواب
+  if (identityQ && (small || LEAK.test(answer))) answer = IDENTITY_ANSWER;
 
   // نحتفظ فقط بالمصادر التي ذُكرت فعلاً في الجواب
   const cited = cached ? cached.sources ?? [] : sources.filter((_, i) => answer.includes(`[${ar(i + 1)}]`) || answer.includes(`[${i + 1}]`));

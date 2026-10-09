@@ -56,9 +56,11 @@ class SaeyTimerModule : Module() {
     )
 
     val builder = NotificationCompat.Builder(context, CHANNEL_ID)
-      .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
+      .setSmallIcon(smallIcon())
       .setContentTitle(title)
       .setContentText(body)
+      .setSubText("سعي")
+      .setStyle(NotificationCompat.BigTextStyle().bigText(body))
       .setWhen(endsAt)
       .setShowWhen(true)
       .setUsesChronometer(true)
@@ -87,6 +89,12 @@ class SaeyTimerModule : Module() {
     } catch (_: SecurityException) {
       // الإشعارات غير مسموحة: المنبّه المجدول يبقى يعمل إن سُمح لاحقاً
     }
+  }
+
+  // شعار سعي أحادي اللون (من موارد الوحدة)، وإن لم يوجد نرجع لأيقونة النظام
+  private fun smallIcon(): Int {
+    val id = context.resources.getIdentifier("saey_timer_small", "drawable", context.packageName)
+    return if (id != 0) id else android.R.drawable.ic_lock_idle_alarm
   }
 
   companion object {

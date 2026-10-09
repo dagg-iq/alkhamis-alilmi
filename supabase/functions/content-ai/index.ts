@@ -405,6 +405,21 @@ ${cur.text}
           detail: res.ok ? 'يعمل' : res.status === 429 ? 'يعمل لكن حصته انتهت مؤقتاً' : `${res.status}: ${(t.match(/"message":\s*"([^"]{0,160})/)?.[1] ?? t.slice(0, 160))}`,
         });
       }
+      // النماذج المتاحة لمفتاح اللوحة (لاختيار الأقوى للفهرسة): كل ما يدعم generateContent
+      const mk = Deno.env.get('GEMINI_ADMIN_API_KEY') ?? Deno.env.get('GEMINI_API_KEY');
+      if (mk) {
+        try {
+          const res = await fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=200', { headers: { 'x-goog-api-key': mk } });
+          const d = await res.json();
+          const names = ((d.models ?? []) as { name: string; supportedGenerationMethods?: string[] }[])
+            .filter((m) => m.supportedGenerationMethods?.includes('generateContent'))
+            .map((m) => m.name.replace('models/', ''))
+            .filter((n) => /^gemini-/.test(n) && !/image|tts|audio|live|embedding|robotics|computer/.test(n));
+          results.push({ name: 'النماذج المتاحة', ok: res.ok, detail: res.ok ? names.join('، ') : `${res.status}` });
+        } catch (e) {
+          results.push({ name: 'النماذج المتاحة', ok: false, detail: String((e as Error).message ?? e).slice(0, 160) });
+        }
+      }
       const yk = Deno.env.get('YOUTUBE_API_KEY');
       if (!yk) results.push({ name: 'YOUTUBE_API_KEY', ok: false, detail: 'غير مضاف' });
       else {

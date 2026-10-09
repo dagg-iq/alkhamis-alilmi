@@ -2,16 +2,23 @@
 import { json } from '../_shared/cors.ts';
 import { sendFcm } from '../_shared/fcm.ts';
 import { admin } from '../_shared/supabase.ts';
+import { presign } from '../_shared/storage.ts';
 
 interface PushMessage { to: string; title: string; body: string; data: Record<string, unknown>; sound: 'default'; channelId: string }
 
-async function sendPush(userIds: string[], title: string, body: string, data: Record<string, unknown>, channelId = 'default') {
+/** رابط مؤقت لصورة مخزنة (يبقى صالحاً يوماً كاملاً حتى لو فتح الطالب الإشعار لاحقاً) */
+async function imageUrl(key?: string | null): Promise<string | undefined> {
+  if (!key) return undefined;
+  try { return await presign('GET', key, 24 * 3600); } catch (e) { console.error('image', e); return undefined; }
+}
+
+async function sendPush(userIds: string[], title: string, body: string, data: Record<string, unknown>, channelId = 'default', image?: string, tag?: string) {
   if (!userIds.length) return;
   const { data: tokens } = await admin.from('push_tokens').select('user_id, token').in('user_id', userIds);
   const all = (tokens ?? []).map((t) => t.token as string);
   // رموز Firebase المباشرة (بلا حساب Expo)
   const fcm = all.filter((t) => !t.startsWith('ExponentPushToken'));
-  const deadFcm = await sendFcm(fcm.map((token) => ({ token, title, body, data, channelId }))).catch((e) => {
+  const deadFcm = await sendFcm(fcm.map((token) => ({ token, title, body, data, channelId, image, tag }))).catch((e) => {
     console.error(e);
     return [] as string[];
   });
@@ -45,7 +52,15 @@ Deno.serve(async (req) => {
   const r = payload.record;
 
   if (payload.table === 'notifications') {
-    await sendPush([r.user_id], r.title, r.body ?? '', { type: r.type, ...r.payload });
+    let body: string = r.body ?? '';
+    let image: string | undefined;
+    // الخبر: النص كاملاً (حتى يتوسع الإشعار بالسحب) وصورة الغلاف إن وُجدت
+    if (r.payload?.post_id) {
+      const { data: post } = await admin.from('posts').select('body, cover_key').eq('id', r.payload.post_id).maybeSingle();
+      if (post?.body) body = String(post.body).slice(0, 600);
+      image = await imageUrl(post?.cover_key);
+    }
+    await sendPush([r.user_id], r.title, body, { type: r.type, ...r.payload }, 'default', image);
   }
 
   if (payload.table === 'messages') {
@@ -62,7 +77,9 @@ Deno.serve(async (req) => {
     const name = sender?.full_name ?? 'رسالة جديدة';
     const title = conv?.type === 'direct' ? name : (conv?.title ?? 'سعي');
     const body = conv?.type === 'direct' ? preview : `${name}: ${preview}`;
-    await sendPush(to, title, body.slice(0, 180), { type: 'message', conversation_id: r.conversation_id }, 'chat');
+    // صورة في الرسالة: تظهر مصغّرة كبيرة في الإشعار. tag يجمع رسائل نفس المحادثة في إشعار واحد
+    const image = r.attachment?.type === 'image' ? await imageUrl(r.attachment.key) : undefined;
+    await sendPush(to, title, body.slice(0, 500), { type: 'message', conversation_id: r.conversation_id }, 'chat', image);
   }
 
   return json({ ok: true });

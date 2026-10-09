@@ -3,10 +3,11 @@
 import { PDFDocument } from 'npm:pdf-lib@1.17.1';
 import { handler, HttpError, json } from '../_shared/cors.ts';
 import { admin, getCaller, getSetting } from '../_shared/supabase.ts';
-import { chunkText, embed, fileRef, generate, poolKeys, GeminiQuotaError, parseJson, uploadFile, LITE_MODELS, modelChain } from '../_shared/gemini.ts';
+import { chunkText, embed, fileRef, generate, poolKeys, GeminiQuotaError, parseJson, uploadFile, MAIN_MODELS, modelChain } from '../_shared/gemini.ts';
 import { getObject } from '../_shared/storage.ts';
 
-const BATCH = 10;
+// الفهرسة تُنفَّذ مرة واحدة للكتاب، فنفضّل الجودة: صفحات أقل في الطلب الواحد وأقوى نموذج متاح وصور بدقة عالية
+const BATCH = 6;
 
 Deno.serve(handler(async (req) => {
   await getCaller(req, { staff: true });
@@ -48,9 +49,9 @@ Deno.serve(handler(async (req) => {
   await admin.from('documents').update({ ingest_status: 'running', ingest_error: null }).eq('id', doc.id);
 
   try {
-    const ai = await getSetting<{ lite_model?: string }>('ai');
+    const ai = await getSetting<{ model?: string; ingest_model?: string }>('ai');
     const ref = fileRef(fileUri!);
-    const raw = await generate(modelChain(ai.lite_model, LITE_MODELS), [{
+    const raw = await generate(modelChain(ai.ingest_model ?? ai.model, MAIN_MODELS), [{
       role: 'user',
       parts: [
         { file_data: { mime_type: 'application/pdf', file_uri: ref.uri } },
@@ -60,10 +61,13 @@ Deno.serve(handler(async (req) => {
 - اكتب المعادلات بـ LaTeX بين $...$.
 - صف الأشكال المهمة باختصار بين [شكل: ...].
 - تجاهل الزخارف وأرقام الهواتف والإعلانات.
-- إذا كانت الصفحة صورة ممسوحة (ملزمة مصوّرة) فاقرأ النص من الصورة كما هو.`,
+- إذا كانت الصفحة صورة ممسوحة (ملزمة مصوّرة) فاقرأ النص من الصورة كما هو.
+- انسخ كل كلمة بدقة تامة بلا اختصار أو تلخيص أو إعادة صياغة، مع التشكيل إن وُجد، وحافظ على ترتيب القراءة (عمودان ← عمود بعد عمود) وعلى عناوين الدروس والتمارين والجداول (اكتب الجداول بـ Markdown).
+- الشعر: كل بيت في سطر والصدر ثم // ثم العجز. الآيات والأحاديث كما وردت.
+- لا تضف شيئاً من عندك، وإذا لم تقرأ كلمة بوضوح اكتب [؟] مكانها.`,
         },
       ],
-    }], { json: true, temperature: 0, maxOutputTokens: 32768, pool: 'admin', keyIndex: ref.keyIndex });
+    }], { json: true, temperature: 0, maxOutputTokens: 32768, pool: 'admin', keyIndex: ref.keyIndex, thinking: 'low', extraConfig: { mediaResolution: 'MEDIA_RESOLUTION_HIGH' } });
 
     const pagesText = parseJson<{ page: number; text: string }[]>(raw);
     const rows: { page: number; content: string }[] = [];

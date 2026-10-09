@@ -65,6 +65,30 @@ jobs:
           # رقم النسخة داخل التطبيق (للتحديث من داخل التطبيق)
           APK_BUILD: ${{ github.run_number }}
 
+      # توقيع النسخة بمفتاح سعي الخاص (يُنشأ مرة واحدة من سير العمل «Create Signing Key»).
+      # قبل إنشائه تبقى النسخ موقّعة بمفتاح Expo العام كالسابق.
+      - name: Release signing key
+        env:
+          SIGNING_PASSPHRASE: ${{ secrets.SIGNING_PASSPHRASE }}
+        run: |
+          ENC=signing/saey-release.keystore.enc
+          if [ -f "$ENC" ]; then
+            if [ -z "$SIGNING_PASSPHRASE" ]; then
+              echo "::error::مفتاح التوقيع موجود لكن السر SIGNING_PASSPHRASE غير مضاف. لا نبني بمفتاح مختلف حتى لا ينكسر التحديث عند الطلاب."
+              exit 1
+            fi
+            openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -pass env:SIGNING_PASSPHRASE -in "$ENC" -out "$RUNNER_TEMP/saey.keystore"
+            {
+              echo "SAEY_KEYSTORE=$RUNNER_TEMP/saey.keystore"
+              echo "SAEY_STORE_PASSWORD=$SIGNING_PASSPHRASE"
+              echo "SAEY_KEY_ALIAS=saey"
+              echo "SAEY_KEY_PASSWORD=$SIGNING_PASSPHRASE"
+            } >> "$GITHUB_ENV"
+            SAEY_KEYSTORE="$RUNNER_TEMP/saey.keystore" SAEY_STORE_PASSWORD="$SIGNING_PASSPHRASE" SAEY_KEY_ALIAS=saey SAEY_KEY_PASSWORD="$SIGNING_PASSPHRASE" node scripts/apply-signing.js
+          else
+            echo "::notice::لا يوجد مفتاح توقيع خاص بعد — النسخة موقّعة بمفتاح Expo العام."
+          fi
+
       - name: Build release APK
         working-directory: apps/mobile/android
         env:
@@ -88,6 +112,8 @@ jobs:
         run: |
           mkdir -p out
           cp apps/mobile/android/app/build/outputs/apk/release/app-release.apk out/saey.apk
+          echo "بصمة توقيع النسخة (يجب أن تبقى ثابتة بين النسخ):"
+          keytool -printcert -jarfile out/saey.apk | grep -E 'Owner|SHA256' || true
           ls -lh out
 
       - uses: actions/upload-artifact@v4

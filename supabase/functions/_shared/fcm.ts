@@ -48,7 +48,7 @@ async function accessToken(a: ServiceAccount): Promise<string> {
   return cached.token;
 }
 
-export interface FcmMessage { token: string; title: string; body: string; data: Record<string, unknown>; channelId: string }
+export interface FcmMessage { token: string; title: string; body: string; data: Record<string, unknown>; channelId: string; image?: string; tag?: string }
 
 /** يرسل الرسائل ويعيد الرموز التي لم تعد صالحة (لحذفها) */
 export async function sendFcm(messages: FcmMessage[]): Promise<string[]> {
@@ -66,9 +66,16 @@ export async function sendFcm(messages: FcmMessage[]): Promise<string[]> {
         body: JSON.stringify({
           message: {
             token: m.token,
-            notification: { title: m.title, body: m.body },
+            // image: صورة كبيرة تظهر عند فتح الإشعار (تحتاج رابطاً مباشراً)، والنص الطويل يتوسع بالسحب
+            notification: { title: m.title, body: m.body, ...(m.image ? { image: m.image } : {}) },
             data,
-            android: { priority: 'high', notification: { channel_id: m.channelId, sound: 'default', color: '#2346F5' } },
+            android: {
+              priority: 'high',
+              notification: {
+                channel_id: m.channelId, sound: 'default', color: '#2346F5', visibility: 'PUBLIC', notification_priority: 'PRIORITY_HIGH',
+                default_vibrate_timings: true, ...(m.image ? { image: m.image } : {}), ...(m.tag ? { tag: m.tag } : {}),
+              },
+            },
           },
         }),
       });

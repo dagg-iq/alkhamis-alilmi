@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- شعار سعي أحادي اللون (أسنان السين الثلاث + النقطة) لأيقونة إشعار المؤقت الصغيرة -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="120"
+    android:viewportHeight="120">
+    <path android:fillColor="#FFFFFF" android:pathData="M90,62 A10,10 0 0 1 100,72 L100,94 A10,10 0 0 1 80,94 L80,72 A10,10 0 0 1 90,62 Z" />
+    <path android:fillColor="#FFFFFF" android:pathData="M60,44 A10,10 0 0 1 70,54 L70,94 A10,10 0 0 1 50,94 L50,54 A10,10 0 0 1 60,44 Z" />
+    <path android:fillColor="#FFFFFF" android:pathData="M30,30 A10,10 0 0 1 40,40 L40,94 A10,10 0 0 1 20,94 L20,40 A10,10 0 0 1 30,30 Z" />
+    <path android:fillColor="#FFFFFF" android:pathData="M30,84 L90,84 A10,10 0 0 1 90,104 L30,104 A10,10 0 0 1 30,84 Z" />
+    <path android:fillColor="#FFFFFF" android:pathData="M30,2 A10,10 0 1 1 30,22 A10,10 0 1 1 30,2 Z" />
+</vector>

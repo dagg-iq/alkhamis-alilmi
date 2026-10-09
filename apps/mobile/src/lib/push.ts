@@ -57,6 +57,26 @@ export async function setupChannels() {
 }
 
 const TIMER_CHANNEL = 'timer-alarm-2';
+const DOWNLOAD_CHANNEL = 'downloads';
+const DOWNLOAD_ID = 'saey-update-download';
+
+/** إشعار تقدم تحميل التحديث (يُحدَّث في مكانه، وصامت). done = اكتمل أو فشل ← يصدر تنبيه مرة واحدة */
+export async function notifyDownload(title: string, body: string, done: boolean) {
+  const N = notifications();
+  if (!N || Platform.OS !== 'android') return;
+  try {
+    const { status } = await N.getPermissionsAsync();
+    if (status !== 'granted') return;
+    // إعدادات القناة لا تتغير بعد إنشائها: قناة هادئة للتقدم وأخرى للنتيجة
+    const channel = done ? `${DOWNLOAD_CHANNEL}-done` : DOWNLOAD_CHANNEL;
+    await N.setNotificationChannelAsync(channel, { name: done ? 'نتيجة تحميل التحديث' : 'تحميل التحديثات', importance: done ? N.AndroidImportance.HIGH : N.AndroidImportance.LOW, showBadge: false });
+    await N.scheduleNotificationAsync({
+      identifier: DOWNLOAD_ID,
+      content: { title, body, sticky: !done, autoDismiss: done, data: { url: '/about' }, priority: done ? N.AndroidNotificationPriority.HIGH : N.AndroidNotificationPriority.LOW },
+      trigger: { channelId: channel },
+    });
+  } catch { /* الإشعار تحسين فقط */ }
+}
 const TIMER_SOUND = 'saey_alarm.wav';
 
 export type PushResult = 'ok' | 'denied' | 'unsupported' | 'not-configured' | 'error';

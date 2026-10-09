@@ -114,6 +114,8 @@ export default function Settings() {
             }
           }} />
         <Divider />
+        <ListItem icon="info" title="عن التطبيق" onPress={() => router.push('/about')} />
+        <Divider />
         <ListItem icon="logout" title="تسجيل الخروج" danger onPress={() => Alert.alert('تسجيل الخروج', 'هل تريد الخروج من حسابك؟', [
           { text: 'إلغاء', style: 'cancel' },
           { text: 'خروج', style: 'destructive', onPress: () => { unregisterPush(me.id).finally(signOut); } },

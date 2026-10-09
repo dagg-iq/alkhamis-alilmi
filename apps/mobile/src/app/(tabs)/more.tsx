@@ -50,6 +50,8 @@ export default function More() {
 
       <Card style={{ paddingVertical: 2 }}>
         <ListItem icon="settings" title="الإعدادات" onPress={() => router.push('/settings')} />
+        <Divider />
+        <ListItem icon="info" title="عن التطبيق" subtitle="النسخة والمطوّر وروابط التواصل" onPress={() => router.push('/about')} />
       </Card>
     </Screen>
   );

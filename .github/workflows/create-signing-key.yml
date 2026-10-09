@@ -1,0 +1,50 @@
+# ينشئ مفتاح توقيع سعي الخاص مرة واحدة، ويحفظه مشفّراً في المستودع (signing/saey-release.keystore.enc).
+# الشرط: السر SIGNING_PASSPHRASE (أي جملة طويلة سرية يختارها صاحب المشروع). لا يعيد إنشاءه إن وُجد.
+# تحذير: ضياع الجملة السرية أو الملف يعني أن كل الطلاب سيحتاجون حذف التطبيق وتثبيته من جديد.
+name: Create Signing Key
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  create:
+    runs-on: ubuntu-latest
+    env:
+      SIGNING_PASSPHRASE: ${{ secrets.SIGNING_PASSPHRASE }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create and encrypt the keystore
+        run: |
+          if [ -z "$SIGNING_PASSPHRASE" ] || [ "${#SIGNING_PASSPHRASE}" -lt 12 ]; then
+            echo "::error::أضف السر SIGNING_PASSPHRASE (12 حرفاً فأكثر) في Settings ← Secrets and variables ← Actions."
+            exit 1
+          fi
+          if [ -f signing/saey-release.keystore.enc ]; then
+            echo "::error::مفتاح التوقيع موجود مسبقاً ولن يُستبدل (الاستبدال يكسر التحديث عند كل الطلاب)."
+            exit 1
+          fi
+          mkdir -p signing
+          keytool -genkeypair -keystore "$RUNNER_TEMP/saey.keystore" -alias saey -keyalg RSA -keysize 4096 -validity 36500 \
+            -storepass "$SIGNING_PASSPHRASE" -keypass "$SIGNING_PASSPHRASE" -dname "CN=Saey, OU=Saey, O=Saey, C=IQ"
+          openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -pass env:SIGNING_PASSPHRASE -in "$RUNNER_TEMP/saey.keystore" -out signing/saey-release.keystore.enc
+          # نتأكد أنه يُفك بنفس الجملة السرية
+          openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -pass env:SIGNING_PASSPHRASE -in signing/saey-release.keystore.enc -out "$RUNNER_TEMP/check.keystore"
+          keytool -list -keystore "$RUNNER_TEMP/check.keystore" -storepass "$SIGNING_PASSPHRASE" | grep -E "saey|SHA"
+          cat > signing/README.md <<'EOT'
+          مفتاح توقيع سعي مشفّر بـ AES-256 بالجملة السرية SIGNING_PASSPHRASE (سر في GitHub). لا تحذف هذا الملف ولا تغيّر الجملة السرية.
+          EOT
+
+      - name: Commit the encrypted key
+        run: |
+          git config user.name "saey-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add signing
+          git commit -m "مفتاح توقيع سعي الخاص (مشفّر)"
+          for i in 1 2 3 4; do
+            git fetch origin "$GITHUB_REF_NAME" && git rebase "origin/$GITHUB_REF_NAME" && git push origin "HEAD:$GITHUB_REF_NAME" && break
+            sleep $((i * 3))
+          done
+          echo "✓ تم. شغّل الآن Build APK؛ النسخة الجديدة ستُوقَّع بالمفتاح الخاص (وعلى الطلاب حذف النسخة القديمة مرة واحدة)."
