@@ -27,6 +27,7 @@ const PATHS: Record<string, string[]> = {
   sparkle: ['M12 3l2 6 6 2-6 2-2 6-2-6-6-2 6-2z'],
   timer: ['M12 8v5l3 2', 'M9 2h6'],
   calendar: ['M4 6h16v14H4z', 'M4 10h16', 'M8 3v4', 'M16 3v4'],
+  table: ['M3 5h18v14H3z', 'M3 10h18', 'M3 14.5h18', 'M9 5v14', 'M15 5v14'],
   news: ['M4 5h13v14H6a2 2 0 0 1-2-2z', 'M17 9h3v8a2 2 0 0 1-2 2', 'M8 9h5', 'M8 13h5'],
   settings: ['M4 7h10', 'M18 7h2', 'M4 17h4', 'M12 17h8'],
   user: ['M5 20a7 7 0 0 1 14 0'],

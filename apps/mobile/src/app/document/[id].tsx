@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { View } from 'react-native';
 import { Alert } from '@/lib/dialog';
 import { Icon } from '@/components/icon';
-import { Button, ErrorBox, ProgressBar, Header, Loading, Screen, T } from '@/components/ui';
+import { Button, ErrorBox, ProgressBar, Header, Loading, Row, Screen, T } from '@/components/ui';
 import { OutlineList } from '@/components/outline-list';
 import { PdfThumb } from '@/components/pdf-thumb';
 import { downloadMaterial, isDownloaded, openPdf, removeDownload, sharePdf, signedUrl } from '@/lib/files';
@@ -61,13 +61,17 @@ export default function DocumentScreen() {
           <T dim center size={13}>{arDigits(Math.round((prog.total ? prog.got / prog.total : 0) * 100))}٪ — {arDigits((prog.got / 1048576).toFixed(1))} من {arDigits((prog.total / 1048576).toFixed(1))} ميغا</T>
         </View>
       ) : null}
-      <Button title={saved ? 'فتح' : 'تحميل وفتح'} icon={saved ? 'file' : 'download'} loading={busy === 'open'} onPress={() => run('open', () => openPdf(d.file_key, d.title))} />
-      {!saved ? (
-        <Button title="تحميل للهاتف فقط (للقراءة بلا إنترنت)" variant="secondary" icon="download" loading={busy === 'save'}
-          onPress={() => run('save', async () => { setProg({ got: 0, total: 0 }); await downloadMaterial(d.file_key, (got, total) => setProg({ got, total })); setProg(null); })} />
-      ) : null}
-      <Button title="مشاركة" variant="secondary" icon="share" loading={busy === 'share'} onPress={() => run('share', () => sharePdf(d.file_key, d.title))} />
-      {saved ? <Button title="حذف من الهاتف" variant="ghost" onPress={() => { removeDownload(d.file_key); force((n) => n + 1); }} /> : null}
+      <Button title={saved ? 'فتح' : 'تحميل وفتح'} icon={saved ? 'file' : 'download'} loading={busy === 'open'} onPress={() => run('open', () => openPdf(d.file_key, d.title, { docId: d.id }))} />
+      {/* الأزرار الثانوية في صف واحد حتى تظهر الفصول مبكراً */}
+      <Row gap={10}>
+        {!saved ? (
+          <Button small style={{ flex: 1 }} title="تحميل للقراءة بلا إنترنت" variant="secondary" icon="download" loading={busy === 'save'}
+            onPress={() => run('save', async () => { setProg({ got: 0, total: 0 }); await downloadMaterial(d.file_key, (got, total) => setProg({ got, total })); setProg(null); })} />
+        ) : (
+          <Button small style={{ flex: 1 }} title="حذف من الهاتف" variant="secondary" icon="trash" onPress={() => { removeDownload(d.file_key); force((n) => n + 1); }} />
+        )}
+        <Button small style={{ flex: saved ? 1 : 0, minWidth: 110 }} title="مشاركة" variant="secondary" icon="share" loading={busy === 'share'} onPress={() => run('share', () => sharePdf(d.file_key, d.title))} />
+      </Row>
       <View style={{ gap: 10, marginTop: 8 }}>
         <T display size={22}>الفصول والمواضيع</T>
         {outline.data?.length ? (

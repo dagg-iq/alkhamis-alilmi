@@ -1,7 +1,7 @@
 import { ROLE_LABELS } from '@saey/shared';
 import { router } from 'expo-router';
 import { View } from 'react-native';
-import { Avatar, Card, Divider, Header, ListItem, NameLine, Row, Screen, T } from '@/components/ui';
+import { Avatar, SectionTitle, Card, Divider, Header, ListItem, NameLine, Row, Screen, T } from '@/components/ui';
 import { useAuth, useMe } from '@/lib/auth';
 import { useLoad } from '@/lib/use-load';
 import { supabase } from '@/lib/supabase';
@@ -28,30 +28,43 @@ export default function More() {
         </Row>
       </Card>
 
+      <SectionTitle title="دراستي" />
       <Card style={{ paddingVertical: 2 }}>
+        <ListItem icon="table" title="الجداول" subtitle="الحصص الأسبوعية والامتحانات" onPress={() => router.push('/schedules')} />
+        <Divider />
         <ListItem icon="calendar" title="المنظِّم" subtitle="الواجبات والتحضيرات والامتحانات" onPress={() => router.push('/planner')} />
         <Divider />
-        <ListItem icon="calendar" title="الجداول" subtitle="الحصص الأسبوعية والامتحانات" onPress={() => router.push('/schedules')} />
-        <Divider />
+        <ListItem icon="timer" title="مؤقت الدراسة" subtitle="ركّز ٢٥ دقيقة وسجّل وقتك" onPress={() => router.push('/timer')} />
+      </Card>
+
+      <SectionTitle title="الأدوات الذكية" />
+      <Card style={{ paddingVertical: 2 }}>
         <ListItem icon="sparkle" title="مساعد سعي" subtitle="اسأل عن أي شيء في المنهج" onPress={() => router.push('/ai')} />
         <Divider />
-        <ListItem icon="scan" title="تحويل ورقة إلى PDF" subtitle="صوّر ورقة أسئلة فتعود ملفاً بنفس شكلها" onPress={() => router.push('/scan')} />
+        <ListItem icon="scan" title="تحويل ورقة إلى PDF" subtitle="صوّر ورقة فتعود ملفاً مرتباً" onPress={() => router.push('/scan')} />
+      </Card>
+
+      <SectionTitle title="المدرسة" />
+      <Card style={{ paddingVertical: 2 }}>
+        <ListItem icon="news" title="أخبار المدرسة" subtitle="العطل والامتحانات والتبليغات" onPress={() => router.push('/news')} />
         <Divider />
-        <ListItem icon="timer" title="مؤقت الدراسة" subtitle="ركّز ٢٥ دقيقة وسجّل وقتك" onPress={() => router.push('/timer')} />
-        <Divider />
-        <ListItem icon="news" title="أخبار المدرسة" onPress={() => router.push('/news')} />
-        <Divider />
-        <ListItem icon="bell" title="الإشعارات" onPress={() => router.push('/notifications')} />
+        <ListItem icon="bell" title="الإشعارات" subtitle="كل ما وصلك من سعي" onPress={() => router.push('/notifications')} />
       </Card>
 
       {isStaff ? (
-        <Card style={{ paddingVertical: 2 }}>
-          <ListItem icon="news" title="نشر خبر" onPress={() => router.push('/news/new')} />
-        </Card>
+        <>
+          <SectionTitle title="للمشرفين" />
+          <Card style={{ paddingVertical: 2 }}>
+            <ListItem icon="news" title="نشر خبر" subtitle="يصل إشعاراً لكل الطلاب" onPress={() => router.push('/news/new')} />
+            <Divider />
+            <ListItem icon="quiz" title="إضافة أسئلة" subtitle="من صور (مع تحويل ذكي اختياري)" onPress={() => router.push('/scan')} />
+          </Card>
+        </>
       ) : null}
 
+      <SectionTitle title="الحساب" />
       <Card style={{ paddingVertical: 2 }}>
-        <ListItem icon="settings" title="الإعدادات" onPress={() => router.push('/settings')} />
+        <ListItem icon="settings" title="الإعدادات" subtitle="المظهر والهدف والإشعارات" onPress={() => router.push('/settings')} />
         <Divider />
         <ListItem icon="info" title="عن التطبيق" subtitle="النسخة والمطوّر وروابط التواصل" onPress={() => router.push('/about')} />
       </Card>

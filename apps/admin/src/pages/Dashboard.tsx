@@ -15,7 +15,15 @@ export const TABLE_LABEL: Record<string, string> = {
 export default function Dashboard() {
   const stats = useLoad(async () => must(supabase.rpc('admin_stats')) as Promise<Stats>);
   const audit = useLoad(async () => must(supabase.from('audit_log').select('id, action, target_type, meta, created_at, profiles(full_name)').order('created_at', { ascending: false }).limit(10)) as unknown as Promise<Audit[]>);
+  // ملازم لم تكتمل فهرستها أو فهرسها (لا يجد المساعد صفحاتها ولا يرى الطالب فصولها)
+  const docs = useLoad(async () => must(supabase.from('documents').select('id, title, ingest_status, outline_status, is_published')) as Promise<{ id: string; title: string; ingest_status: string; outline_status?: string; is_published: boolean }[]>);
   const s = stats.data;
+  const unindexed = (docs.data ?? []).filter((d) => d.ingest_status !== 'done' || (d.outline_status ?? 'none') !== 'done');
+  const todo = s ? [
+    s.pending > 0 && { text: `${s.pending.toLocaleString('ar-IQ')} طلب انضمام ينتظر موافقتك`, to: '/students', btn: 'مراجعة الطلاب' },
+    s.drafts > 0 && { text: `${s.drafts.toLocaleString('ar-IQ')} مجموعة أسئلة مسودة لم تُنشر بعد`, to: '/questions', btn: 'مراجعة الأسئلة' },
+    unindexed.length > 0 && { text: `${unindexed.length.toLocaleString('ar-IQ')} ملزمة بلا فهرسة كاملة (المساعد لا يجيب منها والطالب لا يرى فصولها)`, to: '/documents', btn: 'فتح الملازم' },
+  ].filter(Boolean) as { text: string; to: string; btn: string }[] : [];
   const cards = s ? [
     { label: 'طالب معتمد', value: s.students },
     { label: 'طلب بانتظار الموافقة', value: s.pending, to: '/students', hot: s.pending > 0 },
@@ -44,6 +52,19 @@ export default function Dashboard() {
           })}
         </div>
       )}
+      {todo.length ? (
+        <>
+          <h2>يحتاج انتباهك</h2>
+          <div className="card" style={{ display: 'grid', gap: 10 }}>
+            {todo.map((t) => (
+              <div key={t.to} className="row" style={{ justifyContent: 'space-between' }}>
+                <span>{t.text}</span>
+                <Link className="btn sm primary" to={t.to}>{t.btn}</Link>
+              </div>
+            ))}
+          </div>
+        </>
+      ) : s ? <p className="small dim">لا يوجد ما ينتظرك الآن 👌</p> : null}
       <h2>آخر العمليات</h2>
       <div className="table-wrap">
         <table>

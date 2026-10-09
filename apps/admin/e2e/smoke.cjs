@@ -49,7 +49,7 @@ const data = {
     const url = new URL(req.url());
     const single = (req.headers()['accept'] || '').includes('vnd.pgrst.object');
     const m = url.pathname.match(/\/rest\/v1\/(rpc\/)?([a-z_]+)/);
-    let body = m ? (m[1] ? null : (data[m[2]] ?? [])) : [];
+    let body = m ? (m[1] ? (m[2] === 'admin_stats' ? { students: 41, pending: 3, lectures: 120, documents: 14, question_sets: 22, drafts: 2, messages_today: 87, ai_today: 160, study_minutes_week: 5400 } : null) : (data[m[2]] ?? [])) : [];
     // فلترة بسيطة: ?col=eq.value
     if (Array.isArray(body)) {
       for (const [k, v] of url.searchParams) {
