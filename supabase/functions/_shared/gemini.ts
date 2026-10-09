@@ -117,12 +117,6 @@ async function logCall(slot: string, model: string, ok: boolean, status?: number
   } catch { /* العداد اختياري */ }
 }
 
-/** بداية اليوم التالي في حصة Google بحسب طلب صاحب المشروع: ٣ فجراً بغداد = منتصف الليل UTC */
-function msToNextDay(): number {
-  const n = new Date();
-  return Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate() + 1) - n.getTime();
-}
-
 /** مدة الانتظار التي تطلبها Google بعد 429: retryDelay أو «Please retry in 3h35m54s» */
 export function retryAfterMs(detail: string): number | null {
   const d = detail.match(/"retryDelay"\s*:\s*"(\d+(?:\.\d+)?)s"/);
@@ -132,8 +126,23 @@ export function retryAfterMs(detail: string): number | null {
   return null;
 }
 
-/** حصة يومية (لا دقيقة): نقفل النموذج حتى تجدّدها */
-export const isDailyQuota = (detail: string) => /PerDay|per_day|per day|daily/i.test(detail);
+/**
+ * حصة يومية (لا دقيقة)؟ الحد اليومي في الطبقة المجانية ٢٠ لكل نموذج ويتجدد ٣:٠٠ فجراً بتوقيت العراق لكل النماذج،
+ * وحد الدقيقة ٥ (انتظاره ثوانٍ). فـ «limit: 20» أو انتظار أطول من ١٠ دقائق = يومي.
+ */
+export const isDailyQuota = (detail: string) => {
+  if (/PerDay|per_day|per day|daily/i.test(detail)) return true;
+  if (/PerMinute|per_minute|per minute/i.test(detail)) return false;
+  const limit = Number(detail.match(/limit:\s*(\d+)/)?.[1]);
+  if (limit >= 10) return true;
+  return (retryAfterMs(detail) ?? 0) > 10 * 60_000;
+};
+
+/** ٣:٠٠ فجراً القادمة بتوقيت العراق (UTC+3 ثابت بلا توقيت صيفي) = منتصف الليل UTC */
+export function nextIraqReset(now = Date.now()): number {
+  const n = new Date(now);
+  return Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate() + 1);
+}
 
 /** ترتيب المحاولات: كل نماذج المفتاح الأول ثم الثاني…، ثم نماذج الاحتياط بنفس الطريقة */
 export function attemptOrder(slots: string[], models: string[], fallback: string[] = FALLBACK_MODELS): { slot: string; m: string }[] {
@@ -227,8 +236,9 @@ export async function generate(model: string | string[], contents: Content[], op
       if (status === 429) {
         // انتهت حصة هذا النموذج على هذا المفتاح: نقفله حتى الوقت الذي تحدده Google وننتقل للتالي
         busy = true;
-        const wait = retryAfterMs(detail) ?? (isDailyQuota(detail) ? msToNextDay() : 60_000);
-        await block(a.slot, a.m, wait + 2000, isDailyQuota(detail) || wait > 10 * 60_000 ? `انتهت الحصة اليومية — تعود ${AR_TIME(Date.now() + wait)}` : 'حد الدقيقة');
+        // يومي ← مقفل حتى ٣:٠٠ فجراً بتوقيت العراق (موعد تجدد كل النماذج)؛ دقيقة ← المدة التي تطلبها Google
+        if (isDailyQuota(detail)) await block(a.slot, a.m, nextIraqReset() - Date.now() + 30_000, 'انتهت الحصة اليومية — تعود ٣:٠٠ فجراً');
+        else await block(a.slot, a.m, (retryAfterMs(detail) ?? 60_000) + 2000, 'حد الدقيقة (٥ طلبات)');
         break;
       }
       if (status === 503) { busy = true; await block(a.slot, a.m, 2 * 60_000, 'مشغول عند Google'); break; }
@@ -293,7 +303,7 @@ export async function embed(texts: string[], taskType: 'RETRIEVAL_DOCUMENT' | 'R
       await logCall(s.slot, EMBED_MODEL, false, res.status, detail.slice(0, 200));
       if (res.status === 429) {
         quota = true;
-        await block(s.slot, EMBED_MODEL, (retryAfterMs(detail) ?? (isDailyQuota(detail) ? msToNextDay() : 60_000)) + 2000, 'حصة التضمين');
+        await block(s.slot, EMBED_MODEL, isDailyQuota(detail) ? nextIraqReset() - Date.now() + 30_000 : (retryAfterMs(detail) ?? 60_000) + 2000, 'حصة التضمين');
       } else if (res.status === 401 || res.status === 403) {
         await block(s.slot, '*', 6 * 3600_000, `مرفوض ${res.status}`);
       } else if (res.status < 500 && res.status !== 400) {

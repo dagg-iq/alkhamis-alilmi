@@ -52,7 +52,7 @@ check('مجموع الطلبات الناجحة = ٤٨٠ (٣ مفاتيح × ٨ 
 check('بعد انتهاء الكل: رسالة «مشغول» لا خطأ غامض', answers[answers.length - 1] === 'QUOTA');
 // كل (مفتاح، نموذج) استُهلك بالضبط ٢١ مرة كحد أقصى (٢٠ ناجحة + 429 واحدة) — القفل يمنع تكرار الطلبات الفاشلة
 check('لا طلبات ضائعة بعد القفل', Object.values(used).every((n) => n <= 21), JSON.stringify(Object.values(used).filter((n) => n > 21)));
-check('القفل محفوظ حتى الوقت الذي حددته Google (~٣ ساعات ونصف)', Object.values(blocksTable).every((b) => Math.abs(Date.parse(b.blocked_until) - Date.now() - 12954_000) < 60_000));
+check('القفل اليومي حتى ٣:٠٠ فجراً بتوقيت العراق (منتصف الليل UTC)', Object.values(blocksTable).every((b) => { const d = new Date(Date.parse(b.blocked_until) - 30_000); return d.getUTCHours() === 0 && d.getUTCMinutes() === 0 && Date.parse(b.blocked_until) > Date.now(); }));
 check('العدادات تُسجَّل', usage['GEMINI_API_KEY|gemini-3.8-flash']?.ok === 20 && usage['GEMINI_API_KEY|gemini-3.8-flash']?.err === 1);
 
 // ٢) مفتاح اللوحة المحجوب يُقفل كله من أول محاولة ثم يُستخدم الاحتياط
@@ -77,6 +77,11 @@ check('أول مفتاح متاح غير المنتهي', (await g.firstAvailabl
 check('retryDelay', g.retryAfterMs('"retryDelay": "12954s"') === 12954000);
 check('Please retry in 3h35m54.6s', Math.round(g.retryAfterMs('Please retry in 3h35m54.6s')! / 1000) === 12955);
 check('retry in 41s', g.retryAfterMs('Please retry in 41.2s') === 41200);
+check('رسالة صاحب المشروع (limit: 20) = يومي', g.isDailyQuota('Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-3.8-flash Please retry in 2h43m41.58s.'));
+check('حد الدقيقة (limit: 5, retry 30s) ليس يومياً', !g.isDailyQuota('Quota exceeded for metric: generate_content_free_tier_requests, limit: 5, model: gemini-3.8-flash Please retry in 31s'));
+// الساعة ١٢:١٦ ظهراً بتوقيت العراق (09:16 UTC) ← التجدد ٣:٠٠ فجراً = 00:00 UTC اليوم التالي
+check('موعد التجدد من ١٢:١٦ ظهراً', new Date(g.nextIraqReset(Date.UTC(2026, 9, 10, 9, 16))).toISOString() === '2026-10-11T00:00:00.000Z');
+check('موعد التجدد من ٢:٥٠ فجراً (23:50 UTC) بعد ١٠ دقائق', g.nextIraqReset(Date.UTC(2026, 9, 10, 23, 50)) - Date.UTC(2026, 9, 10, 23, 50) === 600_000);
 check('fileRef الجديد والقديم', g.fileRef('s:GEMINI_API_KEY_3|https://x/f').slot === 'GEMINI_API_KEY_3' && g.fileRef('k1|https://x/f').keyIndex === 1);
 
 if (failed) { console.error(`${failed} فشل`); Deno.exit(1); }
