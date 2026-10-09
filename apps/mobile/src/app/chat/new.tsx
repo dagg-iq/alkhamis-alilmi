@@ -1,7 +1,8 @@
 import { ROLE_LABELS, type Profile } from '@saey/shared';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Alert, Pressable, View } from 'react-native';
+import { Pressable, View } from 'react-native';
+import { Alert } from '@/lib/dialog';
 import { Avatar, Empty, Field, Header, Loading, NameLine, Screen, T } from '@/components/ui';
 import { useMe } from '@/lib/auth';
 import { must, supabase } from '@/lib/supabase';

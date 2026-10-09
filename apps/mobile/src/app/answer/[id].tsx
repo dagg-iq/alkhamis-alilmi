@@ -1,7 +1,8 @@
 import type { Attachment } from '@saey/shared';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { Alert, View } from 'react-native';
+import { View } from 'react-native';
+import { Alert } from '@/lib/dialog';
 import { ConversationPicker } from '@/components/conversation-picker';
 import { LogoMark } from '@/components/icon';
 import { tap } from '@/components/motion';

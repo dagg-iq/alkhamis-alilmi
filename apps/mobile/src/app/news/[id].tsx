@@ -1,7 +1,8 @@
 import { POST_KIND_LABELS, formatDate, type Post } from '@saey/shared';
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
-import { Alert, View } from 'react-native';
+import { View } from 'react-native';
+import { Alert } from '@/lib/dialog';
 import { Button, ErrorBox, Header, Loading, Row, Screen, T } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
 import { signedUrl } from '@/lib/files';

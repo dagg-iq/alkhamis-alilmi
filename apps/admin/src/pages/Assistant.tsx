@@ -1,5 +1,6 @@
 import { DOCUMENT_KIND_LABELS, type Book, type Chapter, type DocumentKind, type Subject, type Teacher } from '@saey/shared';
 import { useState } from 'react';
+import { askText } from '../components/dialog';
 import { Empty, Field, Modal, Tabs, useAction, useToast } from '../components/ui';
 import { ensureChapter, ensureTeachers, indexLecture, ingestDocument } from '../lib/content-ai';
 import { useLoad } from '../lib/hooks';
@@ -250,12 +251,12 @@ function LecturesTab({ data: d, reload }: { data: Data; reload: () => Promise<vo
                         </select>
                       </td>
                       <td data-label="الفصل">
-                        <select className="input" style={{ minWidth: 140 }} value={r.chapter} onChange={(e) => {
+                        <select className="input" style={{ minWidth: 140 }} value={r.chapter} onChange={async (e) => {
                           if (e.target.value !== '__new') return patch(i, { chapter: e.target.value });
                           // فصل غير موجود: نكتب رقمه وعنوانه ويُنشأ عند الإضافة
-                          const num = Number(prompt('رقم الفصل الجديد؟', '1'));
+                          const num = Number(await askText('رقم الفصل الجديد؟', '1'));
                           if (!num) return;
-                          const title = prompt('عنوان الفصل؟', '') ?? '';
+                          const title = (await askText('عنوان الفصل؟', '')) ?? '';
                           setRows((rs) => rs.map((x, k) => (k === i || (x.subject_id === r.subject_id && !x.chapter) ? { ...x, chapter: `${NEW}${num}:${title}` } : x)));
                         }}>
                           {r.chapter.startsWith(NEW) ? <option value={r.chapter}>جديد: الفصل {r.chapter.slice(NEW.length).replace(':', ' — ')}</option> : null}

@@ -3,6 +3,7 @@ import {
   type Period, type QuestionKind, type QuestionSet, type Section, type Subject,
 } from '@saey/shared';
 import { useState } from 'react';
+import { askConfirm } from '../components/dialog';
 import { Empty, Field, Markdown, Modal, Tabs, check, useAction } from '../components/ui';
 import { useLoad } from '../lib/hooks';
 import { must, signedUrl, supabase } from '../lib/supabase';
@@ -69,7 +70,7 @@ export default function Questions() {
                     <div className="row" style={{ justifyContent: 'flex-end', flexWrap: 'nowrap' }}>
                       {s.pdf_key ? <button className="btn sm" onClick={() => run(async () => { window.open(await signedUrl(s.pdf_key!), '_blank'); })}>الصور</button> : null}
                       <button className="btn sm" onClick={() => { setPreview(true); setEdit(s as Draft); }}>{s.status === 'draft' ? 'مراجعة' : 'تعديل'}</button>
-                      <button className="btn danger sm" onClick={() => confirm('حذف؟') && run(async () => { await check(supabase.from('question_sets').delete().eq('id', s.id)); await q.reload(); }, 'تم الحذف')}>حذف</button>
+                      <button className="btn danger sm" onClick={async () => (await askConfirm('حذف؟')) && run(async () => { await check(supabase.from('question_sets').delete().eq('id', s.id)); await q.reload(); }, 'تم الحذف')}>حذف</button>
                     </div>
                   </td>
                 </tr>

@@ -1,5 +1,6 @@
 import type { Message, Profile } from '@saey/shared';
 import { useEffect, useState } from 'react';
+import { askConfirm } from '../components/dialog';
 import { Avatar, Empty, Field, Modal, Verified, check, useAction } from '../components/ui';
 import { useAuth } from '../lib/auth';
 import { useLoad } from '../lib/hooks';
@@ -83,7 +84,7 @@ export default function Chat() {
               <div className="row" style={{ justifyContent: 'space-between' }}>
                 <h2>{conv?.title ?? TYPE_LABEL[conv?.type ?? '']}</h2>
                 {isAdmin && conv?.type === 'group' ? (
-                  <button className="btn danger sm" onClick={() => confirm('حذف المجموعة وكل رسائلها؟') && run(async () => { await check(supabase.from('conversations').delete().eq('id', active)); setActive(null); await convs.reload(); }, 'حُذفت')}>حذف المجموعة</button>
+                  <button className="btn danger sm" onClick={async () => (await askConfirm('حذف المجموعة وكل رسائلها؟')) && run(async () => { await check(supabase.from('conversations').delete().eq('id', active)); setActive(null); await convs.reload(); }, 'حُذفت')}>حذف المجموعة</button>
                 ) : null}
               </div>
               {isMember ? (

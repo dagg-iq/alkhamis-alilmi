@@ -3,6 +3,7 @@ import {
   type Period, type Profile, type ProfileStatus, type Role, type Section, type Subject, type SubjectScores,
 } from '@saey/shared';
 import { useState } from 'react';
+import { askConfirm } from '../components/dialog';
 import { Avatar, Empty, Modal, Tabs, Verified, check, useAction } from '../components/ui';
 import { useAuth } from '../lib/auth';
 import { useLoad } from '../lib/hooks';
@@ -94,7 +95,7 @@ export default function Students({ onChange }: { onChange: () => void }) {
                         </button>
                       ) : null}
                       {p.status === 'approved' && isAdmin && p.id !== me?.id ? (
-                        <button className="btn danger sm" onClick={() => confirm(`حظر ${p.full_name}؟`) && update(p, { status: 'banned' }, 'تم الحظر')}>حظر</button>
+                        <button className="btn danger sm" onClick={async () => (await askConfirm(`حظر ${p.full_name}؟`)) && update(p, { status: 'banned' }, 'تم الحظر')}>حظر</button>
                       ) : null}
                     </div>
                   </td>

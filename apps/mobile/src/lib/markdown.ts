@@ -42,11 +42,23 @@ export function needsHtml(text: string): boolean {
   return /\$|\\\(|\\\[|^\s*\|.*\|\s*$|```/m.test(text);
 }
 
-function esc(s: string) {
+export function esc(s: string) {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-function tex(src: string, display: boolean) {
+const decodeEntities = (s: string) => s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&');
+
+/** يحسب المعادلات $...$ و $$...$$ في نصوص HTML جاهز فقط (لا داخل الوسوم) */
+export function renderMath(html: string): string {
+  return html.split(/(<[^>]*>)/).map((part) => {
+    if (part.startsWith('<')) return part;
+    return part
+      .replace(/\$\$([\s\S]+?)\$\$/g, (_, t) => tex(decodeEntities(t), true))
+      .replace(/\$([^$\n]+?)\$/g, (_, t) => tex(decodeEntities(t), false));
+  }).join('');
+}
+
+export function tex(src: string, display: boolean) {
   try {
     return katex.renderToString(src, { displayMode: display, throwOnError: false, strict: 'ignore', output: 'html' });
   } catch {
@@ -132,8 +144,8 @@ export interface PageOptions {
   print?: boolean;
 }
 
-const KATEX_CSS = 'https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css';
-const FONTS = 'https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;700&family=Amiri:wght@400;700&family=Amiri+Quran&display=swap';
+export const KATEX_CSS = 'https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css';
+export const PAGE_FONTS = 'https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;700&family=Amiri:wght@400;700&family=Amiri+Quran&display=swap';
 
 /** صفحة HTML كاملة: للعرض داخل التطبيق وللتصدير PDF */
 export function markdownPage(text: string, o: PageOptions): string {
@@ -143,7 +155,7 @@ export function markdownPage(text: string, o: PageOptions): string {
   return `<!doctype html><html dir="rtl" lang="ar"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
 <link rel="stylesheet" href="${KATEX_CSS}">
-<link rel="stylesheet" href="${FONTS}">
+<link rel="stylesheet" href="${PAGE_FONTS}">
 <style>
 *{box-sizing:border-box}
 html,body{margin:0;background:${o.bg}}

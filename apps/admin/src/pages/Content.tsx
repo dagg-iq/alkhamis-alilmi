@@ -1,5 +1,6 @@
 import type { Book, Chapter, Section, Subject, Teacher } from '@saey/shared';
 import { useState } from 'react';
+import { askConfirm } from '../components/dialog';
 import { Empty, Field, Modal, Tabs, check, useAction } from '../components/ui';
 import { useLoad } from '../lib/hooks';
 import { must, supabase } from '../lib/supabase';
@@ -56,8 +57,8 @@ function Chapters() {
     await q.reload();
   }, 'تم الحفظ');
 
-  const remove = (table: 'chapters' | 'books', id: string, label: string) => {
-    if (!confirm(`حذف ${label}؟ سيُحذف كل ما بداخله من محاضرات.`)) return;
+  const remove = async (table: 'chapters' | 'books', id: string, label: string) => {
+    if (!(await askConfirm(`حذف ${label}؟ سيُحذف كل ما بداخله من محاضرات.`))) return;
     run(async () => {
       await check(supabase.from(table).delete().eq('id', id));
       await q.reload();
@@ -167,7 +168,7 @@ function Teachers() {
                 <td>
                   <div className="row" style={{ justifyContent: 'flex-end' }}>
                     <button className="btn sm" onClick={() => setEdit(t)}>تعديل</button>
-                    <button className="btn danger sm" onClick={() => confirm('حذف الأستاذ؟') && run(async () => { await check(supabase.from('teachers').delete().eq('id', t.id)); await q.reload(); }, 'تم الحذف')}>حذف</button>
+                    <button className="btn danger sm" onClick={async () => (await askConfirm('حذف الأستاذ؟')) && run(async () => { await check(supabase.from('teachers').delete().eq('id', t.id)); await q.reload(); }, 'تم الحذف')}>حذف</button>
                   </div>
                 </td>
               </tr>
@@ -229,7 +230,7 @@ function Sections() {
         {(q.data?.sections ?? []).map((s) => (
           <div key={s.id} className="card row" style={{ justifyContent: 'space-between' }}>
             <h2>شعبة {s.name}</h2>
-            <button className="btn danger sm" onClick={() => confirm(`حذف شعبة ${s.name}؟ (طلابها يبقون بدون شعبة)`) && run(async () => { await check(supabase.from('sections').delete().eq('id', s.id)); await q.reload(); }, 'تم الحذف')}>حذف</button>
+            <button className="btn danger sm" onClick={async () => (await askConfirm(`حذف شعبة ${s.name}؟ (طلابها يبقون بدون شعبة)`)) && run(async () => { await check(supabase.from('sections').delete().eq('id', s.id)); await q.reload(); }, 'تم الحذف')}>حذف</button>
           </div>
         ))}
       </div>

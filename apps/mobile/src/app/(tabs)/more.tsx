@@ -33,6 +33,8 @@ export default function More() {
         <Divider />
         <ListItem icon="sparkle" title="مساعد سعي" subtitle="اسأل عن أي شيء في المنهج" onPress={() => router.push('/ai')} />
         <Divider />
+        <ListItem icon="scan" title="تحويل ورقة إلى PDF" subtitle="صوّر ورقة أسئلة فتعود ملفاً بنفس شكلها" onPress={() => router.push('/scan')} />
+        <Divider />
         <ListItem icon="timer" title="مؤقت الدراسة" subtitle="ركّز ٢٥ دقيقة وسجّل وقتك" onPress={() => router.push('/timer')} />
         <Divider />
         <ListItem icon="news" title="أخبار المدرسة" onPress={() => router.push('/news')} />
@@ -42,8 +44,6 @@ export default function More() {
 
       {isStaff ? (
         <Card style={{ paddingVertical: 2 }}>
-          <ListItem icon="scan" title="تصوير أسئلة امتحان" subtitle="صوّر ← نص واضح وPDF" onPress={() => router.push('/scan')} />
-          <Divider />
           <ListItem icon="news" title="نشر خبر" onPress={() => router.push('/news/new')} />
         </Card>
       ) : null}

@@ -1,6 +1,7 @@
 import { arDigits } from '@saey/shared';
 import { useEffect, useRef, useState } from 'react';
-import { Alert, View } from 'react-native';
+import { View } from 'react-native';
+import { Alert } from '@/lib/dialog';
 import { cancelDownload, checkForUpdate, installDownloaded, progressText, skipUpdate, startDownload, useDownload, type UpdateInfo } from '@/lib/updater';
 import { useTheme } from '@/lib/theme';
 import { LogoMark } from './icon';

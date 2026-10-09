@@ -160,3 +160,12 @@ tbody tr:hover { background: var(--bg); }
 .progress { height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
 .progress > div { height: 100%; background: var(--accent); }
 .login { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 16px; }
+
+/* نوافذ التأكيد والإدخال */
+.dlg-back { position: fixed; inset: 0; z-index: 1000; background: rgba(0,0,0,.45); display: flex; align-items: center; justify-content: center; padding: 20px; animation: dlg-fade .14s ease-out; }
+.dlg { width: 100%; max-width: 400px; background: var(--card); border: 1px solid var(--line); border-radius: 24px; padding: 24px; display: flex; flex-direction: column; gap: 16px; text-align: center; animation: dlg-pop .18s cubic-bezier(.2,.8,.2,1); box-shadow: 0 20px 60px rgba(0,0,0,.25); }
+.dlg h3 { font-family: 'Display', serif; font-weight: 900; font-size: 20px; line-height: 1.5; }
+.dlg-actions { display: flex; gap: 10px; justify-content: center; }
+.dlg-actions .btn { flex: 1; justify-content: center; height: 46px; }
+@keyframes dlg-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes dlg-pop { from { opacity: 0; transform: scale(.94); } to { opacity: 1; transform: scale(1); } }

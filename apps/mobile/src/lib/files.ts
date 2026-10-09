@@ -1,8 +1,7 @@
 import { Directory, File, Paths } from 'expo-file-system';
 import * as ImageManipulator from 'expo-image-manipulator';
-import * as IntentLauncher from 'expo-intent-launcher';
+import { router } from 'expo-router';
 import * as Sharing from 'expo-sharing';
-import { Platform } from 'react-native';
 import { callFunction } from './supabase';
 
 const urlCache = new Map<string, { url: string; at: number }>();
@@ -87,18 +86,10 @@ export function removeDownload(key: string) {
   if (local.exists) local.delete();
 }
 
-/** يفتح PDF بقارئ الهاتف (ويحمّله أولاً إن لم يكن محفوظاً) */
-export async function openPdf(key: string) {
+/** يفتح PDF داخل التطبيق نفسه (ويحمّله أولاً إن لم يكن محفوظاً) */
+export async function openPdf(key: string, title?: string) {
   const file = await downloadMaterial(key);
-  if (Platform.OS === 'android') {
-    await IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
-      data: file.contentUri,
-      flags: 1, // FLAG_GRANT_READ_URI_PERMISSION
-      type: 'application/pdf',
-    });
-  } else {
-    await Sharing.shareAsync(file.uri, { mimeType: 'application/pdf', UTI: 'com.adobe.pdf' });
-  }
+  router.push({ pathname: '/pdf', params: { uri: file.uri, title: title ?? 'ملف PDF' } });
 }
 
 export async function sharePdf(key: string, title?: string) {

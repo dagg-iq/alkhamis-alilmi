@@ -4,9 +4,8 @@ import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  ActivityIndicator, Alert, FlatList, Platform, Pressable, ScrollView, TextInput, View, useWindowDimensions,
-} from 'react-native';
+import { ActivityIndicator, FlatList, Platform, Pressable, ScrollView, TextInput, View, useWindowDimensions } from 'react-native';
+import { Alert } from '@/lib/dialog';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AttachmentCard } from '@/components/attachment-card';

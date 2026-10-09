@@ -1,7 +1,8 @@
 import { TASK_TYPE_LABELS, arDigits, formatDayDate, type Section, type TaskScope, type TaskType } from '@saey/shared';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Alert, Switch, View } from 'react-native';
+import { Switch, View } from 'react-native';
+import { Alert } from '@/lib/dialog';
 import { Button, Chip, Field, Header, IconButton, Row, Screen, Segmented, T } from '@/components/ui';
 import { useAuth, useMe } from '@/lib/auth';
 import { scheduleReminder } from '@/lib/push';

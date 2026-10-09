@@ -1,5 +1,6 @@
 import { TASK_TYPE_LABELS, type Section, type Subject, type Task, type TaskType } from '@saey/shared';
 import { useState } from 'react';
+import { askConfirm } from '../components/dialog';
 import { Empty, Field, Modal, check, useAction } from '../components/ui';
 import { useAuth } from '../lib/auth';
 import { useLoad } from '../lib/hooks';
@@ -52,7 +53,7 @@ export default function Tasks() {
                   <td>{subjectName(t.subject_id)}</td>
                   <td>{sectionName(t.section_id)}</td>
                   <td className="small">{t.due_at ? new Date(t.due_at).toLocaleString('ar-IQ') : '—'}</td>
-                  <td><button className="btn danger sm" onClick={() => confirm('حذف؟') && run(async () => { await check(supabase.from('tasks').delete().eq('id', t.id)); await q.reload(); }, 'تم الحذف')}>حذف</button></td>
+                  <td><button className="btn danger sm" onClick={async () => (await askConfirm('حذف؟')) && run(async () => { await check(supabase.from('tasks').delete().eq('id', t.id)); await q.reload(); }, 'تم الحذف')}>حذف</button></td>
                 </tr>
               ))}
             </tbody>

@@ -2,6 +2,7 @@ import {
   DOCUMENT_KIND_LABELS, type Book, type Chapter, type DocumentKind, type DocumentRow, type Subject, type Teacher,
 } from '@saey/shared';
 import { useState } from 'react';
+import { askConfirm } from '../components/dialog';
 import { Empty, Field, Modal, check, useAction, useToast } from '../components/ui';
 import { useLoad } from '../lib/hooks';
 import { callFunction, must, signedUrl, supabase, uploadFile } from '../lib/supabase';
@@ -74,7 +75,7 @@ export default function Documents() {
     }
   };
 
-  const remove = (doc: DocumentRow) => confirm(`حذف «${doc.title}»؟`) && run(async () => {
+  const remove = async (doc: DocumentRow) => (await askConfirm(`حذف «${doc.title}»؟`)) && run(async () => {
     await check(supabase.from('content_chunks').delete().eq('source_type', 'document').eq('source_id', doc.id));
     await check(supabase.from('documents').delete().eq('id', doc.id));
     await q.reload();

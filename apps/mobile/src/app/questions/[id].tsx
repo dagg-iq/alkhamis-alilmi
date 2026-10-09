@@ -3,7 +3,8 @@ import * as Print from 'expo-print';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as Sharing from 'expo-sharing';
 import { useState } from 'react';
-import { Alert, View } from 'react-native';
+import { View } from 'react-native';
+import { Alert } from '@/lib/dialog';
 import { RichText, markdownHtml } from '@/components/rich-text';
 import { Button, Card, Chip, ErrorBox, Field, Header, IconButton, Loading, Row, Screen, T } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
@@ -96,7 +97,7 @@ export default function QuestionsScreen() {
           <Button title="صور الورقة الأصلية (PDF)" variant="secondary" icon="file" loading={busy === 'pdf'}
             onPress={async () => {
               setBusy('pdf');
-              try { await openPdf(s.pdf_key!); } catch (e) { Alert.alert('تعذّر الفتح', e instanceof Error ? e.message : ''); }
+              try { await openPdf(s.pdf_key!, s.title); } catch (e) { Alert.alert('تعذّر الفتح', e instanceof Error ? e.message : ''); }
               setBusy(null);
             }} />
         ) : null}

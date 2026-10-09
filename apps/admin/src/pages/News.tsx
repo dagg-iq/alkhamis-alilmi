@@ -1,5 +1,6 @@
 import { POST_KIND_LABELS, type Post, type PostKind, type Section } from '@saey/shared';
 import { useState } from 'react';
+import { askConfirm } from '../components/dialog';
 import { Empty, Field, Modal, check, useAction } from '../components/ui';
 import { useAuth } from '../lib/auth';
 import { useLoad } from '../lib/hooks';
@@ -54,7 +55,7 @@ export default function News() {
                   <td>
                     <div className="row" style={{ justifyContent: 'flex-end', flexWrap: 'nowrap' }}>
                       <button className="btn sm" onClick={() => setEdit(p)}>تعديل</button>
-                      <button className="btn danger sm" onClick={() => confirm('حذف الخبر؟') && run(async () => { await check(supabase.from('posts').delete().eq('id', p.id)); await q.reload(); }, 'تم الحذف')}>حذف</button>
+                      <button className="btn danger sm" onClick={async () => (await askConfirm('حذف الخبر؟')) && run(async () => { await check(supabase.from('posts').delete().eq('id', p.id)); await q.reload(); }, 'تم الحذف')}>حذف</button>
                     </div>
                   </td>
                 </tr>

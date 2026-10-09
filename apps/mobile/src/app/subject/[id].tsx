@@ -5,7 +5,8 @@ import {
 import { Image } from 'expo-image';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
-import { Alert, Pressable, View } from 'react-native';
+import { Pressable, View } from 'react-native';
+import { Alert } from '@/lib/dialog';
 import { Icon } from '@/components/icon';
 import { Card, ChipRow, Empty, ErrorBox, Header, IconButton, Loading, ProgressBar, Row, Screen, Segmented, T } from '@/components/ui';
 import { useMe } from '@/lib/auth';
@@ -88,7 +89,7 @@ export default function SubjectScreen() {
   const openDoc = async (doc: DocumentRow) => {
     setOpening(doc.id);
     try {
-      await openPdf(doc.file_key);
+      await openPdf(doc.file_key, doc.title);
       q.reload();
     } catch (e) {
       Alert.alert('تعذّر فتح الملف', e instanceof Error ? e.message : '');

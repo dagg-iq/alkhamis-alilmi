@@ -15,6 +15,7 @@ import { isConfigured } from '@/lib/supabase';
 import { AppThemeProvider, fontAssets, useTheme } from '@/lib/theme';
 import { Intro } from '@/components/intro';
 import { PortalProvider } from '@/components/portal';
+import { DialogHost } from '@/lib/dialog';
 import { MessageBanner } from '@/components/message-banner';
 import { NotConfigured } from '@/components/not-configured';
 import { useWidgetSync } from '@/widgets/sync';
@@ -145,6 +146,7 @@ function Navigator() {
       {ready ? <MessageBanner myId={approvedId} /> : null}
       <UpdateSheet enabled={ready && introDone && !!approvedId} />
       {!introDone ? <Intro ready={ready} onDone={() => setIntroDone(true)} /> : null}
+      <DialogHost />
       </PortalProvider>
     </ThemeProvider>
   );

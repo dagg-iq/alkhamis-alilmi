@@ -1,7 +1,8 @@
 import { arDigits, timeAgo } from '@saey/shared';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect } from 'react';
-import { Alert, Pressable, View } from 'react-native';
+import { Pressable, View } from 'react-native';
+import { Alert } from '@/lib/dialog';
 import { LogoMark } from '@/components/icon';
 import { Button, Card, ErrorBox, Header, Loading, Row, Screen, T } from '@/components/ui';
 import { useAuth, useMe } from '@/lib/auth';

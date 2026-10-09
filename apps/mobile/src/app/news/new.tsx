@@ -1,7 +1,8 @@
 import { POST_KIND_LABELS, type PostKind, type Section } from '@saey/shared';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Alert, Switch, View } from 'react-native';
+import { Switch, View } from 'react-native';
+import { Alert } from '@/lib/dialog';
 import { Button, Chip, Field, Header, Row, Screen, Segmented, T } from '@/components/ui';
 import { useMe } from '@/lib/auth';
 import { must, supabase } from '@/lib/supabase';

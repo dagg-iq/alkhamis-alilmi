@@ -1,5 +1,6 @@
 import { youtubeId, type Book, type Chapter, type Lecture, type Subject, type Teacher } from '@saey/shared';
 import { useState } from 'react';
+import { askConfirm } from '../components/dialog';
 import { Empty, Field, Modal, check, useAction, useToast } from '../components/ui';
 import { useLoad } from '../lib/hooks';
 import { indexLecture } from '../lib/content-ai';
@@ -100,7 +101,7 @@ export default function Lectures() {
               <div className="row">
                 {list.length ? (
                   <button className="btn sm" disabled={list.some((l) => indexing[l.id])} onClick={async () => {
-                    if (!confirm(`فهرسة ${list.length} محاضرة بالدقيقة؟ (دقيقة أو أكثر لكل محاضرة)`)) return;
+                    if (!(await askConfirm(`فهرسة ${list.length} محاضرة بالدقيقة؟ (دقيقة أو أكثر لكل محاضرة)`))) return;
                     for (const l of list) await index(l);
                   }}>فهرسة الفصل كله</button>
                 ) : null}
@@ -130,7 +131,7 @@ export default function Lectures() {
                         <div className="row" style={{ justifyContent: 'flex-end', flexWrap: 'nowrap' }}>
                           <button className="btn sm" disabled={!!indexing[l.id]} onClick={() => index(l)}>فهرسة</button>
                           <button className="btn sm" onClick={() => setEdit(l)}>تعديل</button>
-                          <button className="btn danger sm" onClick={() => confirm('حذف المحاضرة؟') && run(async () => { await check(supabase.from('lectures').delete().eq('id', l.id)); await q.reload(); }, 'تم الحذف')}>حذف</button>
+                          <button className="btn danger sm" onClick={async () => (await askConfirm('حذف المحاضرة؟')) && run(async () => { await check(supabase.from('lectures').delete().eq('id', l.id)); await q.reload(); }, 'تم الحذف')}>حذف</button>
                         </div>
                       </td>
                     </tr>

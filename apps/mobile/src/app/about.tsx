@@ -1,7 +1,8 @@
 import { arDigits } from '@saey/shared';
 import Constants from 'expo-constants';
 import { useState } from 'react';
-import { Alert, Linking, Share, View } from 'react-native';
+import { Linking, Share, View } from 'react-native';
+import { Alert } from '@/lib/dialog';
 import { DeveloperCard } from '@/components/rich-text';
 import { Icon, LogoMark, type IconName } from '@/components/icon';
 import { PressScale } from '@/components/motion';
@@ -16,7 +17,7 @@ const FEATURES: { icon: IconName; title: string; body: string }[] = [
   { icon: 'book', title: 'المواد والمحاضرات', body: 'محاضرات يوتيوب مرتبة بالفصول، وملازم PDF، وأسئلة متوقعة لكل مادة.' },
   { icon: 'target', title: 'الدرجات والإعفاء', body: 'يحسب لك كم تحتاج في كل امتحان حسب هدفك: نجاح أو إعفاء مواد أو إعفاء عام.' },
   { icon: 'sparkle', title: 'سعي AI', body: 'مساعد ذكي يعرف منهجك ودرجاتك، يشرح ويحل ويفتح لك المحاضرة عند الدقيقة المناسبة.' },
-  { icon: 'scan', title: 'تصوير الأسئلة', body: 'صوّر ورقة الامتحان فتتحول إلى نص واضح وملف PDF.' },
+  { icon: 'scan', title: 'تحويل الورق إلى PDF', body: 'صوّر ورقة أسئلة فيحوّلها الذكاء الاصطناعي إلى ملف PDF بنفس تنسيقها، تحفظه أو ترسله لزملائك.' },
   { icon: 'timer', title: 'مؤقت الدراسة', body: 'يرنّ والتطبيق مغلق، ويعدّ لك الوقت في ستارة الإشعارات.' },
   { icon: 'chat', title: 'الدردشة', body: 'شعبتك ومدرستك ورسائل خاصة مع زملائك.' },
   { icon: 'calendar', title: 'المنظِّم والأخبار', body: 'واجباتك وامتحاناتك وأخبار المدرسة في مكان واحد، مع ويدجتات للشاشة الرئيسية.' },
@@ -112,7 +113,6 @@ export default function About() {
       <View style={{ alignItems: 'center', gap: 4, paddingVertical: 10 }}>
         <T dim size={12} center>إعدادية الشهاب للبنين · الخامس العلمي</T>
         <T dim size={12} center>العام الدراسي {arDigits('2026')} - {arDigits('2027')}</T>
-        <T dim size={12} center>صُنع بحب لزملائي</T>
       </View>
     </Screen>
   );

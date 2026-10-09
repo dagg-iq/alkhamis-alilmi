@@ -2,7 +2,9 @@ import { Image } from 'expo-image';
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Modal, Pressable, StatusBar, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, BackHandler, Platform, Pressable, StatusBar, View, useWindowDimensions } from 'react-native';
+import { Alert } from '@/lib/dialog';
+import { Portal } from './portal';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -97,10 +99,17 @@ export function ImageViewer({ url, onClose }: { url: string | null; onClose: () 
     }
   };
 
+  useEffect(() => {
+    if (!url || Platform.OS === 'web') return;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => { onClose(); return true; });
+    return () => sub.remove();
+  }, [url, onClose]);
+
+  if (!url) return null;
   return (
-    <Modal visible={!!url} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent navigationBarTranslucent>
+    <Portal>
       <StatusBar barStyle="light-content" />
-      <GestureHandlerRootView style={{ flex: 1 }}>
+      <GestureHandlerRootView style={{ flex: 1, backgroundColor: 'transparent' }}>
         <Animated.View style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#000' }, bgStyle]} />
         <GestureDetector gesture={gesture}>
           <Animated.View style={[{ flex: 1, alignItems: 'center', justifyContent: 'center' }, imgStyle]}>
@@ -122,6 +131,6 @@ export function ImageViewer({ url, onClose }: { url: string | null; onClose: () 
           <T size={12} color="rgba(255,255,255,0.6)">كبّر بإصبعين أو بنقرتين · اسحب للأسفل للإغلاق</T>
         </View>
       </GestureHandlerRootView>
-    </Modal>
+    </Portal>
   );
 }

@@ -1,7 +1,8 @@
 import { PERIOD_LABELS, PERIODS, arDigits, parseNumber, type Period, type Subject } from '@saey/shared';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { Alert, TextInput, View } from 'react-native';
+import { TextInput, View } from 'react-native';
+import { Alert } from '@/lib/dialog';
 import { Button, ChipRow, Header, Loading, Screen, T } from '@/components/ui';
 import { tap } from '@/components/motion';
 import { useMe } from '@/lib/auth';

@@ -1,7 +1,8 @@
 import { TASK_TYPE_LABELS, formatTime, relativeDays, type Subject, type Task } from '@saey/shared';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Alert, Pressable, View } from 'react-native';
+import { Pressable, View } from 'react-native';
+import { Alert } from '@/lib/dialog';
 import { Icon } from '@/components/icon';
 import { Card, Empty, ErrorBox, Fab, Header, Loading, Row, Screen, Segmented, T } from '@/components/ui';
 import { useAuth, useMe } from '@/lib/auth';

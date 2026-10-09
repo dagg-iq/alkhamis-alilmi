@@ -73,7 +73,7 @@ const rpc = {
     return route.fulfill({ status: 200, contentType: 'application/json', headers: { 'content-range': '0-0/1' }, body: JSON.stringify(body) });
   });
   const routes = process.env.ROUTES ? process.env.ROUTES.split(',') : ['/', '/subjects', '/grades', '/chat', '/more', '/subject/s0', '/subject/s2', '/lecture/l1', '/questions/q1', '/grades/s0', '/grades/edit',
-    '/planner', '/planner/new', '/news', '/news/p1', '/news/new', '/notifications', '/ai', '/ai/a1', '/quiz/c1', '/timer', '/scan',
+    '/planner', '/planner/new', '/news', '/news/p1', '/news/new', '/notifications', '/ai', '/ai/a1', '/quiz/c1', '/timer', '/scan', '/scan-result', '/about', '/document/d1',
     `/profile/${UID}`, '/settings', '/document/d1', '/chat/cv1', '/chat/new'];
   const results = [];
   for (const r of routes) {
@@ -85,7 +85,7 @@ const rpc = {
     await page.waitForTimeout(Number(process.env.WAIT || 4000)); // بعد انتهاء المقدمة
     // CLICKS="ابدأ,إيقاف مؤقت" — يضغط عناصر حسب وصفها (accessibilityLabel) بالترتيب
     for (const label of (process.env.CLICKS ? process.env.CLICKS.split(',') : [])) {
-      await page.locator(`[aria-label="${label}"]`).first().click({ timeout: 3000 }).catch((e) => errs.push('CLICK ' + label + ' ' + e.message.slice(0, 80)));
+      await page.locator(label.startsWith('text=') ? label : `[aria-label="${label}"]`).first().click({ timeout: 3000 }).catch((e) => errs.push('CLICK ' + label + ' ' + e.message.slice(0, 80)));
       await page.waitForTimeout(Number(process.env.CLICK_WAIT || 1500));
     }
     const text = (await page.evaluate(() => document.body.innerText)).replace(/\s+/g, ' ').slice(0, 90);
