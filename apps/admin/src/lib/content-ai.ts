@@ -27,7 +27,7 @@ export async function embedDocumentOutline(documentId: string) {
 /**
  * فهرسة كتاب أو ملزمة للمساعد، ثم بناء فهرس الفصول والمواضيع.
  * اللوحة تقطع من الكتاب صفحات قليلة (٦–٨) وترسلها وحدها — بدل أن يُرسل الكتاب كاملاً مع كل طلب — فتكون أسرع بكثير،
- * وتقرأ ٣ دفعات معاً، وتكمل دائماً من الصفحات الناقصة فقط (لا تعيد من البداية).
+ * وتقرأ بقارئ لكل مفتاح معاً (حتى ٨)، وتكمل دائماً من الصفحات الناقصة فقط (لا تعيد من البداية).
  * stage: 'pages' أثناء القراءة، 'outline' أثناء بناء الفهرس.
  */
 export async function ingestDocument(
@@ -69,13 +69,16 @@ export async function ingestDocument(
     for (let i = 0; i < u8.length; i += 0x8000) bin += String.fromCharCode(...u8.subarray(i, i + 0x8000));
     return btoa(bin);
   };
-  const runBatch = async (pages: number[]) => {
+  // قارئ لكل مفتاح يعمل (كل قارئ يبدأ بمفتاحه): ٨ مفاتيح = ٨ دفعات معاً
+  const slots = await callFunction<{ slots: string[] }>('content-ai', { action: 'key_slots' }).then((r) => r.slots.length).catch(() => 3);
+  const lanes = Math.max(3, Math.min(8, slots));
+  const runBatch = async (pages: number[], lane: number) => {
     const sub = await PDFDocument.create();
     (await sub.copyPages(src, pages.map((n) => n - 1))).forEach((pg) => sub.addPage(pg));
     const pdf = toB64(await sub.save());
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
-        const r = await callFunction<{ read: number[] }>('ingest', { documentId, action: 'read', from: pages[0], to: pages[pages.length - 1], total, pdf });
+        const r = await callFunction<{ read: number[] }>('ingest', { documentId, action: 'read', from: pages[0], to: pages[pages.length - 1], total, pdf, lane });
         done += r.read.length;
         onProgress?.(Math.min(done, total), total, 'pages');
         if (r.read.length < pages.length) failed.push(...pages.filter((n) => !r.read.includes(n)));
@@ -87,10 +90,11 @@ export async function ingestDocument(
       }
     }
   };
-  // ٣ دفعات في الوقت نفسه
   const queue = [...batches];
-  await Promise.all([0, 1, 2].map(async () => {
-    while (queue.length && !stop) await runBatch(queue.shift()!);
+  await Promise.all(Array.from({ length: lanes }, async (_, lane) => {
+    // بداية متدرجة قليلاً حتى لا تصل كل الطلبات في اللحظة نفسها
+    await new Promise((r) => setTimeout(r, lane * 400));
+    while (queue.length && !stop) await runBatch(queue.shift()!, lane);
   }));
   if (stop) throw stop;
   if (failed.length) throw new Error(`تعذّرت قراءة ${failed.length} صفحة (${failed.slice(0, 8).join('، ')}${failed.length > 8 ? '…' : ''}). اضغط «إكمال» لإعادة محاولة الناقصة فقط.`);

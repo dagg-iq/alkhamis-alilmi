@@ -90,7 +90,7 @@ const call = async (body: any) => {
 let failed = 0;
 const check = (label: string, ok: boolean, extra = '') => { if (!ok) failed++; console.log(ok ? '✅' : '❌', label, extra); };
 
-let r = await call({ action: 'read', from: 3, to: 5, total: 5, pdf: await sub(3, 5) });
+let r = await call({ action: 'read', from: 3, to: 5, total: 5, pdf: await sub(3, 5), lane: 2 });
 check('دفعة متأخرة: كل صفحاتها رغم إسقاط Gemini لصفحة (إعادة الناقصة فقط)', JSON.stringify(r.json.read) === '[3,4,5]', JSON.stringify(r.json));
 check('العدّ المتتالي يبقى ٠ (الصفحتان ١–٢ لم تُقرآ بعد)', r.json.ingested === 0 && db.documents[0].ingested_pages === 0);
 r = await call({ action: 'read', from: 1, to: 2, total: 5, pdf: await sub(1, 2) });

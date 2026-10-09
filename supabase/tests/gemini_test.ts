@@ -88,6 +88,15 @@ check('موعد التجدد من ١٢:١٦ ظهراً', new Date(g.nextIraqRese
 check('موعد التجدد من ٢:٥٠ فجراً (23:50 UTC) بعد ١٠ دقائق', g.nextIraqReset(Date.UTC(2026, 9, 10, 23, 50)) - Date.UTC(2026, 9, 10, 23, 50) === 600_000);
 check('fileRef الجديد والقديم', g.fileRef('s:GEMINI_API_KEY_3|https://x/f').slot === 'GEMINI_API_KEY_3' && g.fileRef('k1|https://x/f').keyIndex === 1);
 
+// ٥ب) القرّاء المتوازون: القارئ ١ يبدأ بالمفتاح الثاني، والقارئ ٢ بالثالث (لا تزاحم على مفتاح واحد)
+for (const k of Object.keys(blocksTable)) delete blocksTable[k];
+for (const k of Object.keys(used)) delete used[k];
+await g.refreshBlocks(true);
+const l1 = await g.generate(g.MAIN_MODELS, [{ role: 'user', parts: [{ text: 'س' }] }], { lane: 1 });
+const l2 = await g.generate(g.MAIN_MODELS, [{ role: 'user', parts: [{ text: 'س' }] }], { lane: 2 });
+const l4 = await g.generate(g.MAIN_MODELS, [{ role: 'user', parts: [{ text: 'س' }] }], { lane: 4 });
+check('القارئ ١ ← المفتاح ٢، القارئ ٢ ← المفتاح ٣، القارئ ٤ يدور ← المفتاح ٢', l1 === 'K2:gemini-3.8-flash' && l2 === 'K3:gemini-3.8-flash' && l4 === 'K2:gemini-3.8-flash', `${l1} ${l2} ${l4}`);
+
 // ٦) المهلة: طلب بطيء يُقطع عند deadline ويُرمى GeminiTimeoutError
 await g.refreshBlocks(true);
 for (const k of Object.keys(blocksTable)) delete blocksTable[k];

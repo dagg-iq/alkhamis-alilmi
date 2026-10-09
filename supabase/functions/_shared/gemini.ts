@@ -64,6 +64,11 @@ export interface GenerateOptions {
   extraConfig?: Record<string, unknown>;
   /** آخر وقت مسموح (Date.now()): بعده يُقطع الطلب ويُرمى GeminiTimeoutError (دوال الخادم محدودة ~١٥٠ ث) */
   deadline?: number;
+  /**
+   * مسار القارئ (للعمل المتوازي): القارئ رقم n يبدأ بالمفتاح n ثم يدور على البقية،
+   * فلا يتزاحم القرّاء على مفتاح واحد ونموذجه (حد ٥ طلبات في الدقيقة لكل نموذج).
+   */
+  lane?: number;
 }
 
 export class GeminiTimeoutError extends Error {}
@@ -219,7 +224,11 @@ export async function generate(model: string | string[], contents: Content[], op
   const keyOf = new Map(all.map((s) => [s.slot, s.key]));
   const pinned = opts.slot ?? (opts.keyIndex !== undefined ? all[opts.keyIndex]?.slot : undefined);
   if (pinned && !keyOf.has(pinned)) throw new GeminiQuotaError(`key ${pinned} not available`);
-  const slots = pinned ? [pinned] : all.map((s) => s.slot);
+  let slots = pinned ? [pinned] : all.map((s) => s.slot);
+  if (!pinned && opts.lane !== undefined && slots.length > 1) {
+    const k = ((opts.lane % slots.length) + slots.length) % slots.length;
+    slots = [...slots.slice(k), ...slots.slice(0, k)];
+  }
   const models = Array.isArray(model) ? model : modelChain(model);
   await refreshBlocks();
   const order = attemptOrder(slots, models, FALLBACK_MODELS, opts.pool === 'admin');
