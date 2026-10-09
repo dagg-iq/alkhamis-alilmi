@@ -23,11 +23,19 @@ const data = {
   grades: [{ id: 'g1', user_id: UID, subject_id: 's0', period: 'month1', score: 93, note: null }, { id: 'g2', user_id: UID, subject_id: 's0', period: 'midyear', score: 88, note: null }, { id: 'g3', user_id: UID, subject_id: 's1', period: 'month1', score: 70, note: null },
     { id: 'g4', user_id: UID, subject_id: 's3', period: 'month1', score: 98, note: null }, { id: 'g5', user_id: UID, subject_id: 's3', period: 'month2', score: 95, note: null },
     { id: 'g6', user_id: UID, subject_id: 's4', period: 'month1', score: 85, note: null }, { id: 'g7', user_id: UID, subject_id: 's5', period: 'month1', score: 45, note: null }],
+  schedules: [
+    { id: 'sc1', title: 'جدول الحصص — شعبة أ', subtitle: 'الفصل الدراسي الأول', kind: 'weekly', section_id: 'sec1', is_published: true, sort: 0, created_at: t, updated_at: t },
+    { id: 'sc2', title: 'امتحانات الشهر الأول', subtitle: 'الفصل الأول', kind: 'exam', section_id: null, is_published: true, sort: 1, created_at: t, updated_at: t },
+  ],
+  schedule_items: [
+    ...[0, 1, 2, 3, 4].flatMap((d) => [1, 2, 3, 4, 5, 6].map((n) => { const st = 480 + (n - 1) * 50; const f = (m) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`; return { id: `i${d}${n}`, schedule_id: 'sc1', day: d, on_date: null, sort: n, start_time: f(st), end_time: f(st + 45), subject_id: `s${(d * 3 + n) % 8}`, title: null, teacher: ['أحمد السوداني', 'علي كاظم'][n % 2], place: null, note: null }; })),
+    ...[2, 4, 6, 9].map((k, i) => ({ id: `e${i}`, schedule_id: 'sc2', day: null, on_date: new Date(Date.now() + k * 86400000).toISOString().slice(0, 10), sort: i + 1, start_time: '09:00', end_time: '11:00', subject_id: `s${i}`, title: null, teacher: null, place: i === 0 ? 'القاعة ٣' : null, note: i === 1 ? 'يُسمح بالآلة الحاسبة' : null })),
+  ],
   tasks: [{ id: 'tk1', scope: 'personal', owner_id: UID, section_id: null, subject_id: 's0', type: 'exam', title: 'امتحان الفيزياء', notes: null, due_at: t, remind_at: null, created_at: t }, { id: 'tk2', scope: 'school', owner_id: 'x', section_id: null, subject_id: null, type: 'homework', title: 'واجب', notes: null, due_at: new Date().toISOString(), remind_at: null, created_at: t }],
   task_status: [], progress: [{ item_type: 'lecture', item_id: 'l1', state: 'watched' }],
   posts: [{ id: 'p1', author_id: UID, kind: 'holiday', title: 'عطلة غداً', body: 'غداً عطلة رسمية', cover_key: null, section_id: null, is_pinned: true, published_at: new Date().toISOString(), profiles: { full_name: 'الأدمن' } }],
   notifications: [{ id: 'n1', user_id: UID, type: 'post', title: 'عطلة غداً', body: 'تفاصيل', payload: { post_id: 'p1' }, read_at: null, created_at: new Date().toISOString() }],
-  app_settings: [{ key: 'grading', value: { individual_exempt: 90, general_avg: 85, general_min: 75, pass: 50, round: 'half_up' } }, { key: 'ai', value: { daily_limit: 20 } }, { key: 'chat', value: { direct_messages: true } }],
+  app_settings: [{ key: 'grading', value: { individual_exempt: 90, general_avg: 85, general_min: 75, pass: 50, round: 'half_up' } }, { key: 'ai', value: { daily_limit: 20 } }, { key: 'chat', value: { direct_messages: true } }, { key: 'schedule', value: { school_days: [0, 1, 2, 3, 4], start: '08:00', end: '12:00', switch_after: '09:00' } }],
   conversation_members: [{ profiles: profile }, { profiles: { id: 'u2', full_name: 'حيدر كريم جاسم', avatar_url: null, is_verified: false, role: 'student' } }],
   messages: [
     { id: 'm6', conversation_id: 'cv1', sender_id: 'u2', body: null, reply_to_id: null, attachment: { type: 'answer', title: 'لخص لي المتسعات', body: '## أهم التعاريف\n- **السعة:** نسبة الشحنة إلى فرق الجهد\n- ==وحدة السعة هي الفاراد==' }, mentions: [], created_at: new Date().toISOString(), edited_at: null, deleted_at: null },
@@ -67,13 +75,15 @@ const rpc = {
     const m = url.pathname.match(/\/rest\/v1\/(rpc\/)?([a-z_]+)/);
     if (m) body = m[1] ? (rpc[m[2]] ?? null) : (data[m[2]] ?? []);
     if (req.method() !== 'GET' && !m?.[1]) body = single ? (Array.isArray(body) ? body[0] : body) : [];
+    // فلترة id و schedule_id البسيطة (eq.) لتجربة صفحات التفاصيل
+    if (Array.isArray(body)) for (const col of ['id', 'schedule_id']) { const v = url.searchParams.get(col); if (v?.startsWith('eq.') && body.length && col in body[0]) body = body.filter((r) => String(r[col]) === v.slice(3)); }
     if (single && Array.isArray(body)) body = body[0] ?? null;
     if (url.pathname.includes('/functions/v1/')) return route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: 'اختبار' }) });
     if (url.pathname.includes('/auth/v1/')) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ user: session.user }) });
     return route.fulfill({ status: 200, contentType: 'application/json', headers: { 'content-range': '0-0/1' }, body: JSON.stringify(body) });
   });
   const routes = process.env.ROUTES ? process.env.ROUTES.split(',') : ['/', '/subjects', '/grades', '/chat', '/more', '/subject/s0', '/subject/s2', '/lecture/l1', '/questions/q1', '/grades/s0', '/grades/edit',
-    '/planner', '/planner/new', '/news', '/news/p1', '/news/new', '/notifications', '/ai', '/ai/a1', '/quiz/c1', '/timer', '/scan', '/scan-result', '/about', '/document/d1',
+    '/planner', '/planner/new', '/news', '/news/p1', '/news/new', '/notifications', '/ai', '/ai/a1', '/quiz/c1', '/timer', '/scan', '/scan-result', '/schedules', '/schedules/sc1', '/schedules/sc2', '/about', '/document/d1',
     `/profile/${UID}`, '/settings', '/document/d1', '/chat/cv1', '/chat/new'];
   const results = [];
   for (const r of routes) {

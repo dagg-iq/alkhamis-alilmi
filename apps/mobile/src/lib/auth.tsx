@@ -3,6 +3,7 @@ import type { Profile } from '@saey/shared';
 import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { clearLocalPrefs, flushPrefs, hydratePrefs } from './prefs';
 import { supabase } from './supabase';
 
 WebBrowser.maybeCompleteAuthSession();
@@ -48,6 +49,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     try {
       const { data } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
+      // الهدف والمظهر وإعدادات المؤقت من حسابه، قبل أن تظهر الشاشات
+      if (data) await hydratePrefs(userId, (data as Profile).prefs).catch(() => {});
       setProfile((data as Profile | null) ?? null);
     } catch {
       setProfile(null);
@@ -109,8 +112,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (result.type === 'success') await completeAuthFromUrl(result.url);
     },
     signOut: async () => {
+      await flushPrefs().catch(() => {});
       await supabase.auth.signOut();
       setProfile(null);
+      await clearLocalPrefs();
       // لا تبقى بيانات الطالب ظاهرة على الشاشة الرئيسية
       import('@/widgets/sync').then((m) => m.clearWidgets()).catch(() => {});
     },

@@ -42,7 +42,7 @@ select pg_temp.as_user('00000000-0000-0000-0000-00000000000b');
 do $$
 declare cid uuid; n int;
 begin
-  assert (select count(*) from public.subjects) = 8, 'المعتمد لا يرى المواد';
+  assert (select count(*) from public.subjects) = 9, 'المعتمد لا يرى المواد';
   assert (select count(*) from public.notifications where type = 'approved') = 1, 'لا إشعار موافقة';
   assert (select count(*) from public.notifications where type = 'post') = 1, 'لا إشعار خبر';
   insert into public.grades (subject_id, period, score) select id, 'month1', 95 from public.subjects where slug = 'physics';
@@ -132,6 +132,43 @@ do $$ begin
     raise exception 'طالب أضاف موضوع محاضرة!';
   exception when insufficient_privilege then null;
   end;
+end $$;
+reset role;
+
+-- ٨. الجداول: المشرف يكتب، الطالب يرى المنشور لشعبته أو للكل فقط، وتفضيلاته تُحفظ على حسابه
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000a');
+insert into public.schedules (id, title, kind, section_id, is_published) values
+  ('00000000-0000-0000-0000-0000000000a1', 'جدول الحصص — أ', 'weekly', (select id from public.sections where name = 'أ'), true),
+  ('00000000-0000-0000-0000-0000000000a2', 'جدول الحصص — ب', 'weekly', (select id from public.sections where name = 'ب'), true),
+  ('00000000-0000-0000-0000-0000000000a3', 'امتحانات الشهر الأول', 'exam', null, true),
+  ('00000000-0000-0000-0000-0000000000a4', 'مسودة', 'custom', null, false);
+insert into public.schedule_items (schedule_id, day, sort, start_time, end_time, title) values
+  ('00000000-0000-0000-0000-0000000000a1', 0, 1, '08:00', '08:45', 'فيزياء'),
+  ('00000000-0000-0000-0000-0000000000a2', 0, 1, '08:00', '08:45', 'كيمياء');
+insert into public.schedule_items (schedule_id, on_date, sort, title) values
+  ('00000000-0000-0000-0000-0000000000a3', current_date + 3, 1, 'الرياضيات');
+reset role;
+
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000b');
+do $$ begin
+  -- الطالب ب في شعبة أ: يرى جدول أ وجدول الامتحانات فقط (لا ب ولا المسودة)
+  assert (select count(*) from public.schedules) = 2, 'الطالب يرى جداول غير شعبته أو مسودات';
+  assert (select count(*) from public.schedule_items) = 2, 'الطالب يرى حصص شعبة أخرى';
+  begin
+    insert into public.schedules (title) values ('اختراق');
+    raise exception 'طالب أنشأ جدولاً!';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    insert into public.schedule_items (schedule_id, title) values ('00000000-0000-0000-0000-0000000000a1', 'x');
+    raise exception 'طالب أضاف حصة!';
+  exception when insufficient_privilege then null;
+  end;
+  -- التفضيلات على الحساب
+  update public.profiles set prefs = '{"goal":"general","theme":"dark"}' where id = auth.uid();
+  assert (select prefs ->> 'goal' from public.profiles where id = auth.uid()) = 'general', 'لم يُحفظ الهدف على الحساب';
 end $$;
 reset role;
 

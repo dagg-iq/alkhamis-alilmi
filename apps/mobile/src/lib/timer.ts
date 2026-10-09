@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { savePref } from './prefs';
 
 /**
  * حالة المؤقت محفوظة على الهاتف: لو أُغلق التطبيق أو قتله النظام يبقى الوقت صحيحاً،
@@ -54,6 +55,7 @@ export function saveTimer(state: TimerState) {
 
 export function saveTimerSettings(settings: TimerSettings) {
   AsyncStorage.setItem(SKEY, JSON.stringify(settings)).catch(() => {});
+  savePref('timer', settings);
 }
 
 /** الجلسة التالية بعد انتهاء الحالية */

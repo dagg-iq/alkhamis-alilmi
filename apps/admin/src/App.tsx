@@ -14,6 +14,7 @@ import Lectures from './pages/Lectures';
 import Login from './pages/Login';
 import News from './pages/News';
 import Questions from './pages/Questions';
+import Schedules from './pages/Schedules';
 import Settings from './pages/Settings';
 import Students from './pages/Students';
 import Tasks from './pages/Tasks';
@@ -27,6 +28,7 @@ const NAV = [
   { to: '/documents', label: 'الملازم' },
   { to: '/questions', label: 'الأسئلة' },
   { to: '/news', label: 'الأخبار' },
+  { to: '/schedules', label: 'الجداول' },
   { to: '/tasks', label: 'الواجبات والامتحانات' },
   { to: '/chat', label: 'الدردشة' },
   { to: '/settings', label: 'الإعدادات', admin: true },
@@ -92,6 +94,7 @@ export default function App() {
           <Route path="/documents" element={<Documents />} />
           <Route path="/questions" element={<Questions />} />
           <Route path="/news" element={<News />} />
+          <Route path="/schedules" element={<Schedules />} />
           <Route path="/tasks" element={<Tasks />} />
           <Route path="/chat" element={<Chat />} />
           {isAdmin ? <Route path="/settings" element={<Settings />} /> : null}

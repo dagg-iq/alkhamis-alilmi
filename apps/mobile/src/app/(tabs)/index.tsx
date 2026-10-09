@@ -1,6 +1,6 @@
 import {
   GOAL_TITLES, analyzeGrades, arDigits, formatDayDate, formatScore, POST_KIND_LABELS, relativeDays, TASK_TYPE_LABELS,
-  type Post, type Subject, type Task,
+  targetLabel, targetSchoolDay, type Post, type Subject, type Task,
 } from '@saey/shared';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback } from 'react';
@@ -9,6 +9,7 @@ import { Icon } from '@/components/icon';
 import { CountUp } from '@/components/motion';
 import { Avatar, Card, IconButton, ProgressBar, Row, Screen, SectionTitle, T } from '@/components/ui';
 import { useMe } from '@/lib/auth';
+import { itemName, loadSchedules, useScheduleSettings } from '@/lib/schedules';
 import { loadMyGrades, loadSubjectProgress, loadSubjects, shortSubject } from '@/lib/queries';
 import { useGoal } from '@/lib/goal';
 import { useGradingRules } from '@/lib/settings';
@@ -27,12 +28,13 @@ export default function Home() {
   const { c } = useTheme();
   const me = useMe();
   const rules = useGradingRules();
+  const schedSettings = useScheduleSettings();
 
   const q = useLoad(async () => {
     const now = new Date();
     const endOfToday = new Date(now);
     endOfToday.setHours(23, 59, 59, 999);
-    const [subjects, progress, grades, exams, tasks, done, posts, unreadNotifs] = await Promise.all([
+    const [subjects, progress, grades, exams, tasks, done, posts, unreadNotifs, sched] = await Promise.all([
       loadSubjects(),
       loadSubjectProgress(me.id),
       loadMyGrades(me.id),
@@ -41,6 +43,7 @@ export default function Home() {
       must(supabase.from('task_status').select('task_id').eq('user_id', me.id)),
       must(supabase.from('posts').select('*').order('is_pinned', { ascending: false }).order('published_at', { ascending: false }).limit(1)),
       supabase.from('notifications').select('id', { count: 'exact', head: true }).is('read_at', null),
+      loadSchedules().catch(() => null),
     ]);
     const doneIds = new Set((done as { task_id: string }[]).map((d) => d.task_id));
     return {
@@ -51,6 +54,7 @@ export default function Home() {
       todayTasks: (tasks as Task[]).filter((t) => !doneIds.has(t.id)).slice(0, 4),
       post: (posts as Post[])[0] ?? null,
       unreadNotifs: unreadNotifs.count ?? 0,
+      sched,
     };
   }, [me.id]);
 
@@ -114,6 +118,27 @@ export default function Home() {
           </View>
         )}
       </Card>
+
+      {/* جدول الحصص: اليوم أو يوم الدوام القادم حسب الوقت */}
+      {(() => {
+        const weekly = d?.sched?.schedules.find((x) => x.kind === 'weekly');
+        if (!d?.sched || !weekly) return null;
+        const tg = targetSchoolDay(new Date(), schedSettings);
+        const lessons = d.sched.items.filter((i) => i.schedule_id === weekly.id && i.day === tg.day);
+        return (
+          <Card onPress={() => router.push(`/schedules/${weekly.id}`)} style={{ flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 14, borderColor: c.accent }}>
+            <View style={{ width: 52, height: 52, borderRadius: 14, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center' }}>
+              <Icon name="calendar" size={24} color="#FFFFFF" />
+            </View>
+            <View style={{ flex: 1, gap: 2 }}>
+              <T dim size={13}>{tg.relation === 'today' ? 'جدول الحصص اليوم' : 'جدول الحصص القادم'}</T>
+              <T weight="bold" size={16} lines={1}>{targetLabel(tg)}</T>
+              <T dim size={12} lines={1}>{lessons.length ? lessons.map((l) => shortSubject(itemName(l, d.sched!.subjects))).join(' · ') : 'لا توجد حصص مسجلة'}</T>
+            </View>
+            <Icon name="forward" size={18} color={c.ink3} />
+          </Card>
+        );
+      })()}
 
       {/* الامتحان القادم */}
       {d?.nextExam ? (

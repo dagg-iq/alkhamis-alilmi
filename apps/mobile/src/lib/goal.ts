@@ -1,9 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Goal } from '@saey/shared';
 import { useEffect, useState } from 'react';
+import { onPrefApplied, savePref } from './prefs';
 
 /**
- * هدف الطالب (النجاح / إعفاء المواد / الإعفاء العام) — محفوظ على الهاتف.
+ * هدف الطالب (النجاح / إعفاء المواد / الإعفاء العام) — محفوظ على حسابه (وعلى الهاتف للسرعة).
  * undefined = لم يُقرأ بعد، null = لم يختر بعد.
  */
 const KEY = 'saey.goal';
@@ -24,8 +25,16 @@ export async function loadGoal(): Promise<Goal | null> {
 export function setGoal(g: Goal) {
   current = g;
   AsyncStorage.setItem(KEY, g).catch(() => {});
+  savePref('goal', g);
   listeners.forEach((l) => l(g));
 }
+
+// الهدف القادم من الحساب (عند الدخول) أو المُمسح (عند الخروج)
+onPrefApplied((k, v) => {
+  if (k !== 'goal') return;
+  current = v === 'pass' || v === 'individual' || v === 'general' ? v : null;
+  listeners.forEach((l) => l(current as Goal | null));
+});
 
 export function useGoal(): Goal | null | undefined {
   const [g, setG] = useState<Goal | null | undefined>(current);

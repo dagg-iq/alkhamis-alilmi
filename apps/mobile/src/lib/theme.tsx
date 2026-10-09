@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { onPrefApplied, savePref } from './prefs';
 import { palette, verdictColors, type ThemeColors, type VerdictPalette } from '@saey/shared';
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useColorScheme } from 'react-native';
@@ -46,6 +47,10 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
     AsyncStorage.getItem(KEY).then((v) => {
       if (v === 'light' || v === 'dark' || v === 'system') setModeState(v);
     }).catch(() => {});
+    // المظهر المحفوظ على الحساب (عند الدخول) أو الافتراضي (عند الخروج)
+    return onPrefApplied((k, v) => {
+      if (k === 'theme') setModeState(v === 'light' || v === 'dark' || v === 'system' ? v : 'system');
+    });
   }, []);
 
   const value = useMemo<ThemeValue>(() => {
@@ -55,6 +60,7 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
       setMode: (m) => {
         setModeState(m);
         AsyncStorage.setItem(KEY, m).catch(() => {});
+        savePref('theme', m);
       },
       dark,
       c: dark ? palette.dark : palette.light,

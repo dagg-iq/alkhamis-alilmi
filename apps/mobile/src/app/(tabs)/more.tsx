@@ -31,6 +31,8 @@ export default function More() {
       <Card style={{ paddingVertical: 2 }}>
         <ListItem icon="calendar" title="المنظِّم" subtitle="الواجبات والتحضيرات والامتحانات" onPress={() => router.push('/planner')} />
         <Divider />
+        <ListItem icon="calendar" title="الجداول" subtitle="الحصص الأسبوعية والامتحانات" onPress={() => router.push('/schedules')} />
+        <Divider />
         <ListItem icon="sparkle" title="مساعد سعي" subtitle="اسأل عن أي شيء في المنهج" onPress={() => router.push('/ai')} />
         <Divider />
         <ListItem icon="scan" title="تحويل ورقة إلى PDF" subtitle="صوّر ورقة أسئلة فتعود ملفاً بنفس شكلها" onPress={() => router.push('/scan')} />

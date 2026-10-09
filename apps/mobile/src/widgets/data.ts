@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { savePref } from '@/lib/prefs';
 import {
   DEFAULT_RULES, analyzeGrades, generalExemption, isIndividuallyExempt, effortStatus, parseRules,
   type Goal, type Post, type Task,
@@ -52,6 +53,7 @@ export async function readWidgetTheme(): Promise<WidgetTheme> {
 
 export async function saveWidgetTheme(t: WidgetTheme) {
   await AsyncStorage.setItem(THEME_KEY, t).catch(() => {});
+  savePref('widgetTheme', t);
   const s = await readSnapshot();
   const next = { ...s, theme: t };
   await writeSnapshot(next);

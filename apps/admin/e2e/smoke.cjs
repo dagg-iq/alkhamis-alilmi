@@ -22,10 +22,19 @@ const data = {
   tasks: [{ id: 'tk1', scope: 'school', type: 'exam', title: 'امتحان الفيزياء', due_at: t, section_id: null, subject_id: 's0', created_at: t }],
   audit_log: [{ id: 'a1', action: 'insert', target_type: 'posts', meta: { title: 'عطلة' }, created_at: t, profiles: { full_name: 'علي' } }],
   conversations: [{ id: 'cv1', type: 'school', title: 'المدرسة', only_staff_can_post: false }],
-  messages: [], app_settings: [{ key: 'grading', value: { individual_exempt: 90 } }], grades: [],
+  schedules: [
+    { id: 'sc1', title: 'جدول الحصص — شعبة أ', subtitle: 'الفصل الدراسي الأول', kind: 'weekly', section_id: 'sec1', is_published: true, sort: 0, created_at: t, updated_at: t },
+    { id: 'sc2', title: 'امتحانات الشهر الأول', subtitle: null, kind: 'exam', section_id: null, is_published: false, sort: 1, created_at: t, updated_at: t },
+  ],
+  schedule_items: [
+    ...[0, 1, 2, 3, 4].flatMap((d) => [1, 2, 3, 4, 5, 6].map((n) => ({ id: `i${d}${n}`, schedule_id: 'sc1', day: d, on_date: null, sort: n, start_time: `${String(8 + Math.floor(((n - 1) * 50) / 60)).padStart(2, '0')}:${String(((n - 1) * 50) % 60).padStart(2, '0')}`, end_time: `${String(8 + Math.floor(((n - 1) * 50 + 45) / 60)).padStart(2, '0')}:${String(((n - 1) * 50 + 45) % 60).padStart(2, '0')}`, subject_id: n % 2 ? 's0' : 's1', title: null, teacher: n % 2 ? 'أحمد السوداني' : 'علي كاظم', place: null, note: null }))),
+    { id: 'e1', schedule_id: 'sc2', day: null, on_date: '2026-11-02', sort: 1, start_time: '09:00', end_time: '11:00', subject_id: 's0', title: null, teacher: null, place: 'القاعة ٣', note: 'يُحضر الطالب الحاسبة' },
+    { id: 'e2', schedule_id: 'sc2', day: null, on_date: '2026-11-04', sort: 2, start_time: '09:00', end_time: '11:00', subject_id: 's1', title: null, teacher: null, place: null, note: null },
+  ],
+  messages: [], app_settings: [{ key: 'grading', value: { individual_exempt: 90 } }, { key: 'schedule', value: { school_days: [0, 1, 2, 3, 4], start: '08:00', end: '12:00', switch_after: '09:00' } }], grades: [],
 };
 (async () => {
-  const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH });
+  const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH || undefined });
   const ctx = await browser.newContext({ viewport: { width: Number(process.env.W || 390), height: Number(process.env.H || 844) } });
   await ctx.addInitScript(([s]) => localStorage.setItem('sb-yjxhprmtyuqnbgraocar-auth-token', s), [JSON.stringify(session)]);
   await ctx.route('**/*.supabase.co/**', async (route) => {
@@ -67,7 +76,7 @@ const data = {
     if (single && Array.isArray(body)) body = body[0] ?? null;
     return route.fulfill({ status: 200, contentType: 'application/json', headers: { 'content-range': '0-1/2' }, body: JSON.stringify(body) });
   });
-  const routes = (process.env.ROUTES || '/,/students,/content,/lectures,/documents,/questions,/news,/tasks,/chat,/settings,/audit').split(',');
+  const routes = (process.env.ROUTES || '/,/students,/schedules,/content,/lectures,/documents,/questions,/news,/tasks,/chat,/settings,/audit').split(',');
   for (const r of routes) {
     const page = await ctx.newPage();
     const errs = [];
@@ -85,7 +94,7 @@ const data = {
       await page.waitForTimeout(2500);
     }
     if (process.env.CLICK) {
-      await page.getByRole('button', { name: process.env.CLICK }).click();
+      await page.getByRole('button', { name: process.env.CLICK }).first().click();
       await page.waitForTimeout(1500);
     }
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
