@@ -106,11 +106,21 @@ const bk = (slot: string, model: string) => `${slot}|${model}`;
 export async function refreshBlocks(force = false) {
   if (!force && Date.now() - blocksLoadedAt < 15_000) return;
   try {
-    const { data } = await admin.from('ai_key_blocks').select('slot, model, blocked_until').gt('blocked_until', new Date().toISOString());
+    const { data } = await admin.from('ai_key_blocks').select('slot, model, blocked_until, reason, updated_at').gt('blocked_until', new Date().toISOString());
     blocks.clear();
-    for (const r of (data ?? []) as { slot: string; model: string; blocked_until: string }[]) blocks.set(bk(r.slot, r.model), Date.parse(r.blocked_until));
+    for (const r of (data ?? []) as BlockRow[]) if (!staleDailyBlock(r)) blocks.set(bk(r.slot, r.model), Date.parse(r.blocked_until));
     blocksLoadedAt = Date.now();
   } catch { /* الجدول غير موجود بعد: نعمل بالذاكرة فقط */ }
+}
+
+interface BlockRow { slot: string; model: string; blocked_until: string; reason?: string | null; updated_at?: string | null }
+/**
+ * قفل حصة يومية وُضع قبل آخر تجدد (منتصف ليل كاليفورنيا) لا قيمة له: Google جددت الحصة بعده.
+ * (أقفال قديمة كانت حتى ٣ فجراً فبقيت النماذج «منتهية» طوال اليوم رغم التجدد عند ١٠ صباحاً.)
+ */
+export function staleDailyBlock(r: BlockRow, now = Date.now()): boolean {
+  if (!/اليومية|التضمين/.test(r.reason ?? '') || !r.updated_at) return false;
+  return Date.parse(r.updated_at) < lastQuotaReset(now);
 }
 
 function blockedUntil(slot: string, model: string): number {
@@ -150,11 +160,13 @@ export function retryAfterMs(detail: string): number | null {
  * وحد الدقيقة ٥ (انتظاره ثوانٍ). فـ «limit: 20» أو انتظار أطول من ١٠ دقائق = يومي.
  */
 export const isDailyQuota = (detail: string) => {
+  // الأوثق: مدة الانتظار التي تطلبها Google — اليومي ينتظر حتى منتصف ليل كاليفورنيا (ساعات)، والدقيقة ثوانٍ
+  const wait = retryAfterMs(detail);
+  if (wait !== null) return wait > 10 * 60_000;
   if (/PerDay|per_day|per day|daily/i.test(detail)) return true;
-  if (/PerMinute|per_minute|per minute/i.test(detail)) return false;
+  if (/PerMinute|per_minute|per minute|token_count|TokensPer/i.test(detail)) return false;
   const limit = Number(detail.match(/limit:\s*(\d+)/)?.[1]);
-  if (limit >= 10) return true;
-  return (retryAfterMs(detail) ?? 0) > 10 * 60_000;
+  return limit >= 10 && limit <= 10_000; // ٢٠ طلباً يومياً؛ حدود التوكنات (مئات الآلاف) ليست يومية
 };
 
 const PT = 'America/Los_Angeles';
@@ -294,7 +306,8 @@ export async function generate(model: string | string[], contents: Content[], op
         else if (timer) clearTimeout(timer);
       } catch (e) {
         if (timer) clearTimeout(timer);
-        if (ctl?.signal.aborted) throw new GeminiTimeoutError('انتهت المهلة');
+        // جواب بطيء (تفكير طويل) ≠ انتهاء حصة: لا نقفل النموذج، نسجّله فقط
+        if (ctl?.signal.aborted) { await logCall(a.slot, a.m, false, undefined, 'انتهت المهلة (جواب بطيء) — ليس حداً'); throw new GeminiTimeoutError('انتهت المهلة'); }
         busy = true;
         failures.push(`${a.slot}/${a.m}: network ${String((e as Error).message ?? e).slice(0, 60)}`);
         break;

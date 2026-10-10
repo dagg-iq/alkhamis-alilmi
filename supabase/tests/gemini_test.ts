@@ -91,6 +91,11 @@ check('آخر تجدد بعد تغيير التوقيت', new Date(g.lastQuotaRe
 check('شتاءً: منتصف ليل كاليفورنيا = 08:00 UTC', new Date(g.nextPacificMidnight(Date.UTC(2026, 11, 1, 1, 0))).toISOString() === '2026-12-01T08:00:00.000Z');
 check('ليلة تغيير التوقيت (١ تشرين الثاني)', new Date(g.nextPacificMidnight(Date.UTC(2026, 10, 1, 12, 0))).toISOString() === '2026-11-02T08:00:00.000Z');
 check('يوم الحصة = تاريخ كاليفورنيا', g.pacificDay(Date.UTC(2026, 9, 10, 0, 19)) === '2026-10-09' && g.pacificDay(Date.UTC(2026, 9, 10, 7, 1)) === '2026-10-10');
+check('حد التوكنات في الدقيقة (limit: 250000) ليس يومياً', !g.isDailyQuota('Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_input_token_count, limit: 250000, model: gemini-3.8-flash'));
+check('انتظار ٤٠ ثانية ليس يومياً ولو ذُكر limit: 20', !g.isDailyQuota('limit: 20, model: gemini-3.8-flash Please retry in 40s'));
+check('قفل يومي قبل تجدد اليوم (٥ صباحاً بغداد) قديم بعد ١٠ صباحاً', g.staleDailyBlock({ slot: 'A', model: 'm', blocked_until: '2026-10-11T00:00:00Z', reason: 'انتهت الحصة اليومية', updated_at: '2026-10-10T02:00:00Z' }, Date.UTC(2026, 9, 10, 14, 0)));
+check('قفل يومي بعد تجدد اليوم ساري', !g.staleDailyBlock({ slot: 'A', model: 'm', blocked_until: '2026-10-11T07:00:00Z', reason: 'انتهت الحصة اليومية', updated_at: '2026-10-10T12:00:00Z' }, Date.UTC(2026, 9, 10, 14, 0)));
+check('قفل الدقيقة لا يتأثر', !g.staleDailyBlock({ slot: 'A', model: 'm', blocked_until: '2026-10-10T14:01:00Z', reason: 'حد الدقيقة (٥ طلبات)', updated_at: '2026-10-10T02:00:00Z' }, Date.UTC(2026, 9, 10, 14, 0)));
 check('fileRef الجديد والقديم', g.fileRef('s:GEMINI_API_KEY_3|https://x/f').slot === 'GEMINI_API_KEY_3' && g.fileRef('k1|https://x/f').keyIndex === 1);
 
 // ٥ب) القرّاء المتوازون: القارئ ١ يبدأ بالمفتاح الثاني، والقارئ ٢ بالثالث (لا تزاحم على مفتاح واحد)

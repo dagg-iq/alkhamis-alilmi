@@ -10,7 +10,7 @@ import { callFunction, must, supabase } from '../lib/supabase';
  */
 interface Slots { slots: string[]; per_model: number; models: string[]; fallback: string[] }
 interface UsageRow { day: string; slot: string; model: string; requests: number; errors: number; last_status: number | null; last_error: string | null; last_at: string | null }
-interface Block { slot: string; model: string; blocked_until: string; reason: string | null }
+interface Block { slot: string; model: string; blocked_until: string; reason: string | null; updated_at: string | null }
 interface StudentUse { user_id: string; day: string; count: number; profiles: { full_name: string; sections: { name: string } | null } | null }
 
 const EMBED = 'gemini-embedding-001';
@@ -105,10 +105,13 @@ export default function Usage() {
     if (!d) return null;
     const models = [...d.slots.models, ...d.slots.fallback];
     const per = d.slots.per_model;
-    const blockOf = (slot: string, model: string) => d.blocks.find((b) => b.slot === slot && (b.model === model || b.model === '*'));
+    // قفل يومي وُضع قبل آخر تجدد لا قيمة له (Google جددت الحصة بعده) — نفس قاعدة الخادم (staleDailyBlock)
+    const lastReset = quotaWindow(now).start;
+    const live = d.blocks.filter((b) => !(/اليومية|التضمين/.test(b.reason ?? '') && b.updated_at && Date.parse(b.updated_at) < lastReset));
+    const blockOf = (slot: string, model: string) => live.find((b) => b.slot === slot && (b.model === model || b.model === '*'));
     const useOf = (slot: string, model: string) => d.usage.find((u) => u.slot === slot && u.model === model);
     const keys = d.slots.slots.map((slot) => {
-      const dead = d.blocks.find((b) => b.slot === slot && b.model === '*');
+      const dead = live.find((b) => b.slot === slot && b.model === '*');
       const rows = models.map((model) => {
         const u = useOf(slot, model);
         const b = blockOf(slot, model);
