@@ -62,6 +62,8 @@ export interface GenerateOptions {
   spread?: boolean;
   /** إعدادات إضافية لـ generationConfig (مثل mediaResolution للفيديو) */
   extraConfig?: Record<string, unknown>;
+  /** نماذج الاحتياط بعد القائمة (الافتراضي FALLBACK_MODELS) */
+  fallback?: string[];
   /** آخر وقت مسموح (Date.now()): بعده يُقطع الطلب ويُرمى GeminiTimeoutError (دوال الخادم محدودة ~١٥٠ ث) */
   deadline?: number;
   /**
@@ -81,6 +83,12 @@ export const MAIN_MODELS = ['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-
 export const LITE_MODELS = ['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.5-flash'];
 /** الاحتياط الأخير بعد انتهاء كل النماذج على كل المفاتيح */
 export const FALLBACK_MODELS = ['gemini-2.5-flash', 'gemini-2.5-flash-lite'];
+/**
+ * قراءة صفحات الكتب (الفهرسة): النماذج القوية فقط — Flash-Lite أضعف في المعادلات والصفحات المصوّرة،
+ * فإن انتهت حصة القوية ينتظر طابور الفهرسة تجددها بدل القراءة بدقة أقل.
+ */
+export const READ_MODELS = MAIN_MODELS.filter((m) => !m.includes('lite'));
+export const READ_FALLBACK = ['gemini-2.5-flash'];
 
 /**
  * سلسلة النماذج: ثابتة بالترتيب أعلاه. إعداد النموذج القديم في لوحة التحكم حُذف ويُتجاهل
@@ -259,7 +267,7 @@ export async function generate(model: string | string[], contents: Content[], op
   }
   const models = Array.isArray(model) ? model : modelChain(model);
   await refreshBlocks();
-  const order = attemptOrder(slots, models, FALLBACK_MODELS, opts.pool === 'admin');
+  const order = attemptOrder(slots, models, opts.fallback ?? FALLBACK_MODELS, opts.pool === 'admin');
   const failures: string[] = [];
   let busy = false;
   let tried = 0;

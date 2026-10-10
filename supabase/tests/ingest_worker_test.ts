@@ -82,10 +82,12 @@ const removed: string[] = [];
 };
 
 let quota = false;
+let strongQuota = false; // النماذج القوية فقط منتهية، و Flash-Lite متاح
 const thinking: string[] = [];
+const readModels = new Set<string>();
 globalThis.fetch = (async (url: string, init: any) => {
   const u = String(url);
-  if (quota && u.includes('generativelanguage')) {
+  if ((quota || (strongQuota && !/lite/.test(u))) && u.includes('generativelanguage') && !u.includes('Embed')) {
     return new Response(JSON.stringify({ error: { code: 429, message: 'Quota exceeded for metric: generate_content_free_tier_requests, limit: 20 GenerateRequestsPerDayPerProjectPerModel' } }), { status: 429 });
   }
   if (u.includes('batchEmbedContents')) {
@@ -95,6 +97,7 @@ globalThis.fetch = (async (url: string, init: any) => {
   const body = JSON.parse(init.body);
   if (body.contents[0].parts.length === 1) return new Response(JSON.stringify({ error: { code: 400, message: 'bad' } }), { status: 400 });
   thinking.push(JSON.stringify(body.generationConfig?.thinkingConfig ?? {}));
+  readModels.add(u.match(/models\/([^:]+):/)?.[1] ?? '?');
   const prompt: string = body.contents[0].parts[1].text;
   const [, from, to] = prompt.match(/من (\d+) إلى (\d+)/)!.map(Number);
   const pages = [];
@@ -124,6 +127,22 @@ check('بُني الفهرس لكليهما وخرجا من الطابور', d1.
 check('حُذفت الأجزاء من الجدول والتخزين', db.ingest_chunks.length === 0 && removed.length === 3, removed.join());
 check('المصوّر يُقرأ بتفكير أعلى من النصي', thinking.some((t) => /low/i.test(t)) && thinking.some((t) => /minimal/i.test(t)), thinking.join(' '));
 check('القفل فُتح بعد الانتهاء', lock === false);
+check('قراءة الصفحات بالنماذج القوية فقط (لا Flash-Lite)', readModels.size > 0 && [...readModels].every((m) => !m.includes('lite')), [...readModels].join());
+
+// كل النماذج القوية مقفلة (حصة يومية) و Flash-Lite متاح: لا يقرأ به، بل ينتظر
+{
+  strongQuota = true;
+  quota = false;
+  db.documents.push({ id: 'd5', title: 'خامس', kind: 'book', subject_id: 's', chapter_id: null, pages: 2, ingested_pages: 0, ingest_status: 'running', queued_at: new Date().toISOString() });
+  db.ingest_chunks.push({ id: 'c5', document_id: 'd5', from_page: 1, to_page: 2, total_pages: 2, file_key: 'k/d2-1', scanned: true, status: 'pending', attempts: 0, next_at: old });
+  readModels.clear();
+  const r5 = await call();
+  const c5 = db.ingest_chunks.find((c) => c.id === 'c5')!;
+  check('القوية منتهية: ينتظر ولا يقرأ بـ Flash-Lite', r5.json.quota === true && readModels.size === 0 && c5.status === 'pending' && c5.attempts === 0, JSON.stringify({ r: r5.json, models: [...readModels], c5 }));
+  strongQuota = false;
+  db.documents = db.documents.filter((d) => d.id !== 'd5');
+  db.ingest_chunks = db.ingest_chunks.filter((c) => c.id !== 'c5');
+}
 
 // انتهاء الحصة على كل المفاتيح: الجزء يعود للطابور ولا تُحسب محاولة، والكتاب يبقى في الطابور
 db.documents.push({ id: 'd3', title: 'ثالث', kind: 'book', subject_id: 's', chapter_id: null, pages: 2, ingested_pages: 0, ingest_status: 'running', queued_at: new Date().toISOString() });

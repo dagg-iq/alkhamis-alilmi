@@ -4,7 +4,7 @@ import { PDFDocument } from 'npm:pdf-lib@1.17.1';
 import { collapseHeadings, fallbackOutline, flattenOutline, headingLines, normalizeOutline, outlineFromHeadings, type OutlineChapter } from './outline.ts';
 import { HttpError } from './cors.ts';
 import { admin } from './supabase.ts';
-import { chunkText, embed, GeminiQuotaError, GeminiTimeoutError, generate, MAIN_MODELS, parseJson, toBase64 } from './gemini.ts';
+import { chunkText, embed, GeminiQuotaError, GeminiTimeoutError, generate, MAIN_MODELS, parseJson, READ_FALLBACK, READ_MODELS, toBase64 } from './gemini.ts';
 
 export interface ReadPage { page: number; printed: string | null; text: string; headings: { level: number; title: string }[] }
 
@@ -38,10 +38,10 @@ export async function readInline(pdf: Uint8Array | string, from: number, to: num
   const b64 = typeof pdf === 'string' ? pdf : toBase64(pdf);
   let pages: ReadPage[] = [];
   try {
-    const raw = await generate(MAIN_MODELS, [{
+    const raw = await generate(READ_MODELS, [{
       role: 'user',
       parts: [{ inline_data: { mime_type: 'application/pdf', data: b64 } }, { text: INLINE_PROMPT(from, to) }],
-    }], { json: true, temperature: 0, maxOutputTokens: 32768, pool: 'admin', lane, thinking: scanned ? 'low' : 'minimal', extraConfig: { mediaResolution: 'MEDIA_RESOLUTION_HIGH' }, deadline });
+    }], { json: true, temperature: 0, maxOutputTokens: 32768, pool: 'admin', lane, fallback: READ_FALLBACK, thinking: scanned ? 'low' : 'minimal', extraConfig: { mediaResolution: 'MEDIA_RESOLUTION_HIGH' }, deadline });
     const parsed = parseJson<ReadPage[] | { pages: ReadPage[] }>(raw);
     const list = Array.isArray(parsed) ? parsed : parsed.pages;
     pages = (Array.isArray(list) ? list : []).filter((p) => Number.isInteger(Number(p?.page)) && Number(p.page) >= from && Number(p.page) <= to)
