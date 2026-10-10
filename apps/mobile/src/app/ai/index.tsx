@@ -4,7 +4,10 @@ import { useCallback, useEffect } from 'react';
 import { Pressable, View } from 'react-native';
 import { Alert } from '@/lib/dialog';
 import { LogoMark } from '@/components/icon';
+import { Icon } from '@/components/icon';
+import { PressScale } from '@/components/motion';
 import { Button, Card, ErrorBox, Header, Loading, Row, Screen, T } from '@/components/ui';
+import { loadSubjects, shortSubject } from '@/lib/queries';
 import { useAuth, useMe } from '@/lib/auth';
 import { useSettings } from '@/lib/settings';
 import { must, supabase } from '@/lib/supabase';
@@ -17,7 +20,10 @@ export default function AiHome() {
   const { isAdmin } = useAuth();
   const params = useLocalSearchParams<{ subjectId?: string; prompt?: string }>();
   const settings = useSettings();
-  const limit = (settings.ai as { daily_limit?: number } | undefined)?.daily_limit ?? 20;
+  // حصة الطالب الخاصة (يضعها الأدمن) وإلا الحد العام
+  const limit = me.ai_daily_limit ?? (settings.ai as { daily_limit?: number } | undefined)?.daily_limit ?? 20;
+  const subjects = useLoad(() => loadSubjects(), []);
+  const openSubject = (subjectId?: string) => router.push({ pathname: '/ai/[id]', params: { id: 'new', ...(subjectId ? { subjectId } : {}) } });
 
   // قادم من صفحة مادة أو أسئلة: افتح محادثة جديدة مباشرة
   useEffect(() => {
@@ -59,8 +65,25 @@ export default function AiHome() {
         <T size={13} color={c.heroInk2}>
           {isAdmin ? 'بلا حد يومي (أدمن)' : `رصيدك اليوم: ${arDigits(remaining)} من ${arDigits(limit)} سؤالاً`}
         </T>
-        <Button title="سؤال جديد" icon="sparkle" onPress={() => router.push({ pathname: '/ai/[id]', params: { id: 'new' } })} />
+        <Button title="سؤال جديد" icon="sparkle" onPress={() => openSubject()} />
       </Card>
+      {subjects.data?.length ? (
+        <View style={{ gap: 8 }}>
+          <T weight="bold" size={15}>ناقش مادة معيّنة</T>
+          <T dim size={12}>اختر المادة فيبحث المساعد في كتبها وملازمها فقط ويناقشك فيها.</T>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+            {subjects.data.map((s) => (
+              <PressScale key={s.id} onPress={() => openSubject(s.id)} haptic accessibilityRole="button" accessibilityLabel={`مناقشة ${s.name}`}
+                style={{ flexGrow: 1, flexBasis: '30%', minWidth: 96, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, height: 48, borderRadius: 16, backgroundColor: c.card, borderWidth: 1, borderColor: c.line }}>
+                <View style={{ width: 28, height: 28, borderRadius: 9, backgroundColor: c.soft, alignItems: 'center', justifyContent: 'center' }}>
+                  <Icon name="book" size={15} color={c.accent} />
+                </View>
+                <T weight="bold" size={14} lines={1} style={{ flex: 1 }}>{shortSubject(s.name)}</T>
+              </PressScale>
+            ))}
+          </View>
+        </View>
+      ) : null}
       {q.loading ? <Loading /> : q.error ? <ErrorBox message={q.error} onRetry={q.reload} /> : q.data!.chats.length ? (
         <>
           <T weight="bold" size={15}>محادثاتك</T>

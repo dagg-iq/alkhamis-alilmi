@@ -47,6 +47,27 @@ export async function uploadFile(file: File, kind: 'material' | 'cover' | 'scan'
   return key;
 }
 
+/** يضغط صورة في المتصفح قبل الرفع: أطول ضلع ١٦٠٠ وجودة JPEG ٧٢٪ (صورة ٨ ميغا ← بضع مئات ك.ب) */
+export async function compressImage(file: File, maxSide = 1600, quality = 0.72): Promise<File> {
+  if (!file.type.startsWith('image/') || file.type === 'image/gif') return file;
+  try {
+    const bmp = await createImageBitmap(file);
+    const k = Math.min(1, maxSide / Math.max(bmp.width, bmp.height));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(bmp.width * k);
+    canvas.height = Math.round(bmp.height * k);
+    const g = canvas.getContext('2d')!;
+    g.fillStyle = '#fff';
+    g.fillRect(0, 0, canvas.width, canvas.height);
+    g.drawImage(bmp, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise<Blob | null>((r) => canvas.toBlob(r, 'image/jpeg', quality));
+    if (!blob || blob.size >= file.size) return file;
+    return new File([blob], file.name.replace(/\.\w+$/, '') + '.jpg', { type: 'image/jpeg' });
+  } catch {
+    return file;
+  }
+}
+
 export async function signedUrl(key: string): Promise<string> {
   const res = await callFunction<{ url: string }>('files', { action: 'download', key });
   return res.url;

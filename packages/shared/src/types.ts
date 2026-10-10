@@ -27,6 +27,8 @@ export interface Profile {
   last_seen_at: string | null;
   /** تفضيلات محفوظة على الحساب: الهدف والمظهر وإعدادات المؤقت */
   prefs?: Record<string, unknown> | null;
+  /** حد أسئلة المساعد اليومي الخاص بالطالب (فارغ = الحد العام) — يغيّره الأدمن فقط */
+  ai_daily_limit?: number | null;
 }
 export interface Subject { id: string; name: string; slug: string; icon: string | null; sort: number }
 export interface Book { id: string; subject_id: string; name: string; sort: number }

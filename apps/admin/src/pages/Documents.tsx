@@ -182,7 +182,7 @@ export default function Documents() {
                     <div className="small dim">{DOCUMENT_KIND_LABELS[doc.kind]}{doc.teacher_id ? ` · ${d.teachers.find((t) => t.id === doc.teacher_id)?.name ?? ''}` : ''}</div>
                   </td>
                   <td>{chapterLabel(doc.chapter_id)}</td>
-                  <td className="num small">{doc.size_bytes ? `${(doc.size_bytes / 1048576).toFixed(1)} MB` : '—'}{doc.pages ? ` · ${doc.pages} ص` : ''}</td>
+                  <td className="small" style={{ whiteSpace: 'nowrap' }}>{doc.size_bytes ? <bdi>{(doc.size_bytes / 1048576).toLocaleString('ar-IQ', { maximumFractionDigits: 1 })} ميغا</bdi> : '—'}{doc.pages ? <> · <bdi>{doc.pages.toLocaleString('ar-IQ')} صفحة</bdi></> : null}</td>
                   <td>
                     {ingesting[doc.id] ? <span className="pill accent">{ingesting[doc.id]}</span>
                       : doc.queued_at ? (() => {

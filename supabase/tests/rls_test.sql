@@ -276,4 +276,28 @@ do $$ begin
 end $$;
 reset role;
 
+-- ٢٤) حصة المساعد الخاصة بالطالب ومسح الدردشات
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000b');
+do $$ begin
+  update public.profiles set ai_daily_limit = 500 where id = '00000000-0000-0000-0000-00000000000b';
+  assert (select ai_daily_limit from public.profiles where id = '00000000-0000-0000-0000-00000000000b') is null, 'طالب رفع حصته بنفسه!';
+  begin
+    perform public.admin_clear_chats(null);
+    raise exception 'طالب مسح الدردشات!';
+  exception when raise_exception then
+    if sqlerrm = 'طالب مسح الدردشات!' then raise; end if;
+  end;
+end $$;
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000a');
+do $$ begin
+  update public.profiles set ai_daily_limit = 40 where id = '00000000-0000-0000-0000-00000000000b';
+  assert (select ai_daily_limit from public.profiles where id = '00000000-0000-0000-0000-00000000000b') = 40, 'الأدمن لا يغيّر حصة الطالب';
+  perform public.admin_clear_chats(null);
+  assert (select count(*) from public.messages) = 0, 'بقيت رسائل بعد المسح';
+  assert (select count(*) from public.conversations where type = 'direct') = 0, 'بقيت محادثات خاصة';
+  assert (select count(*) from public.conversations where type = 'section') > 0, 'حُذفت محادثات الشعب';
+end $$;
+reset role;
+
 select 'ALL RLS TESTS PASSED' as result;

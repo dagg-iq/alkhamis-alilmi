@@ -64,6 +64,7 @@ erDiagram
 | status | enum `pending` `approved` `rejected` `banned` | يغيّره الأدمن فقط |
 | is_verified | bool | **شارة التوثيق** |
 | bio | text | اختياري |
+| ai_daily_limit | int | حد أسئلة المساعد اليومي الخاص بالطالب (فارغ = الحد العام). الأدمن فقط (migration ٢٤) |
 | created_at, last_seen_at | timestamptz | |
 
 > مسار التسجيل: دخول Google ← شاشة إكمال البيانات ← `status = pending` ← شاشة «بانتظار الموافقة» ← الأدمن يوافق ← إشعار للطالب.
@@ -286,14 +287,17 @@ erDiagram
 ## ٧. المساعد الذكي
 
 ### `ai_chats` / `ai_messages`
-| ai_chats: id, user_id, title, created_at |
+| ai_chats: id, user_id, title, subject_id, plan jsonb (خطة الشرح المقسّم: title, documentId, docTitle, parts[{from,to}], next, ids[]), created_at |
 |---|
 | ai_messages: id, chat_id, role (`user`/`assistant`), content, sources jsonb, created_at |
 
 ### `ai_usage`
 | user_id, day | PK |
 |---|---|
-| count | int — يُقارن بـ `app_settings.ai.daily_limit` |
+| count | int — يُقارن بـ `profiles.ai_daily_limit` أو `app_settings.ai.daily_limit` |
+
+> `app_settings.ai_scope` = `{subject_id: نص}` حدود المقرر لكل مادة (الداخل في الامتحان وما هو للاطلاع) يلتزم بها المساعد.
+> `admin_clear_chats(p_conversation uuid default null)`: مسح الدردشات للأدمن (محادثة واحدة أو الكل؛ الخاصة تُحذف، المدرسة والشعب والمجموعات تبقى بلا رسائل).
 
 ### `content_chunks` — المنهج مقطّعاً للبحث (pgvector)
 | العمود | النوع |

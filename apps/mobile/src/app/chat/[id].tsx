@@ -1,6 +1,7 @@
 import { PERIOD_LABELS, arDigits, countOf, formatTime, ROLE_LABELS, type Attachment, type Message, type Profile } from '@saey/shared';
 import * as Clipboard from 'expo-clipboard';
 import { Image } from 'expo-image';
+import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -251,6 +252,24 @@ export default function ChatScreen() {
     }
   };
 
+  // ملف PDF من الهاتف (حتى ٢٥ ميغا)
+  const sendPdf = async () => {
+    setAttachOpen(false);
+    const res = await DocumentPicker.getDocumentAsync({ type: 'application/pdf', copyToCacheDirectory: true });
+    if (res.canceled || !res.assets?.[0]) return;
+    const f = res.assets[0];
+    if ((f.size ?? 0) > 25 * 1048576) return Alert.alert('الملف كبير', 'أقصى حجم لملف PDF في الدردشة ٢٥ ميغا.');
+    setSending(true);
+    try {
+      const key = await uploadFile(f.uri, 'chat', 'application/pdf', id);
+      await send({ type: 'file', key, title: (f.name || 'ملف').replace(/\.pdf$/i, ''), size: f.size ?? undefined });
+    } catch (e) {
+      Alert.alert('تعذّر إرسال الملف', e instanceof Error ? e.message : '');
+    } finally {
+      setSending(false);
+    }
+  };
+
   const react = async (m: Message, emoji: string) => {
     setActionFor(null);
     const mine = reactions.find((r) => r.message_id === m.id && r.user_id === me.id && r.emoji === emoji);
@@ -412,6 +431,7 @@ export default function ChatScreen() {
       <Sheet visible={attachOpen} onClose={() => setAttachOpen(false)}>
         <SheetItem icon="camera" label="الكاميرا" onPress={() => sendImage(true)} />
         <SheetItem icon="image" label="صورة من المعرض" onPress={() => sendImage(false)} />
+        <SheetItem icon="file" label="ملف PDF" onPress={sendPdf} />
         <SheetItem icon="book" label="من المنهج (محاضرة، ملزمة، أسئلة)" onPress={() => { setAttachOpen(false); setCurriculumOpen(true); }} />
         <SheetItem icon="sparkles" label={text.trim() ? 'اسأل مساعد سعي عمّا كتبته' : 'اسأل مساعد سعي'} onPress={() => {
           setAttachOpen(false);

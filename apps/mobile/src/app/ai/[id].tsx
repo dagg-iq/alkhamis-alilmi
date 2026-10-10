@@ -1,6 +1,10 @@
 import type { AiSource, Subject } from '@saey/shared';
 import { analyzeGrades, arDigits, studentBrief } from '@saey/shared';
 import * as Clipboard from 'expo-clipboard';
+import * as DocumentPicker from 'expo-document-picker';
+import { File } from 'expo-file-system';
+import { Image } from 'expo-image';
+import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, ScrollView, TextInput, View, useWindowDimensions } from 'react-native';
@@ -9,9 +13,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardView, PressScale, tap } from '@/components/motion';
 import { Icon, LogoMark, type IconName } from '@/components/icon';
 import { ConversationPicker } from '@/components/conversation-picker';
+import { Sheet, SheetItem } from '@/components/sheet';
 import { RichText, clock } from '@/components/rich-text';
 import { Chip, IconButton, Row, T, MAX_WIDTH } from '@/components/ui';
+import { chatTitle } from '@/lib/ai-title';
 import { useMe } from '@/lib/auth';
+import { compressImage } from '@/lib/files';
 import { conversationTitle } from '@/lib/chat';
 import { openDocumentAt } from '@/lib/outline';
 import { markdownPdf, sendAttachment } from '@/lib/pdf';
@@ -21,14 +28,30 @@ import { useGradingRules } from '@/lib/settings';
 import { callFunction, supabase } from '@/lib/supabase';
 import { fonts, useTheme } from '@/lib/theme';
 
-interface Msg { id: string; role: 'user' | 'assistant'; content: string; sources?: AiSource[] | null; error?: boolean }
+interface Msg { id: string; role: 'user' | 'assistant'; content: string; sources?: AiSource[] | null; error?: boolean; files?: Pending[] }
+/** مرفق ينتظر الإرسال مع السؤال (صورة مضغوطة أو PDF) */
+interface Pending { uri: string; mime: string; name: string; size?: number }
+/** خطة شرح فصل طويل على أقسام (من الخادم) */
+interface Plan { title: string; docTitle: string; parts: { from: number; to: number }[]; next: number; ids: string[]; done?: boolean }
+const MAX_PDF = 8 * 1048576;
 
 /** طلبات جاهزة — تُكمل بالمادة المختارة */
+// تُكتب في صندوق النص (لا تُرسل مباشرة) حتى يكمّلها الطالب: رقم الفصل أو اسم الموضوع
 const QUICK: { icon: IconName; label: string; prompt: (subject: string) => string }[] = [
-  { icon: 'quiz', label: 'اعمل لي أسئلة', prompt: (s) => `اعمل لي ١٠ أسئلة امتحانية متنوعة${s ? ` في ${s}` : ''} مع الإجابات النموذجية في النهاية.` },
-  { icon: 'list', label: 'لخّص لي', prompt: (s) => `لخّص لي أهم نقاط${s ? ` ${s}` : ' الفصل الذي أدرسه'} بشكل ملزمة مركزة: التعاريف والقوانين والتعليلات.` },
-  { icon: 'sparkle', label: 'اشرح بمثال', prompt: (s) => `اشرح لي${s ? ` أصعب موضوع في ${s}` : ' '} بمثال محلول خطوة بخطوة.` },
+  { icon: 'book', label: 'اشرح فصلاً كاملاً', prompt: (s) => `اشرح لي الفصل ${s ? `… من ${s}` : '… من مادة …'} كاملاً بالتفصيل` },
+  { icon: 'quiz', label: 'أسئلة امتحانية', prompt: (s) => `اعمل لي ١٠ أسئلة وزارية متنوعة${s ? ` في ${s}` : ''} عن … مع الإجابات النموذجية` },
+  { icon: 'list', label: 'لخّص لي', prompt: (s) => `لخّص لي ${s ? `الفصل … من ${s}` : '…'} بشكل ملزمة مركزة: التعاريف والقوانين والتعليلات` },
+  { icon: 'sparkle', label: 'حل مسألة', prompt: (s) => `حل لي هذه المسألة${s ? ` في ${s}` : ''} خطوة بخطوة: …` },
+  { icon: 'check', label: 'الداخل في الامتحان', prompt: (s) => `ما المطلوب للامتحان وما هو للاطلاع في ${s ? `${s} — ` : ''}…؟` },
   { icon: 'target', label: 'انصحني حسب درجاتي', prompt: () => 'شوف درجاتي وهدفي، وقل لي بصراحة وضعي، وأي مادة أركز عليها هذا الأسبوع، واعمل لي خطة دراسة قصيرة.' },
+];
+/** بعد أول جواب: متابعة على نفس الموضوع */
+const FOLLOW: { label: string; prompt: string }[] = [
+  { label: 'وضّح أكثر', prompt: 'وضّح لي هذا أكثر بمثال أبسط' },
+  { label: 'مثال محلول', prompt: 'أعطني مثالاً محلولاً خطوة بخطوة على هذا' },
+  { label: 'أسئلة على هذا', prompt: 'اعمل لي ٥ أسئلة امتحانية على هذا مع الإجابات' },
+  { label: 'لخّص الجواب', prompt: 'لخّص لي هذا الجواب في نقاط قصيرة للحفظ' },
+  { label: 'الداخل في الامتحان', prompt: 'ما المطلوب للامتحان من هذا وما هو للاطلاع؟' },
 ];
 
 /** طلبات جاهزة عند السؤال من داخل ملزمة/كتاب (الصفحة أو الفصل الحالي) */
@@ -57,7 +80,38 @@ export default function AiChat() {
     params.doc ? { documentId: params.doc, page: params.docPage ? Number(params.docPage) : undefined, from: params.from ? Number(params.from) : undefined, to: params.to ? Number(params.to) : undefined, title: params.docTitle } : null);
   const [thinking, setThinking] = useState(false);
   const [remaining, setRemaining] = useState<number | null>(null);
+  const [files, setFiles] = useState<Pending[]>([]);
+  const [attachOpen, setAttachOpen] = useState(false);
+  const [plan, setPlan] = useState<Plan | null>(null);
   const listRef = useRef<FlatList<Msg>>(null);
+  const inputRef = useRef<TextInput>(null);
+  // الاقتراح يُكتب في الصندوق ليكمله الطالب، والمؤشر عند «…» إن وُجدت
+  const suggest = (p: string) => { setText(p); tap('light'); setTimeout(() => inputRef.current?.focus(), 50); };
+
+  const pickImage = async (camera: boolean) => {
+    setAttachOpen(false);
+    const opts: ImagePicker.ImagePickerOptions = { mediaTypes: ['images'], quality: 0.9, allowsMultipleSelection: !camera, selectionLimit: 4 };
+    const res = camera ? await ImagePicker.launchCameraAsync(opts) : await ImagePicker.launchImageLibraryAsync(opts);
+    if (res.canceled) return;
+    try {
+      const out: Pending[] = [];
+      for (const a of res.assets.slice(0, 4)) {
+        const img = await compressImage(a.uri);
+        out.push({ uri: img.uri, mime: 'image/jpeg', name: 'صورة' });
+      }
+      setFiles((f) => [...f, ...out].slice(0, 4));
+    } catch (e) {
+      Alert.alert('تعذّر تجهيز الصورة', e instanceof Error ? e.message : '');
+    }
+  };
+  const pickPdf = async () => {
+    setAttachOpen(false);
+    const res = await DocumentPicker.getDocumentAsync({ type: 'application/pdf', copyToCacheDirectory: true });
+    if (res.canceled || !res.assets?.[0]) return;
+    const f = res.assets[0];
+    if ((f.size ?? 0) > MAX_PDF) return Alert.alert('الملف كبير', 'أقصى حجم لملف PDF مع السؤال ٨ ميغا. أرسل الصفحات المهمة فقط (أو صوّرها).');
+    setFiles((list) => [...list, { uri: f.uri, mime: 'application/pdf', name: f.name || 'ملف PDF', size: f.size ?? undefined }].slice(0, 4));
+  };
 
   useEffect(() => {
     loadSubjects().then(setSubjects).catch(() => {});
@@ -66,6 +120,10 @@ export default function AiChat() {
       brief.current = studentBrief(analyzeGrades(subs, grades, goal ?? 'general', rules));
     }).catch(() => {});
     if (chatId) {
+      supabase.from('ai_chats').select('plan').eq('id', chatId).maybeSingle().then(({ data }) => {
+        const p = data?.plan as Plan | null | undefined;
+        if (p?.parts?.length) setPlan({ ...p, done: p.next >= p.parts.length });
+      });
       supabase.from('ai_messages').select('id, role, content, sources, created_at').eq('chat_id', chatId).order('created_at')
         .then(({ data }) => {
           // السؤال قبل جوابه حتى لو حُفظا بنفس الوقت (رسائل قديمة)
@@ -79,16 +137,21 @@ export default function AiChat() {
 
   const ask = async (preset?: string) => {
     const question = (preset ?? text).trim();
-    if (!question || thinking) return;
+    const sending = preset ? [] : files;
+    if ((!question && !sending.length) || thinking) return;
     setText('');
-    setMessages((m) => [...m, { id: `u${Date.now()}`, role: 'user', content: question }]);
+    setFiles([]);
+    setMessages((m) => [...m, { id: `u${Date.now()}`, role: 'user', content: question || 'اشرح لي ما في المرفق', files: sending }]);
     setThinking(true);
     try {
-      const res = await callFunction<{ chatId: string; answer: string; messageId: string | null; sources: AiSource[]; remaining?: number | null }>('ai-chat', {
+      const attachments = await Promise.all(sending.map(async (f) => ({ mime: f.mime, name: f.name, data: await new File(f.uri).base64() })));
+      const res = await callFunction<{ chatId: string; answer: string; messageId: string | null; sources: AiSource[]; remaining?: number | null; plan?: Plan | null }>('ai-chat', {
         chatId, message: question, subjectId, brief: brief.current,
+        ...(attachments.length ? { attachments } : {}),
         ...(docCtx ? { context: { documentId: docCtx.documentId, page: docCtx.page, from: docCtx.from, to: docCtx.to } } : {}),
       });
       setChatId(res.chatId);
+      if (res.plan) setPlan(res.plan);
       if (res.remaining !== undefined) setRemaining(res.remaining);
       setMessages((m) => [...m, { id: res.messageId ?? `a${Date.now()}`, role: 'assistant', content: res.answer, sources: res.sources }]);
     } catch (e) {
@@ -101,10 +164,37 @@ export default function AiChat() {
 
   const subjectName = subjects.find((x) => x.id === subjectId)?.name ?? '';
 
+  // عنوان PDF مرتب: «شرح: قانون كولوم»، «أسئلة: الفيزياء»… بدل نص السؤال كما هو
   const titleFor = (m: Msg) => {
     const i = messages.indexOf(m);
     const question = i > 0 ? messages[i - 1] : null;
-    return question?.role === 'user' ? (question.content.length > 70 ? `${question.content.slice(0, 70)}…` : question.content) : 'مساعد سعي';
+    if (plan?.ids.includes(m.id)) return `شرح ${plan.title} — القسم ${arDigits(plan.ids.indexOf(m.id) + 1)}`;
+    const base = question?.role === 'user' ? chatTitle(question.content.replace(/\n\n\(مرفقات:[^)]*\)$/, '')) : 'مساعد سعي';
+    return subjectName && !base.includes(subjectName.replace(/^ال/, '')) ? `${base} — ${shortSubject(subjectName)}` : base;
+  };
+
+  // كل أقسام الشرح المقسّم في ملف PDF واحد مرتب
+  const [seriesBusy, setSeriesBusy] = useState(false);
+  const seriesPdf = async () => {
+    if (!plan || seriesBusy) return;
+    setSeriesBusy(true);
+    try {
+      let byId = new Map(messages.map((x) => [x.id, x.content]));
+      if (plan.ids.some((id) => !byId.has(id))) {
+        const { data } = await supabase.from('ai_messages').select('id, content').in('id', plan.ids);
+        byId = new Map([...byId, ...((data ?? []) as { id: string; content: string }[]).map((r) => [r.id, r.content] as [string, string])]);
+      }
+      // نحذف جمل «اكتب أكمل» و«سأقسم لك» فيبقى الشرح متصلاً
+      const clean = (t: string) => t.split('\n').filter((l) => !/اكتب\s*«?\s*أكمل|سأشرحه لك على|سأقسم|انتهى القسم|اكتمل شرح الفصل/.test(l)).join('\n').trim();
+      const body = plan.ids.map((id) => clean(byId.get(id) ?? '')).filter(Boolean).join('\n\n---\n\n');
+      const title = `شرح ${plan.title}`;
+      const f = await markdownPdf(`> **${plan.docTitle}** — ${arDigits(plan.ids.length)} أقسام (الصفحات ${arDigits(plan.parts[0].from)}–${arDigits(plan.parts[plan.parts.length - 1].to)})\n\n${body}`, title, `${me.full_name ? `${me.full_name} · ` : ''}مساعد سعي`);
+      router.push({ pathname: '/pdf', params: { uri: f.uri, title } });
+    } catch (e) {
+      Alert.alert('تعذّر إنشاء PDF', e instanceof Error ? e.message : '');
+    } finally {
+      setSeriesBusy(false);
+    }
   };
 
   // تحويل الإجابة إلى PDF: يظهر في المحادثة كمرفق من المساعد «تم التحويل إلى PDF»، ويُفتح داخل التطبيق
@@ -190,7 +280,7 @@ export default function AiChat() {
             </View>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
               {(docCtx ? DOC_QUICK.map((q) => ({ ...q, prompt: () => q.prompt(!!docCtx.from) })) : QUICK).map((q) => (
-                <PressScale key={q.label} onPress={() => ask(q.prompt(subjectName))} haptic accessibilityRole="button"
+                <PressScale key={q.label} onPress={() => suggest(q.prompt(subjectName))} haptic accessibilityRole="button"
                   style={{ flexGrow: 1, flexBasis: '45%', backgroundColor: c.card, borderRadius: 18, borderWidth: 1, borderColor: c.line, padding: 14, gap: 8 }}>
                   <View style={{ width: 36, height: 36, borderRadius: 12, backgroundColor: c.soft, alignItems: 'center', justifyContent: 'center' }}>
                     <Icon name={q.icon} size={20} color={c.accent} />
@@ -202,7 +292,14 @@ export default function AiChat() {
           </View>
         }
         renderItem={({ item }) => item.role === 'user' ? (
-          <View style={{ alignSelf: 'flex-start', maxWidth: '85%', backgroundColor: c.ink, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 10 }}>
+          <View style={{ alignSelf: 'flex-start', maxWidth: '85%', backgroundColor: c.ink, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 10, gap: 8 }}>
+            {item.files?.length ? (
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                {item.files.map((f, i) => f.mime.startsWith('image/')
+                  ? <Image key={i} source={{ uri: f.uri }} style={{ width: 84, height: 84, borderRadius: 12 }} contentFit="cover" />
+                  : <Row key={i} gap={6} style={{ paddingHorizontal: 10, height: 34, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.14)' }}><Icon name="file" size={14} color={c.bg} /><T size={12} color={c.bg} lines={1}>{f.name}</T></Row>)}
+              </View>
+            ) : null}
             <T color={c.bg} selectable>{item.content}</T>
           </View>
         ) : (
@@ -218,6 +315,17 @@ export default function AiChat() {
                 <AnswerAction icon="share" label="مشاركة" onPress={() => setSharing(item)} />
                 <AnswerAction icon="copy" label="نسخ" onPress={() => { Clipboard.setStringAsync(item.content); tap('success'); }} />
               </Row>
+            ) : null}
+            {plan?.done && item.id === plan.ids[plan.ids.length - 1] ? (
+              <PressScale onPress={seriesPdf} disabled={seriesBusy} accessibilityRole="button" accessibilityLabel="تحميل الشرح الكامل PDF"
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, borderRadius: 18, backgroundColor: c.accent }}>
+                {seriesBusy ? <ActivityIndicator color={c.accentInk} /> : <Icon name="file" size={24} color={c.accentInk} />}
+                <View style={{ flex: 1 }}>
+                  <T weight="bold" color={c.accentInk}>الشرح الكامل في ملف PDF واحد</T>
+                  <T size={12} color={c.accentInk}>{plan.title} · {arDigits(plan.ids.length)} أقسام مدموجة بترتيبها</T>
+                </View>
+                <Icon name="forward" size={16} color={c.accentInk} />
+              </PressScale>
             ) : null}
             {item.sources?.length ? (
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
@@ -246,11 +354,20 @@ export default function AiChat() {
         ) : null}
       />
 
+      {plan && !plan.done && !thinking ? (
+        <Row gap={10} style={{ backgroundColor: c.soft, paddingVertical: 8, paddingHorizontal: Math.max(12, (width - MAX_WIDTH) / 2), borderTopWidth: 1, borderTopColor: c.line }}>
+          <View style={{ flex: 1 }}>
+            <T size={12} weight="bold" color={c.softInk} lines={1}>شرح {plan.title}: انتهى {arDigits(plan.next)} من {arDigits(plan.parts.length)} أقسام</T>
+            <T size={11} color={c.softInk}>التالي: الصفحات {arDigits(plan.parts[plan.next].from)}–{arDigits(plan.parts[plan.next].to)}</T>
+          </View>
+          <Chip small label="أكمل القسم التالي" active onPress={() => ask('أكمل')} />
+        </Row>
+      ) : null}
       {messages.length && !thinking ? (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled"
           style={{ flexGrow: 0, flexShrink: 0, height: 46, backgroundColor: c.card, borderTopWidth: 1, borderTopColor: c.line }}
           contentContainerStyle={{ gap: 6, paddingHorizontal: 12, alignItems: 'center', paddingTop: 6 }}>
-          {(docCtx ? DOC_QUICK.map((q) => ({ ...q, prompt: () => q.prompt(!!docCtx.from) })) : QUICK).map((q) => <Chip small key={q.label} label={q.label} onPress={() => ask(q.prompt(subjectName))} />)}
+          {(docCtx ? DOC_QUICK.map((q) => ({ label: q.label, prompt: q.prompt(!!docCtx.from) })) : FOLLOW).map((q) => <Chip small key={q.label} label={q.label} onPress={() => suggest(q.prompt)} />)}
         </ScrollView>
       ) : null}
       {docCtx ? (
@@ -262,8 +379,32 @@ export default function AiChat() {
           <Pressable onPress={() => setDocCtx(null)} accessibilityLabel="إلغاء ربط السؤال بالملزمة" hitSlop={8}><Icon name="close" size={16} color={c.softInk} /></Pressable>
         </Row>
       ) : null}
+      {files.length ? (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0, backgroundColor: c.card }}
+          contentContainerStyle={{ gap: 8, paddingHorizontal: Math.max(12, (width - MAX_WIDTH) / 2), paddingTop: 8 }}>
+          {files.map((f, i) => (
+            <View key={`${f.uri}-${i}`}>
+              {f.mime.startsWith('image/')
+                ? <Image source={{ uri: f.uri }} style={{ width: 60, height: 60, borderRadius: 12 }} contentFit="cover" />
+                : <View style={{ width: 130, height: 60, borderRadius: 12, backgroundColor: c.soft, alignItems: 'center', justifyContent: 'center', padding: 6, gap: 2 }}>
+                    <Icon name="file" size={18} color={c.accent} />
+                    <T size={11} lines={1} color={c.softInk}>{f.name}</T>
+                  </View>}
+              <Pressable onPress={() => setFiles(files.filter((_, j) => j !== i))} accessibilityLabel="إزالة المرفق" hitSlop={6}
+                style={{ position: 'absolute', top: -6, left: -6, width: 22, height: 22, borderRadius: 11, backgroundColor: c.ink, alignItems: 'center', justifyContent: 'center' }}>
+                <Icon name="close" size={12} color={c.bg} strokeWidth={2.4} />
+              </Pressable>
+            </View>
+          ))}
+        </ScrollView>
+      ) : null}
       <Row gap={8} style={{ backgroundColor: c.card, paddingTop: 10, paddingBottom: insets.bottom + 10, borderTopWidth: messages.length && !thinking ? 0 : 1, borderTopColor: c.line, alignItems: 'flex-end', paddingHorizontal: Math.max(12, (width - MAX_WIDTH) / 2) }}>
+        <Pressable onPress={() => setAttachOpen(true)} disabled={thinking} accessibilityLabel="إرفاق صورة أو ملف"
+          style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: c.bg, alignItems: 'center', justifyContent: 'center' }}>
+          <Icon name="paperclip" size={22} color={c.ink2} />
+        </Pressable>
         <TextInput
+          ref={inputRef}
           value={text}
           onChangeText={setText}
           placeholder="اكتب سؤالك…"
@@ -271,11 +412,16 @@ export default function AiChat() {
           multiline
           style={{ flex: 1, minHeight: 44, maxHeight: 160, borderRadius: 22, backgroundColor: c.bg, paddingHorizontal: 16, paddingVertical: 10, fontFamily: fonts.regular, fontSize: 16, color: c.ink, writingDirection: 'rtl' }}
         />
-        <Pressable onPress={() => ask()} disabled={thinking || !text.trim()} accessibilityLabel="إرسال"
-          style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: text.trim() && !thinking ? c.accent : c.line, alignItems: 'center', justifyContent: 'center' }}>
-          <Icon name="send" size={20} color={text.trim() && !thinking ? c.accentInk : c.ink3} strokeWidth={2} />
+        <Pressable onPress={() => ask()} disabled={thinking || (!text.trim() && !files.length)} accessibilityLabel="إرسال"
+          style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: (text.trim() || files.length) && !thinking ? c.accent : c.line, alignItems: 'center', justifyContent: 'center' }}>
+          <Icon name="send" size={20} color={(text.trim() || files.length) && !thinking ? c.accentInk : c.ink3} strokeWidth={2} />
         </Pressable>
       </Row>
+      <Sheet visible={attachOpen} onClose={() => setAttachOpen(false)}>
+        <SheetItem icon="camera" label="تصوير (سؤال، صفحة، حلّك)" onPress={() => pickImage(true)} />
+        <SheetItem icon="image" label="صور من المعرض (حتى ٤)" onPress={() => pickImage(false)} />
+        <SheetItem icon="file" label="ملف PDF (حتى ٨ ميغا)" onPress={pickPdf} />
+      </Sheet>
       <ConversationPicker visible={!!sharing} onClose={() => setSharing(null)} title="مشاركة الإجابة مع"
         onPick={async (conv) => {
           if (!sharing) return;

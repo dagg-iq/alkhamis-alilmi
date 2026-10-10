@@ -1,9 +1,10 @@
 // المساعد الذكي: يجيب من المنهج (RAG) ويذكر المصدر، ويعرف فهرس التطبيق (المحاضرات والملازم والأسئلة)، مع حد يومي لكل طالب
 import { handler, HttpError, json } from '../_shared/cors.ts';
 import { admin, getCaller, getSetting } from '../_shared/supabase.ts';
-import { type Content, generate, GeminiQuotaError, LITE_MODELS, modelChain } from '../_shared/gemini.ts';
+import { type Content, generate, GeminiQuotaError, LITE_MODELS, modelChain, type Part } from '../_shared/gemini.ts';
 import { parseChapterRef, parsePageRef } from '../_shared/outline.ts';
-import { retrieveItems, type ViewerContext } from './retrieve.ts';
+import { type RangeInfo, retrieveItems, type ViewerContext } from './retrieve.ts';
+import { chatTitle } from './title.ts';
 
 interface AiSettings { daily_limit?: number; model?: string; lite_model?: string; enabled?: boolean; thinking_hard?: Level; thinking_explain?: Level }
 type Level = 'minimal' | 'low' | 'medium' | 'high'
@@ -42,6 +43,17 @@ const SYSTEM = `أنت «سعي AI»، مدرّس خصوصي ذكي داخل ت�
 عن التطبيق:
 - «سعي» من تطوير **محمد حازم احمد**، طالب في الخامس العلمي بإعدادية الشهاب للبنين، صممه ليجمع لزملائه كل ما يحتاجونه للدراسة والإعفاء. إذا سُئلت عن صانع التطبيق أو كيف يتواصل مع المطور أو يقترح فكرة أو يبلّغ عن خطأ: اكتب جملة قصيرة ثم ضع الرمز التالي في سطر مستقل ليظهر للطالب بطاقة التواصل:
 [[developer]]
+
+حدود المطلوب في الامتحان (صارم ومهم جداً):
+- فرّق دائماً بين ما هو **مطلوب للامتحان** وما هو **للاطلاع** أو **محذوف**. مصادرك بالترتيب: «ملاحظات المقرر» التي يضعها الأدمن إن أُرفقت (هي المرجع الأعلى)، ثم ما يكتبه الكتاب أو الملزمة نفسها في المقتطفات (مثل «للحفظ ٨ أبيات»، «للاطلاع»، «إثراء»، «لا يدخل في الامتحان»، «محذوف»)، ثم معرفتك المؤكدة بمنهج الخامس العلمي العراقي.
+- الشعر (العربية): إذا كان المطلوب حفظ عدد محدد من الأبيات (مثلاً ٨) فاكتب الأبيات المطلوبة فقط تحت عنوان «المطلوب حفظه (٨ أبيات)» بالترتيب، ثم الباقي تحت «للاطلاع فقط» أو نبّه أنه للاطلاع. **معاني المفردات وشرح الأبيات ضمن حدود الأبيات المطلوبة فقط**: كل مفردة تشرحها يجب أن تكون من بيت داخل في المطلوب، وآخر مفردة في المعاني تكون من آخر بيت مطلوب؛ مفردات الأبيات الأخرى لا تُشرح إلا تحت «للاطلاع».
+- الإسلامية: الآيات المقررة للحفظ بحدودها (من الآية كذا إلى الآية كذا)، والمفردات والمعاني والتفسير ضمن تلك الآيات فقط، وما زاد عليها تنبّه أنه للاطلاع. ومثلها الأحاديث المقررة.
+- بقية المواد: نبّه على الموضوع أو الفقرة أو الاشتقاق أو المثال المكتوب عليه «للاطلاع» أو «إثراء» أو المحذوف بعبارة قصيرة مثل «(للاطلاع — لا يدخل في الامتحان)»، ولا تبنِ عليه أسئلة امتحانية.
+- كن متوازناً: الأصل أن محتوى الكتاب مطلوب، فلا تكتب «للاطلاع» إلا بدليل (ملاحظات المقرر أو نص الكتاب أو معرفة مؤكدة). إن لم تتأكد من حدود المطلوب فقل ذلك بجملة قصيرة وانصحه بالتأكد من أستاذه، ولا تخترع حدوداً.
+- عند صنع أسئلة امتحانية: من المطلوب فقط، لا من «للاطلاع» أو المحذوف.
+
+المرفقات:
+- إذا أرفق الطالب صورة أو ملف PDF (ورقة أسئلة، صفحة كتاب، حل كتبه بيده…) فاقرأه بدقة وأجب عنه مباشرة: حل الأسئلة بالترتيب، أو صحح حله وبيّن أخطاءه، أو اشرح ما فيه. إن كانت الصورة غير واضحة فقل ما الذي لم تستطع قراءته.
 
 الكتب والملازم والصفحات (مهم جداً):
 - كل مقتطف يحمل بين قوسين: اسم الكتاب أو الملزمة، ورقم الصفحة، والفصل والموضوع. اذكرها في جوابك بدقة هكذا: «(ملزمة X، صفحة ٥٢، الفصل الثاني: ...)». لا تذكر صفحة أو فصلاً لم يرد في المقتطفات، ولا تخمّن رقماً.
@@ -86,6 +98,17 @@ const WANTS_CONTENT_STRICT = /محاضر|فيديو|ملزم|ملازم|ملف|p
 // مستوى التفكير حسب صعوبة الطلب: توليد أسئلة وحل مسائل ← تفكير عميق، الشرح والمقارنة ← متوسط، الباقي سريع
 const HARD = /اسئل|أسئل|سؤال.*(امتحان|وزاري)|امتحان|اختبار|مسأل|مسائل|مسئل|احسب|برهن|اثبت|أثبت|استنتج|استخرج|حل\s/;
 const EXPLAIN = /اشرح|شرح|وضح|فسر|علل|قارن|لماذا|لخص|ملخص|الفرق بين/;
+// «أكمل» في شرح مقسّم ← القسم التالي
+// (\b لا يعمل مع الحروف العربية في JS، فالحد بعد الكلمة: ليس حرفاً عربياً)
+export const CONTINUE = /^\s*(?:يلا\s*|طيب\s*|تمام\s*)?(?:(?:ا|أ)?(?:كمل|كمّل|كملي|كمللي)|التالي|القسم التالي|استمر|تابع|واصل|بعده)(?![\u0621-\u064A])/;
+// فصل أطول من هذا (صفحات) يُشرح على أقسام، كل قسم حتى ٧ صفحات
+const PART_PAGES = 7;
+// طلب شرح كامل (لا تلخيص ولا أسئلة)
+const WHOLE = /(اشرح|شرح|وضح|فسر)/;
+const NOT_WHOLE = /لخص|لخّص|ملخص|اسئل|أسئل|امتحان|اختبار/;
+interface Plan { title: string; documentId: string; docTitle: string; parts: { from: number; to: number }[]; next: number; ids: string[] }
+const MAX_ATTACH_B64 = 14 * 1024 * 1024; // ~١٠ ميغا من الملفات
+const ATTACH_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
 const CACHE_DAYS = 30;
 // رقم نسخة الكاش: نرفعه عند تغيير التعليمات حتى لا تعود أجوبة قديمة (مثل «أنا من جوجل»)
 const CACHE_V = 'v2';
@@ -210,6 +233,20 @@ async function historyOf(chat: string, limit: number): Promise<Content[]> {
   return out;
 }
 
+/** ملاحظات الأدمن عن حدود المقرر (الداخل وغير الداخل) للمادة المعنية بالسؤال */
+async function scopeNotes(subjectId: string | null, text: string, sources: Source[]): Promise<string> {
+  const notes = await getSetting<Record<string, string>>('ai_scope');
+  const ids = Object.keys(notes ?? {}).filter((k) => String(notes[k] ?? '').trim());
+  if (!ids.length) return '';
+  const { data: subs } = await admin.from('subjects').select('id, name').in('id', ids);
+  const list = (subs ?? []) as { id: string; name: string }[];
+  const named = new Set(sources.map((s) => s.subject).filter(Boolean));
+  const pick = list.filter((s) => s.id === subjectId || named.has(s.name) || SUBJECT_WORDS.some(([re, w]) => re.test(text) && s.name.includes(w)));
+  const use = pick.length ? pick : subjectId ? [] : list;
+  const body = use.map((s) => `${s.name}:\n${String(notes[s.id]).trim().slice(0, 3000)}`).join('\n\n');
+  return body ? `ملاحظات المقرر من الأدمن (المرجع الأعلى لما هو داخل في الامتحان وما هو للاطلاع أو محذوف):\n${body.slice(0, 8000)}` : '';
+}
+
 Deno.serve(handler(async (req) => {
   const caller = await getCaller(req);
   const body = await req.json();
@@ -230,20 +267,27 @@ Deno.serve(handler(async (req) => {
     return json({ id: row.id });
   }
 
-  const text = String(message ?? '').trim();
+  // مرفقات (صور أو PDF) مع السؤال: تُرسل للنموذج مباشرة ولا تُخزن
+  const rawAtt = Array.isArray(body.attachments) ? body.attachments.slice(0, 4) : [];
+  const attachments = rawAtt.filter((a: { mime?: unknown; data?: unknown }) => typeof a?.data === 'string' && ATTACH_TYPES.includes(String(a?.mime)))
+    .map((a: { mime: string; data: string; name?: unknown }) => ({ mime: a.mime, data: a.data, name: String(a.name ?? '').slice(0, 80) }));
+  if (attachments.reduce((n: number, a: { data: string }) => n + a.data.length, 0) > MAX_ATTACH_B64) throw new HttpError(413, 'المرفقات كبيرة جداً (الحد ١٠ ميغا تقريباً). أرسل صفحات أقل.');
+  const text = String(message ?? '').trim() || (attachments.length ? 'اشرح لي ما في المرفق وأجب عن أسئلته إن وُجدت.' : '');
   if (!text) throw new HttpError(400, 'اكتب سؤالك أولاً.');
   if (text.length > 4000) throw new HttpError(400, 'السؤال طويل جداً، اختصره قليلاً.');
 
   const settings = await getSetting<AiSettings>('ai');
   if (settings.enabled === false) throw new HttpError(503, 'المساعد الذكي متوقف مؤقتاً من قبل الأدمن.');
-  const limit = settings.daily_limit ?? 20;
+  // حصة الطالب الخاصة (من لوحة التحكم ← الطلاب) وإلا الحد العام
+  const { data: mine } = await admin.from('profiles').select('ai_daily_limit').eq('id', caller.id).maybeSingle();
+  const limit = (mine?.ai_daily_limit as number | null | undefined) ?? settings.daily_limit ?? 20;
   const identityQ = text.length <= 70 && IDENTITY.test(text);
-  const small = identityQ || (text.length <= 40 && SMALL_TALK.test(text) && !WANTS_CONTENT.test(text));
+  const small = !attachments.length && !CONTINUE.test(text) && (identityQ || (text.length <= 40 && SMALL_TALK.test(text) && !WANTS_CONTENT.test(text)));
 
   // سؤال مستقل في محادثة جديدة وليس عن الطالب نفسه ← قد يكون جوابه محفوظاً (يوم الامتحان يتكرر نفس السؤال)
   // أسئلة الصفحة والفصل وما يُسأل من داخل العارض تعتمد على ملف بعينه فلا تُحفظ للآخرين
   const docBound = !!viewerCtx || parsePageRef(text) !== null || parseChapterRef(text) !== null;
-  const cacheable = !chatId && !small && text.length >= 12 && !PERSONAL.test(text) && !WANTS_CONTENT_STRICT.test(text) && !docBound;
+  const cacheable = !attachments.length && !chatId && !small && text.length >= 12 && !PERSONAL.test(text) && !WANTS_CONTENT_STRICT.test(text) && !docBound;
   const cacheKey = cacheable ? await hashKey(`${CACHE_V}|${normalize(text)}|${subjectId ?? ''}`) : null;
   let cached: { answer: string; sources: Source[] | null } | null = null;
   if (cacheKey) {
@@ -265,11 +309,13 @@ Deno.serve(handler(async (req) => {
 
   // المحادثة
   let chat = chatId as string | undefined;
+  let plan: Plan | null = null;
   if (chat) {
-    const { data } = await admin.from('ai_chats').select('id, user_id').eq('id', chat).single();
+    const { data } = await admin.from('ai_chats').select('id, user_id, plan').eq('id', chat).single();
     if (!data || data.user_id !== caller.id) throw new HttpError(404, 'المحادثة غير موجودة.');
+    plan = (data.plan as Plan | null) ?? null;
   } else {
-    const title = text.length > 40 ? `${text.slice(0, 40)}…` : text;
+    const title = chatTitle(text);
     const { data, error } = await admin
       .from('ai_chats').insert({ user_id: caller.id, title, subject_id: subjectId ?? null }).select('id').single();
     if (error) throw error;
@@ -277,11 +323,35 @@ Deno.serve(handler(async (req) => {
   }
 
   // كل ما يحتاجه الجواب بالتوازي: السجل، معلومات الطالب، الفهرس، والبحث في الملازم
+  // شرح مقسّم: «أكمل» ← القسم التالي من الخطة المحفوظة؛ أو طلب شرح فصل طويل ← خطة جديدة تبدأ بالقسم الأول
+  const continuing = !!plan && plan.next < plan.parts.length && text.length <= 40 && CONTINUE.test(text);
+  let partNo = 0; // رقم القسم الحالي (١…) إن كان الجواب قسماً من شرح مقسّم
+  let newPlan: Plan | null = null;
   const retrieval = small || cached ? Promise.resolve({ context: '', sources: [] as Source[] }) : (async () => {
     let context = '';
     let sources: Source[] = [];
     try {
-      const items = await retrieveItems(text, subjectId ?? null, viewerCtx);
+      const info: { range?: RangeInfo } = {};
+      let items;
+      if (continuing && plan) {
+        const part = plan.parts[plan.next];
+        items = await retrieveItems(`اشرح ${plan.title}`, subjectId ?? null, { documentId: plan.documentId, from: part.from, to: part.to, force: true });
+        partNo = plan.next + 1;
+      } else {
+        items = await retrieveItems(text, subjectId ?? null, viewerCtx, info);
+        const r = info.range;
+        const pages = r ? r.to - r.from + 1 : 0;
+        if (r && pages > PART_PAGES && WHOLE.test(text) && !NOT_WHOLE.test(text) && !attachments.length) {
+          const k = Math.ceil(pages / PART_PAGES);
+          const size = Math.ceil(pages / k);
+          const parts: { from: number; to: number }[] = [];
+          for (let f = r.from; f <= r.to; f += size) parts.push({ from: f, to: Math.min(r.to, f + size - 1) });
+          newPlan = { title: r.chapter ?? r.title, documentId: r.documentId, docTitle: r.title, parts, next: 0, ids: [] };
+          partNo = 1;
+          // القسم الأول فقط من صفحات الفصل
+          items = items.filter((it) => !it.direct || ((it.page ?? 0) >= parts[0].from && (it.page ?? 0) <= parts[0].to)).map((it) => ({ ...it, note: undefined }));
+        }
+      }
       sources = items.map((it) => ({
         title: it.title,
         page: it.kind === 'lecture' ? undefined : it.page,
@@ -315,18 +385,34 @@ Deno.serve(handler(async (req) => {
     retrieval,
   ]);
 
-  const extra = [catalog, context ? `مقتطفات المنهج:\n${context}` : ''].filter(Boolean).join('\n\n');
+  const activePlan = continuing ? plan : newPlan;
+  let partNote = '';
+  if (activePlan && partNo) {
+    const total = activePlan.parts.length;
+    const p = activePlan.parts[partNo - 1];
+    const nextP = activePlan.parts[partNo];
+    partNote = `شرح مقسّم: الطالب طلب شرح «${activePlan.title}» (${activePlan.docTitle}) وهو طويل، فقُسّم إلى ${ar(total)} أقسام. هذا **القسم ${ar(partNo)} من ${ar(total)}** (الصفحات ${ar(p.from)}–${ar(p.to)}).
+${partNo === 1 ? `- ابدأ بجملة تخبره: «الفصل طويل، فسأشرحه لك على ${ar(total)} أقسام حتى يكون الشرح وافياً. بعد كل قسم اكتب «أكمل» لأشرح القسم التالي، وفي النهاية أجمع لك الأقسام كلها في ملف PDF واحد.» ثم ابدأ مباشرة.
+` : ''}- اشرح صفحات هذا القسم فقط كاملة بالتفصيل وبترتيبها، وابدأ بعنوان: ## القسم ${ar(partNo)}: (عنوان مناسب لمحتواه)
+- لا تشرح شيئاً من الأقسام الأخرى ولا تكرر ما سبق.
+${nextP ? `- اختم بسطر مستقل بالضبط: «انتهى القسم ${ar(partNo)} من ${ar(total)} — اكتب «أكمل» للقسم التالي (الصفحات ${ar(nextP.from)}–${ar(nextP.to)}).»` : `- هذا آخر قسم: اختم بخلاصة قصيرة للفصل كله ثم سطر: «اكتمل شرح الفصل. يمكنك الآن تحميل الأقسام كلها في ملف PDF واحد.»`}`;
+  }
+  const scope = await scopeNotes(subjectId ?? null, text, sources).catch(() => '');
+  const extra = [scope, catalog, context ? `مقتطفات المنهج:\n${context}` : '', partNote].filter(Boolean).join('\n\n');
+  const attParts: Part[] = attachments.map((a: { mime: string; data: string }) => ({ inline_data: { mime_type: a.mime, data: a.data } }));
   const contents: Content[] = [...history, {
     role: 'user',
-    parts: [{ text: extra ? `${extra}\n\n---\nرسالة الطالب الجديدة (أجب عنها فقط):\n${text}` : text }],
+    parts: [...attParts, { text: extra ? `${extra}\n\n---\nرسالة الطالب الجديدة (أجب عنها فقط)${attachments.length ? ' — مع مرفقاته أعلاه' : ''}:\n${text}` : text }],
   }];
   if (contents.length > 1 && contents[contents.length - 2].role === 'user') {
     // سؤال سابق بلا جواب محفوظ: ندمجه حتى يبقى التناوب صحيحاً
     const prev = contents.splice(contents.length - 2, 1)[0];
-    (contents[contents.length - 1].parts[0] as { text: string }).text = `(رسالة سابقة: ${(prev.parts[0] as { text: string }).text})\n\n${(contents[contents.length - 1].parts[0] as { text: string }).text}`;
+    const lastParts = contents[contents.length - 1].parts;
+    const lastText = lastParts[lastParts.length - 1] as { text: string };
+    lastText.text = `(رسالة سابقة: ${(prev.parts[0] as { text: string }).text})\n\n${lastText.text}`;
   }
 
-  const level: Level = HARD.test(text) ? (settings.thinking_hard ?? 'high') : (EXPLAIN.test(text) || docBound) ? (settings.thinking_explain ?? 'medium') : 'low';
+  const level: Level = HARD.test(text) ? (settings.thinking_hard ?? 'high') : (EXPLAIN.test(text) || docBound || partNo || attachments.length) ? (settings.thinking_explain ?? 'medium') : 'low';
   let answer: string;
   try {
     answer = identityQ ? IDENTITY_ANSWER : cached ? cached.answer : small
@@ -334,7 +420,7 @@ Deno.serve(handler(async (req) => {
       : await generate(modelChain(settings.model), contents, {
         system: SYSTEM + about, temperature: 0.3,
         // التفكير يُحسب من حد الإخراج، فنوسّع الحد للطلبات الصعبة
-        maxOutputTokens: level === 'high' || docBound ? 24576 : 8192,
+        maxOutputTokens: level === 'high' || docBound || partNo || attachments.length ? 24576 : 8192,
         thinking: level,
       });
   } catch (e) {
@@ -364,15 +450,25 @@ Deno.serve(handler(async (req) => {
   // وقتان مختلفان حتى يبقى السؤال قبل جوابه عند الترتيب
   const t = Date.now();
   const { data: saved } = await admin.from('ai_messages').insert([
-    { chat_id: chat, role: 'user', content: text, created_at: new Date(t).toISOString() },
+    { chat_id: chat, role: 'user', content: attachments.length ? `${text}\n\n(مرفقات: ${attachments.map((a: { mime: string; name: string }) => a.name || (a.mime === 'application/pdf' ? 'ملف PDF' : 'صورة')).join('، ')})` : text, created_at: new Date(t).toISOString() },
     { chat_id: chat, role: 'assistant', content: answer, sources: cited.length ? cited : null, created_at: new Date(t + 5).toISOString() },
   ]).select('id, role');
-  await admin.from('ai_chats').update({ updated_at: new Date().toISOString() }).eq('id', chat);
+  const answerId = (saved ?? []).find((r) => r.role === 'assistant')?.id ?? null;
+  // خطة الشرح المقسّم: نسجل القسم المكتمل (سؤال آخر بين الأقسام لا يغيّرها، و«أكمل» يتابع بعده)
+  let planOut: (Plan & { done: boolean }) | null = null;
+  const chatPatch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (activePlan && partNo && answerId) {
+    const next = { ...activePlan, next: partNo, ids: [...activePlan.ids, answerId] };
+    chatPatch.plan = next;
+    planOut = { ...next, done: next.next >= next.parts.length };
+  }
+  await admin.from('ai_chats').update(chatPatch).eq('id', chat);
 
   return json({
     chatId: chat,
     answer,
-    messageId: (saved ?? []).find((r) => r.role === 'assistant')?.id ?? null,
+    messageId: answerId,
+    plan: planOut,
     sources: cited,
     remaining: caller.role === 'admin' ? null : used === null ? undefined : Math.max(0, limit - used),
     cached: !!cached,

@@ -46,10 +46,16 @@ export async function uploadFile(
   return key;
 }
 
-/** يضغط الصورة قبل الرفع (أقصى عرض ١٦٠٠ وجودة ٧٠٪) */
-export async function compressImage(uri: string, maxWidth = 1600, quality = 0.7) {
-  const ctx = ImageManipulator.ImageManipulator.manipulate(uri);
-  ctx.resize({ width: maxWidth });
+/**
+ * يضغط الصورة قبل الرفع مثل فيسبوك: أطول ضلع ١٦٠٠ بكسل (تبقى النصوص مقروءة) وجودة JPEG ٧٢٪.
+ * صورة كاميرا ٨ ميغا (4000×3000) تصير ~٣٠٠–٥٠٠ ك.ب. لا تُكبَّر الصورة الصغيرة أبداً.
+ */
+export async function compressImage(uri: string, maxSide = 1600, quality = 0.72) {
+  const M = ImageManipulator.ImageManipulator;
+  const src = await M.manipulate(uri).renderAsync();
+  const { width, height } = src;
+  const ctx = M.manipulate(uri);
+  if (Math.max(width, height) > maxSide) ctx.resize(width >= height ? { width: maxSide } : { height: maxSide });
   const image = await ctx.renderAsync();
   const result = await image.saveAsync({ compress: quality, format: ImageManipulator.SaveFormat.JPEG });
   return { uri: result.uri, width: result.width, height: result.height };

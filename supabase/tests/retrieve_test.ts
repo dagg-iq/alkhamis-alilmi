@@ -46,4 +46,12 @@ await check('الموضوع الحالي', 'اشرح هذا الموضوع', { d
 await check('يعرض الفصل الأول ويسأل عن الثاني', 'اشرح الفصل الثاني', { documentId: D, page: 8, from: 5, to: 30 }, [31]);
 await check('هذه الصفحة داخل فصل', 'اشرح هذه الصفحة', { documentId: D, page: 40, from: 31, to: 60 }, [40, 39, 41]);
 await check('تكملة فصل طويل من صفحة', 'اشرح من صفحة 45', { documentId: D, page: 31, from: 31, to: 60 }, [45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58]);
+await check('قسم من شرح مقسّم (نطاق إجباري ٣٨–٤٤)', 'اشرح الفصل الثاني: المتسعات', { documentId: D, from: 38, to: 44, force: true }, [38, 39, 40, 41, 42, 43, 44]);
+{
+  const info: any = {};
+  await retrieveItems('اشرح الفصل الثاني من ملزمة الأستاذ أحمد السوداني', 's', undefined, info);
+  const ok = info.range?.from === 31 && info.range?.to === 60 && info.range?.chapter === 'الفصل الثاني: المتسعات' && info.range?.documentId === D;
+  if (!ok) failed++;
+  console.log(ok ? '✅' : '❌', 'نطاق الفصل الكامل للتقسيم (٣١–٦٠ ← ٥ أقسام)', JSON.stringify(info.range));
+}
 if (failed) { console.error(`${failed} فشل`); Deno.exit(1); }

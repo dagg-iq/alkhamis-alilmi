@@ -4,7 +4,7 @@ import { askConfirm } from '../components/dialog';
 import { Empty, Field, Modal, check, useAction } from '../components/ui';
 import { useAuth } from '../lib/auth';
 import { useLoad } from '../lib/hooks';
-import { must, supabase, uploadFile } from '../lib/supabase';
+import { compressImage, must, supabase, uploadFile } from '../lib/supabase';
 
 const KIND_PILL: Record<PostKind, string> = { news: 'accent', holiday: 'ok', exam: 'warn', urgent: 'bad' };
 
@@ -22,7 +22,7 @@ export default function News() {
 
   const save = () => run(async () => {
     if (!edit?.title?.trim()) throw new Error('اكتب العنوان');
-    const cover_key = edit.cover ? await uploadFile(edit.cover, 'cover') : edit.cover_key ?? null;
+    const cover_key = edit.cover ? await uploadFile(await compressImage(edit.cover), 'cover') : edit.cover_key ?? null;
     const row = {
       title: edit.title.trim(), body: edit.body ?? '', kind: edit.kind ?? 'news', is_pinned: !!edit.is_pinned,
       section_id: edit.section_id || null, cover_key,

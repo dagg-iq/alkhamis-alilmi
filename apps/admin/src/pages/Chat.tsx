@@ -1,6 +1,5 @@
 import type { Message, Profile } from '@saey/shared';
 import { useEffect, useState } from 'react';
-import { askConfirm } from '../components/dialog';
 import { Avatar, Empty, Field, Modal, Verified, check, useAction } from '../components/ui';
 import { useAuth } from '../lib/auth';
 import { useLoad } from '../lib/hooks';
@@ -15,6 +14,15 @@ export default function Chat() {
   const [active, setActive] = useState<string | null>(null);
   const [text, setText] = useState('');
   const [group, setGroup] = useState<{ title: string; members: string[]; staffOnly: boolean } | null>(null);
+  // حذف بتأكيد مكتوب: لا يتم إلا إذا كتب الأدمن كلمة «حذف» (حتى لا يُحذف شيء بالغلط)
+  const [wipe, setWipe] = useState<{ title: string; detail: string; action: () => Promise<void> } | null>(null);
+  const [typed, setTyped] = useState('');
+  const askWipe = (title: string, detail: string, action: () => Promise<void>) => { setTyped(''); setWipe({ title, detail, action }); };
+  const clearChats = (conversation: string | null) => async () => {
+    const { error } = await supabase.rpc('admin_clear_chats', { p_conversation: conversation });
+    if (error) throw new Error(error.message);
+    await Promise.all([convs.reload(), msgs.reload()]);
+  };
 
   const convs = useLoad(async () => {
     const [list, mine, people] = await Promise.all([
@@ -66,7 +74,10 @@ export default function Chat() {
     <>
       <div className="head">
         <h1>الدردشة</h1>
-        <button className="btn primary" onClick={() => setGroup({ title: '', members: [], staffOnly: false })}>+ مجموعة أو قناة إعلانات</button>
+        <div className="row">
+          {isAdmin ? <button className="btn danger" onClick={() => askWipe('مسح كل الدردشات', 'تُمسح كل الرسائل في المدرسة والشعب والمجموعات، وتُحذف كل المحادثات الخاصة بين الطلاب. تبقى الشعب والمجموعات وأعضاؤها جاهزة لاستقبال الطلاب. لا يمكن التراجع.', clearChats(null))}>مسح كل الدردشات</button> : null}
+          <button className="btn primary" onClick={() => setGroup({ title: '', members: [], staffOnly: false })}>+ مجموعة أو قناة إعلانات</button>
+        </div>
       </div>
       <div className="row" style={{ alignItems: 'flex-start', gap: 16 }}>
         <div className="card" style={{ flex: '1 1 240px', maxWidth: 320, padding: 8 }}>
@@ -83,8 +94,13 @@ export default function Chat() {
             <>
               <div className="row" style={{ justifyContent: 'space-between' }}>
                 <h2>{conv?.title ?? TYPE_LABEL[conv?.type ?? '']}</h2>
-                {isAdmin && conv?.type === 'group' ? (
-                  <button className="btn danger sm" onClick={async () => (await askConfirm('حذف المجموعة وكل رسائلها؟')) && run(async () => { await check(supabase.from('conversations').delete().eq('id', active)); setActive(null); await convs.reload(); }, 'حُذفت')}>حذف المجموعة</button>
+                {isAdmin ? (
+                  <div className="row">
+                    <button className="btn danger sm" onClick={() => askWipe(`مسح رسائل «${conv?.title ?? TYPE_LABEL[conv?.type ?? '']}»`, 'تُحذف كل رسائل هذه المحادثة نهائياً، وتبقى المحادثة وأعضاؤها. لا يمكن التراجع.', clearChats(active))}>مسح الرسائل</button>
+                    {conv?.type === 'group' ? (
+                      <button className="btn danger sm" onClick={() => askWipe(`حذف المجموعة «${conv?.title ?? ''}»`, 'تُحذف المجموعة وكل رسائلها نهائياً. لا يمكن التراجع.', async () => { await check(supabase.from('conversations').delete().eq('id', active)); setActive(null); await convs.reload(); })}>حذف المجموعة</button>
+                    ) : null}
+                  </div>
                 ) : null}
               </div>
               {isMember ? (
@@ -120,6 +136,17 @@ export default function Chat() {
           )}
         </div>
       </div>
+
+      {wipe ? (
+        <Modal title={wipe.title} onClose={() => setWipe(null)}>
+          <p style={{ marginTop: 0 }}>{wipe.detail}</p>
+          <Field label="للتأكيد اكتب كلمة «حذف»">
+            <input className="input" value={typed} onChange={(e) => setTyped(e.target.value)} placeholder="حذف" autoFocus />
+          </Field>
+          <button className="btn danger" disabled={busy || typed.trim() !== 'حذف'}
+            onClick={() => run(async () => { await wipe.action(); setWipe(null); }, 'تم الحذف')}>حذف نهائياً</button>
+        </Modal>
+      ) : null}
 
       {group ? (
         <Modal title="مجموعة جديدة" onClose={() => setGroup(null)}>

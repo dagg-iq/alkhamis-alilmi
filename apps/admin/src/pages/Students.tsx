@@ -20,11 +20,13 @@ export default function Students({ onChange }: { onChange: () => void }) {
   const { run } = useAction();
 
   const q = useLoad(async () => {
-    const [people, sections] = await Promise.all([
+    const [people, sections, ai] = await Promise.all([
       must(supabase.from('profiles').select('*').order('created_at', { ascending: false })),
       must(supabase.from('sections').select('*').order('sort')),
+      supabase.from('app_settings').select('value').eq('key', 'ai').maybeSingle(),
     ]);
-    return { people: people as Profile[], sections: sections as Section[] };
+    const defaultLimit = ((ai.data?.value ?? {}) as { daily_limit?: number }).daily_limit ?? 20;
+    return { people: people as Profile[], sections: sections as Section[], defaultLimit };
   });
 
   const update = (p: Profile, patch: Partial<Profile>, msg: string) =>
@@ -33,6 +35,15 @@ export default function Students({ onChange }: { onChange: () => void }) {
       await q.reload();
       onChange();
     }, msg);
+
+  // حصة أسئلة المساعد اليومية الخاصة بالطالب (فارغ = الحد العام)
+  const saveLimit = (p: Profile, raw: string) => {
+    const v = raw.replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d))).trim();
+    const next = v === '' ? null : Math.round(Number(v));
+    if (next !== null && (!Number.isFinite(next) || next < 0 || next > 500)) return run(async () => { throw new Error('الحصة بين ٠ و٥٠٠ سؤالاً.'); });
+    if (next === (p.ai_daily_limit ?? null)) return;
+    return update(p, { ai_daily_limit: next }, next === null ? 'رجعت حصته للحد العام' : `حصته اليومية صارت ${next.toLocaleString('ar-IQ')} سؤالاً`);
+  };
 
   const people = (q.data?.people ?? []).filter((p) => (filter === 'pending' ? p.status === 'pending' && p.onboarded : p.status === filter))
     .filter((p) => p.full_name.includes(search.trim()));
@@ -54,7 +65,7 @@ export default function Students({ onChange }: { onChange: () => void }) {
       {q.loading ? <Empty>جارٍ التحميل…</Empty> : people.length === 0 ? <Empty>لا يوجد أحد هنا</Empty> : (
         <div className="table-wrap">
           <table>
-            <thead><tr><th>الطالب</th><th>الشعبة</th><th>الدور</th><th>الحالة</th><th>انضم</th><th /></tr></thead>
+            <thead><tr><th>الطالب</th><th>الشعبة</th><th>الدور</th><th>الحالة</th>{isAdmin && filter === 'approved' ? <th title="عدد أسئلة المساعد الذكي اليومية لهذا الطالب. اتركه فارغاً ليأخذ الحد العام">أسئلة المساعد/يوم</th> : null}<th>انضم</th><th /></tr></thead>
             <tbody>
               {people.map((p) => (
                 <tr key={p.id}>
@@ -83,6 +94,13 @@ export default function Students({ onChange }: { onChange: () => void }) {
                     ) : <span className="pill accent">{ROLE_LABELS[p.role]}</span>}
                   </td>
                   <td><span className={`pill ${STATUS_PILL[p.status]}`}>{STATUS_LABELS[p.status]}</span></td>
+                  {isAdmin && filter === 'approved' ? (
+                    <td>
+                      <input key={`${p.id}-${p.ai_daily_limit ?? ''}`} className="input" style={{ height: 34, width: 90 }} inputMode="numeric"
+                        defaultValue={p.ai_daily_limit ?? ''} placeholder={`${q.data!.defaultLimit} (عام)`}
+                        onBlur={(e) => saveLimit(p, e.target.value)} onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()} />
+                    </td>
+                  ) : null}
                   <td className="small dim">{new Date(p.created_at).toLocaleDateString('ar-IQ')}</td>
                   <td>
                     <div className="row" style={{ flexWrap: 'nowrap', justifyContent: 'flex-end' }}>

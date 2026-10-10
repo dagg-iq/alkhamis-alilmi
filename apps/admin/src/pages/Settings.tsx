@@ -1,5 +1,6 @@
 import { DEFAULT_RULES, parseRules } from '@saey/shared';
 import { useEffect, useState } from 'react';
+import { ScopeNotes } from '../components/ScopeNotes';
 import { Field, check, useAction } from '../components/ui';
 import { useLoad } from '../lib/hooks';
 import { must, supabase } from '../lib/supabase';
@@ -63,6 +64,8 @@ export default function Settings() {
         <label className="check"><input type="checkbox" checked={registrationOpen} onChange={(e) => setRegistrationOpen(e.target.checked)} /> استقبال طلبات انضمام جديدة</label>
         <label className="check"><input type="checkbox" checked={dms} onChange={(e) => setDms(e.target.checked)} /> السماح بالرسائل الخاصة بين الطلاب</label>
       </div>
+
+      <ScopeNotes />
     </>
   );
 }

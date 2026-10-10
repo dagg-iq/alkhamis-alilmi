@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { Alert } from '@/lib/dialog';
 import { Avatar, Button, Card, Chip, ErrorBox, Field, Header, Loading, NameLine, Row, Screen, T } from '@/components/ui';
+import { DeveloperCard, useDeveloperId } from '@/components/rich-text';
 import { useAuth, useMe } from '@/lib/auth';
 import { compressImage } from '@/lib/files';
 import { must, supabase } from '@/lib/supabase';
@@ -22,6 +23,7 @@ export default function ProfileScreen() {
   const [editing, setEditing] = useState(false);
   const [bio, setBio] = useState('');
   const [busy, setBusy] = useState(false);
+  const devId = useDeveloperId();
 
   const q = useLoad(async () => {
     const p = await must(supabase.from('profiles').select('*, sections(name)').eq('id', id).single()) as Profile & { sections: { name: string } | null };
@@ -90,6 +92,12 @@ export default function ProfileScreen() {
         <Card onPress={isMe ? () => { setBio(p.bio ?? ''); setEditing(true); } : undefined}>
           <T dim={!p.bio}>{p.bio ?? 'أضف نبذة قصيرة عنك'}</T>
         </Card>
+      ) : null}
+      {devId && p.id === devId ? (
+        <View style={{ gap: 8, alignItems: 'stretch' }}>
+          <T weight="bold" size={15}>المطوّر</T>
+          <View style={{ alignItems: 'center' }}><View style={{ width: '100%', maxWidth: 380 }}><DeveloperCard linkName={false} /></View></View>
+        </View>
       ) : null}
       <T dim size={12} center>انضم في {formatDate(new Date(p.created_at))}</T>
       {!isMe ? <Button title="مراسلة" icon="chat" onPress={message} /> : null}

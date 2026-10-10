@@ -1,5 +1,6 @@
 import type { Attachment } from '@saey/shared';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { router } from 'expo-router';
 import { Linking, Pressable, Text, View } from 'react-native';
 import { markdownPage, needsHtml, splitTokens, type Token } from '@/lib/markdown';
 import { supabase } from '@/lib/supabase';
@@ -175,16 +176,33 @@ const DEVELOPER_LINKS: { icon: IconName; label: string; url: string; color: stri
   { icon: 'facebook', label: 'فيسبوك', url: 'https://www.facebook.com/mohammed.al.ahmed.23957', color: '#1877F2' },
 ];
 
-/** بطاقة المطوّر: ترويسة بلون سعي، الاسم والصف، وروابط التواصل بألوان كل منصة */
-export function DeveloperCard() {
+// حساب المطوّر داخل التطبيق (أدمن باسم «محمد حازم…»): للانتقال إلى ملفه من البطاقة ولعرض البطاقة في ملفه
+let devId: Promise<string | null> | null = null;
+export function developerProfileId(): Promise<string | null> {
+  devId ??= Promise.resolve(supabase.from('profiles').select('id').eq('role', 'admin').ilike('full_name', 'محمد حازم%').order('created_at').limit(1))
+    .then(({ data }) => (data?.[0]?.id as string | undefined) ?? null)
+    .catch(() => { devId = null; return null; });
+  return devId;
+}
+export function useDeveloperId() {
+  const [id, setId] = useState<string | null>(null);
+  useEffect(() => { developerProfileId().then(setId); }, []);
+  return id;
+}
+
+/** بطاقة المطوّر: ترويسة بلون سعي، الاسم والصف، وروابط التواصل بألوان كل منصة. linkName: الضغط على الاسم يفتح ملفه في التطبيق */
+export function DeveloperCard({ linkName = true }: { linkName?: boolean } = {}) {
   const { c } = useTheme();
+  const dev = useDeveloperId();
+  const openProfile = linkName && dev ? () => router.push(`/profile/${dev}`) : undefined;
   return (
     <View style={{ borderRadius: 22, overflow: 'hidden', borderWidth: 1, borderColor: c.line, backgroundColor: c.card, maxWidth: 380 }}>
       <View style={{ backgroundColor: c.heroBg, paddingHorizontal: 16, paddingTop: 16, paddingBottom: 28, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-        <View style={{ flex: 1 }}>
+        <Pressable style={{ flex: 1 }} onPress={openProfile} disabled={!openProfile} accessibilityRole={openProfile ? 'link' : undefined} accessibilityLabel="ملف محمد حازم احمد في سعي">
           <T size={12} color={c.heroInk2}>صانع التطبيق</T>
-          <T display size={22} color={c.heroInk}>محمد حازم احمد</T>
-        </View>
+          <T display size={22} color={c.heroInk} style={openProfile ? { textDecorationLine: 'underline' } : undefined}>محمد حازم احمد</T>
+          {openProfile ? <T size={11} color={c.heroInk2}>اضغط على الاسم لفتح ملفه في سعي</T> : null}
+        </Pressable>
         <View style={{ width: 54, height: 54, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center' }}>
           <LogoMark size={32} ink={c.heroInk} dot={c.heroInk2} />
         </View>

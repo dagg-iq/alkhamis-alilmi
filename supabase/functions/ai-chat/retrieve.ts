@@ -21,7 +21,14 @@ export interface Item {
   note?: string;
 }
 
-export interface ViewerContext { documentId?: string; page?: number; from?: number; to?: number }
+export interface ViewerContext {
+  documentId?: string; page?: number; from?: number; to?: number;
+  /** نطاق إجباري (قسم من شرح فصل طويل): الصفحات from–to كما هي */
+  force?: boolean;
+}
+
+/** الجزء المباشر الذي طُلب (لتقسيم شرح فصل طويل إلى أقسام) */
+export interface RangeInfo { documentId: string; title: string; from: number; to: number; chapter?: string }
 
 const NO_ID = '00000000-0000-0000-0000-000000000000';
 const MAX_CHARS = 45000;
@@ -54,7 +61,7 @@ async function docNamedIn(text: string, subjectId: string | null): Promise<strin
   return bestScore >= 0.6 ? best : null;
 }
 
-export async function retrieveItems(text: string, subjectId: string | null, ctx?: ViewerContext): Promise<Item[]> {
+export async function retrieveItems(text: string, subjectId: string | null, ctx?: ViewerContext, info?: { range?: RangeInfo }): Promise<Item[]> {
   // ١) بحث دلالي
   const [qv] = await embed([text], 'RETRIEVAL_QUERY');
   const args = { query_embedding: qv, match_count: 10, p_subject: subjectId };
@@ -118,7 +125,8 @@ export async function retrieveItems(text: string, subjectId: string | null, ctx?
     const named = chapterWord && !pageRef ? pickSection(tree, text) : null;
     // «اشرح من صفحة ٤٥» (تكملة فصل طويل) ← من تلك الصفحة إلى نهاية فصلها
     const onward = explicitPage && /من\s*(?:ال)?(?:صفحة|صفحه|ص)\s*[:.]?\s*[0-9٠-٩]/.test(text);
-    if (onward && explicitPage) {
+    if (ctx?.force && ctx.from && ctx.to && ctx.documentId === docId) { from = ctx.from; to = ctx.to; focusPages.clear(); }
+    else if (onward && explicitPage) {
       const ch = locate(tree, explicitPage).chapter;
       from = explicitPage; to = ch?.end_page ?? explicitPage + MAX_DIRECT_PAGES - 1;
       focusPages.clear(); // التكملة بترقيم الملف (كما يقترحه المساعد نفسه) وبالترتيب
@@ -140,6 +148,7 @@ export async function retrieveItems(text: string, subjectId: string | null, ctx?
       const focus = onward ? 0 : pageRef ?? 0;
       // فصل كبير: نبدأ من أوله ونكتفي بعدد صفحات معقول
       const fullTo = to;
+      if (info) info.range = { documentId: docId, title: docMeta.title, from, to: fullTo, chapter: locate(tree, from).chapter?.title };
       if (to - from + 1 > MAX_DIRECT_PAGES) to = from + MAX_DIRECT_PAGES - 1;
       const wanted = new Set<number>();
       for (let n = from; n <= to; n++) wanted.add(n);
