@@ -54,6 +54,8 @@ export async function ingestDocument(
   // دفعات من صفحات متتالية: ٨ للملفات الخفيفة، و٤ للمصوّرة الثقيلة
   const avgPage = buf.byteLength / Math.max(1, total);
   const size = avgPage > 400_000 ? 4 : avgPage > 150_000 ? 6 : 8;
+  // صفحات ثقيلة = غالباً مصوّرة (ماسح ضوئي): تُقرأ من الصورة بتفكير أكثر (المعادلات والجداول)
+  const scanned = avgPage > 60_000;
   const batches: number[][] = [];
   for (const n of missing) {
     const b = batches[batches.length - 1];
@@ -78,7 +80,7 @@ export async function ingestDocument(
     const pdf = toB64(await sub.save());
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
-        const r = await callFunction<{ read: number[] }>('ingest', { documentId, action: 'read', from: pages[0], to: pages[pages.length - 1], total, pdf, lane });
+        const r = await callFunction<{ read: number[] }>('ingest', { documentId, action: 'read', from: pages[0], to: pages[pages.length - 1], total, pdf, lane, scanned });
         done += r.read.length;
         onProgress?.(Math.min(done, total), total, 'pages');
         if (r.read.length < pages.length) failed.push(...pages.filter((n) => !r.read.includes(n)));
