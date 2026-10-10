@@ -52,7 +52,7 @@ check('مجموع الطلبات الناجحة = ٤٨٠ (٣ مفاتيح × ٨ 
 check('بعد انتهاء الكل: رسالة «مشغول» لا خطأ غامض', answers[answers.length - 1] === 'QUOTA');
 // كل (مفتاح، نموذج) استُهلك بالضبط ٢١ مرة كحد أقصى (٢٠ ناجحة + 429 واحدة) — القفل يمنع تكرار الطلبات الفاشلة
 check('لا طلبات ضائعة بعد القفل', Object.values(used).every((n) => n <= 21), JSON.stringify(Object.values(used).filter((n) => n > 21)));
-check('القفل اليومي حتى أقرب موعد تجدد (منتصف ليل كاليفورنيا أو UTC)', Object.values(blocksTable).every((b) => Math.abs(Date.parse(b.blocked_until) - 30_000 - g.nextQuotaReset()) < 5_000 && Date.parse(b.blocked_until) > Date.now()));
+check('القفل اليومي حتى منتصف ليل كاليفورنيا (لا ٣ فجراً)', Object.values(blocksTable).every((b) => Math.abs(Date.parse(b.blocked_until) - 30_000 - g.nextQuotaReset()) < 5_000 && Date.parse(b.blocked_until) > Date.now()));
 check('العدادات تُسجَّل', usage['GEMINI_API_KEY|gemini-3.8-flash']?.ok === 20 && usage['GEMINI_API_KEY|gemini-3.8-flash']?.err === 1);
 
 // ٢) مفتاح اللوحة المحجوب يُقفل كله من أول محاولة ثم يُستخدم الاحتياط
@@ -83,12 +83,11 @@ check('Please retry in 3h35m54.6s', Math.round(g.retryAfterMs('Please retry in 3
 check('retry in 41s', g.retryAfterMs('Please retry in 41.2s') === 41200);
 check('رسالة صاحب المشروع (limit: 20) = يومي', g.isDailyQuota('Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-3.8-flash Please retry in 2h43m41.58s.'));
 check('حد الدقيقة (limit: 5, retry 30s) ليس يومياً', !g.isDailyQuota('Quota exceeded for metric: generate_content_free_tier_requests, limit: 5, model: gemini-3.8-flash Please retry in 31s'));
-// الساعة ١٢:١٦ ظهراً بتوقيت العراق (09:16 UTC) ← التجدد ٣:٠٠ فجراً = 00:00 UTC اليوم التالي
-check('موعد التجدد من ١٢:١٦ ظهراً', new Date(g.nextIraqReset(Date.UTC(2026, 9, 10, 9, 16))).toISOString() === '2026-10-11T00:00:00.000Z');
-check('موعد التجدد من ٢:٥٠ فجراً (23:50 UTC) بعد ١٠ دقائق', g.nextIraqReset(Date.UTC(2026, 9, 10, 23, 50)) - Date.UTC(2026, 9, 10, 23, 50) === 600_000);
 // Google تجدد الحصة منتصف ليل كاليفورنيا: صيفاً 07:00 UTC (١٠ صباحاً بغداد)، شتاءً 08:00 UTC (١١ صباحاً)
 check('بعد ٣:١٩ فجراً بغداد (00:19 UTC): المحاولة التالية ١٠:٠٠ صباحاً لا ٣ فجراً الغد', new Date(g.nextQuotaReset(Date.UTC(2026, 9, 10, 0, 19))).toISOString() === '2026-10-10T07:00:00.000Z');
-check('بعد ١٠ صباحاً: نجرب ٣ فجراً احتياطاً (أقرب الموعدين)', new Date(g.nextQuotaReset(Date.UTC(2026, 9, 10, 9, 0))).toISOString() === '2026-10-11T00:00:00.000Z');
+check('بعد ١٠ صباحاً بغداد: التالي ١٠ صباح الغد لا ٣ فجراً', new Date(g.nextQuotaReset(Date.UTC(2026, 9, 10, 9, 0))).toISOString() === '2026-10-11T07:00:00.000Z');
+check('آخر تجدد: ١٠ صباح اليوم (بعده) وأمس (قبله)', new Date(g.lastQuotaReset(Date.UTC(2026, 9, 10, 14, 48))).toISOString() === '2026-10-10T07:00:00.000Z' && new Date(g.lastQuotaReset(Date.UTC(2026, 9, 10, 6, 0))).toISOString() === '2026-10-09T07:00:00.000Z');
+check('آخر تجدد بعد تغيير التوقيت', new Date(g.lastQuotaReset(Date.UTC(2026, 10, 2, 9, 0))).toISOString() === '2026-11-02T08:00:00.000Z');
 check('شتاءً: منتصف ليل كاليفورنيا = 08:00 UTC', new Date(g.nextPacificMidnight(Date.UTC(2026, 11, 1, 1, 0))).toISOString() === '2026-12-01T08:00:00.000Z');
 check('ليلة تغيير التوقيت (١ تشرين الثاني)', new Date(g.nextPacificMidnight(Date.UTC(2026, 10, 1, 12, 0))).toISOString() === '2026-11-02T08:00:00.000Z');
 check('يوم الحصة = تاريخ كاليفورنيا', g.pacificDay(Date.UTC(2026, 9, 10, 0, 19)) === '2026-10-09' && g.pacificDay(Date.UTC(2026, 9, 10, 7, 1)) === '2026-10-10');

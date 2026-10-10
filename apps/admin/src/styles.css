@@ -233,6 +233,8 @@ tbody tr:hover { background: var(--bg); }
 .usage-rings { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); margin-bottom: 14px; }
 .usage-ring { display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; font-weight: 700; }
 .usage-ring svg { color: var(--ink); }
+.usage-models { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); margin-top: 10px; }
+.usage-model { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; }
 .usage-key-head { all: unset; box-sizing: border-box; width: 100%; display: flex; align-items: center; gap: 12px; cursor: pointer; flex-wrap: wrap; }
 .usage-key-head:focus-visible { outline: 2px solid var(--accent); border-radius: 12px; }
 .usage-chev { display: inline-flex; width: 28px; height: 28px; align-items: center; justify-content: center; border-radius: 50%; background: var(--soft); color: var(--accent); transition: transform .2s; flex: none; }

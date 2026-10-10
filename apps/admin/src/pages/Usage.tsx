@@ -6,7 +6,7 @@ import { callFunction, must, supabase } from '../lib/supabase';
 /**
  * استخدام Gemini: كم طلباً بقي لكل مفتاح ولكل نموذج اليوم، وما المقفل ومتى يعود، وكم استخدم كل طالب.
  * حصة Google المجانية: ٢٠ طلباً يومياً و٥ في الدقيقة لكل نموذج في كل مشروع.
- * الحصة اليومية تتجدد عند Google منتصف الليل بتوقيت كاليفورنيا (١٠:٠٠ صباحاً بغداد صيفاً، ١١:٠٠ شتاءً).
+ * الحصة اليومية تتجدد عند Google منتصف الليل بتوقيت كاليفورنيا (١٠:٠٠ صباحاً بغداد صيفاً، ١١:٠٠ شتاءً) — لا ٣:٠٠ فجراً.
  */
 interface Slots { slots: string[]; per_model: number; models: string[]; fallback: string[] }
 interface UsageRow { day: string; slot: string; model: string; requests: number; errors: number; last_status: number | null; last_error: string | null; last_at: string | null }
@@ -18,6 +18,7 @@ const short = (m: string) => m.replace('gemini-', '').replace('-flash-lite', ' F
 export const slotLabel = (s: string) => s === 'GEMINI_ADMIN_API_KEY' ? 'مفتاح لوحة التحكم' : s === 'GEMINI_API_KEY' ? 'مفتاح الطلاب ١' : `مفتاح الطلاب ${s.replace('GEMINI_API_KEY_', '')}`;
 const ar = (n: number) => n.toLocaleString('ar-IQ');
 const time = (iso: string) => new Date(iso).toLocaleTimeString('ar-IQ', { hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Baghdad' });
+const dayTime = (ts: number) => new Date(ts).toLocaleString('ar-IQ', { weekday: 'long', hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Baghdad' });
 const PT = 'America/Los_Angeles';
 /** فرق توقيت كاليفورنيا عن UTC الآن (يتغير مع التوقيت الصيفي) */
 function ptOffset(ts: number) {
@@ -116,7 +117,9 @@ export default function Usage() {
         const daily = !!b && /اليومية/.test(b.reason ?? '');
         const long = !!b && Date.parse(b.blocked_until) - now > 10 * 60_000;
         const left = dead || daily || long ? 0 : Math.max(0, per - used);
-        return { model, used, errors: u?.errors ?? 0, left, block: b, daily, lastError: u?.last_error };
+        // الحصة اليومية تعود عند منتصف ليل كاليفورنيا (أقفال قديمة قد تقول ٣:٠٠ فجراً — نعرض الموعد الصحيح)
+        const back = b ? (daily ? quotaWindow(now).end : Date.parse(b.blocked_until)) : 0;
+        return { model, used, errors: u?.errors ?? 0, left, block: b, daily, back, lastError: u?.last_error };
       });
       const used = rows.reduce((a, r) => a + r.used, 0);
       const left = rows.reduce((a, r) => a + r.left, 0);
@@ -137,7 +140,12 @@ export default function Usage() {
     }
     const students = [...byStudent.values()].sort((a, b) => b.today - a.today || b.week - a.week);
     const studentsToday = students.reduce((a, s) => a + s.today, 0);
-    return { keys, capacity, used, left, students, studentsToday, models, per, working: working.length, total: keys.length };
+    // كل نموذج على كل المفاتيح التي تعمل: كم بقي وعلى كم مفتاح هو متاح الآن (للفهرسة: 3.8 أولاً)
+    const byModel = models.map((model) => {
+      const rs = working.map((k) => k.rows.find((r) => r.model === model)!);
+      return { model, left: rs.reduce((a, r) => a + r.left, 0), used: rs.reduce((a, r) => a + r.used, 0), keysOpen: rs.filter((r) => r.left > 0).length };
+    });
+    return { keys, capacity, used, left, students, studentsToday, models, per, working: working.length, total: keys.length, byModel };
   }, [d, now]);
 
   if (q.error) return <><div className="head"><h1>الاستخدام</h1></div><Empty>{q.error}</Empty></>;
@@ -151,8 +159,23 @@ export default function Usage() {
       </div>
       <p className="small dim" style={{ marginTop: 0 }}>
         حصة Google المجانية: {ar(calc.per)} طلباً يومياً و٥ في الدقيقة <b>لكل نموذج في كل مفتاح</b>. الترتيب: كل نماذج المفتاح الأول (3.8 ← 3.7 ← … ← 3.1) ثم المفتاح التالي، ثم 2.5 احتياطاً.
-        تتجدد الحصة اليومية عند Google <b>منتصف الليل بتوقيت كاليفورنيا = {time(new Date(quotaWindow(now).end).toISOString())} بتوقيت بغداد</b> (بعد {untilReset(now)}). النموذج الذي تنتهي حصته يُقفل حتى الوقت الذي تحدده Google.
+        تتجدد الحصة اليومية عند Google <b>منتصف الليل بتوقيت كاليفورنيا = {time(new Date(quotaWindow(now).end).toISOString())} بتوقيت بغداد</b> (لا ٣:٠٠ فجراً).
+        {' '}<b>آخر تجدد:</b> {dayTime(quotaWindow(now).start)} — <b>التجدد القادم:</b> {dayTime(quotaWindow(now).end)} (بعد {untilReset(now)}).
+        {' '}النموذج الذي تنتهي حصته يُقفل حتى التجدد القادم.
       </p>
+
+      <div className="card" style={{ marginBottom: 14 }}>
+        <b>النماذج المتاحة الآن</b> <span className="small dim">(على كل المفاتيح التي تعمل — الفهرسة تقرأ بـ 3.8 ثم 3.7 ثم 3.6 ثم 3.5 Flash)</span>
+        <div className="usage-models">
+          {calc.byModel.map((m) => (
+            <div key={m.model} className="usage-model">
+              <b dir="ltr">{short(m.model)}</b>
+              {m.left > 0 ? <span className="pill ok">متاح — بقي {ar(m.left)}</span> : <span className="pill bad">انتهت حصته — يعود {time(new Date(quotaWindow(now).end).toISOString())}</span>}
+              <span className="small dim">على {ar(m.keysOpen)} من {ar(calc.working)} مفتاح · استُخدم {ar(m.used)}</span>
+            </div>
+          ))}
+        </div>
+      </div>
 
       <div className="usage-rings">
         <Ring value={calc.capacity ? calc.used / calc.capacity : 0} label="المستخدم من السعة اليومية"
@@ -221,7 +244,7 @@ export default function Usage() {
                     <td><div className="progress"><div style={{ width: `${Math.min(100, (r.used / calc.per) * 100)}%`, background: r.left === 0 ? 'var(--bad)' : undefined }} /></div></td>
                     <td>
                       {k.dead ? <span className="pill bad">المفتاح متوقف</span>
-                        : r.block ? <span className={`pill ${r.daily ? 'bad' : 'warn'}`} title={r.block.reason ?? ''}>{r.daily ? 'انتهت حصته' : r.block.reason ?? 'مقفل'} — يعود {time(r.block.blocked_until)}</span>
+                        : r.block ? <span className={`pill ${r.daily ? 'bad' : 'warn'}`} title={r.block.reason ?? ''}>{r.daily ? 'انتهت حصته' : r.block.reason ?? 'مقفل'} — يعود {time(new Date(r.back).toISOString())}</span>
                           : r.left > 0 ? <span className="pill ok">متاح ({ar(r.left)})</span> : <span className="pill warn">قارب الانتهاء</span>}
                       {r.block && !r.daily && r.lastError ? <div className="small dim" style={{ marginTop: 4, maxWidth: 320 }} dir="ltr">Google: {r.lastError.slice(0, 140)}</div> : null}
                     </td>

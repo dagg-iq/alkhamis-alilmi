@@ -157,12 +157,6 @@ export const isDailyQuota = (detail: string) => {
   return (retryAfterMs(detail) ?? 0) > 10 * 60_000;
 };
 
-/** ٣:٠٠ فجراً القادمة بتوقيت العراق (UTC+3 ثابت بلا توقيت صيفي) = منتصف الليل UTC */
-export function nextIraqReset(now = Date.now()): number {
-  const n = new Date(now);
-  return Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate() + 1);
-}
-
 const PT = 'America/Los_Angeles';
 /** فرق توقيت كاليفورنيا عن UTC (بالمللي ثانية، سالب) في لحظة معينة — يتغير مع التوقيت الصيفي */
 function ptOffset(ts: number): number {
@@ -183,12 +177,17 @@ export function nextPacificMidnight(now = Date.now()): number {
   return midLocal - ptOffset(t); // إن تغيّر التوقيت الصيفي في الليلة نفسها
 }
 /**
- * متى نجرّب النموذج بعد انتهاء حصته اليومية: Google تجدد الحصة اليومية عند منتصف الليل بتوقيت كاليفورنيا
- * (رأينا ذلك فعلاً: نماذج رفضت بعد ٣:٠٠ فجراً بغداد بحجة الحصة اليومية)، ونجرب أيضاً عند منتصف ليل UTC (٣ فجراً)
- * احتياطاً — أقرب الموعدين. إن لم تتجدد بعدُ يُقفل النموذج من جديد حتى الموعد التالي (طلب واحد فقط يضيع).
+ * متى نجرّب النموذج بعد انتهاء حصته اليومية: Google تجدد الحصة اليومية (RPD) عند منتصف الليل بتوقيت كاليفورنيا
+ * (حسب وثائق Google) = ١٠:٠٠ صباحاً بغداد صيفاً (حتى ١ تشرين الثاني) و١١:٠٠ شتاءً.
+ * لا تجدد عند ٣:٠٠ فجراً (منتصف ليل UTC) — جرّبناه سابقاً فرفضت النماذج بعده بحجة الحصة اليومية.
  */
 export function nextQuotaReset(now = Date.now()): number {
-  return Math.min(nextIraqReset(now), nextPacificMidnight(now));
+  return nextPacificMidnight(now);
+}
+
+/** آخر تجدد للحصة اليومية (منتصف ليل كاليفورنيا الماضي) */
+export function lastQuotaReset(now = Date.now()): number {
+  return nextPacificMidnight(nextPacificMidnight(now) - 26 * 3600_000);
 }
 
 /**
