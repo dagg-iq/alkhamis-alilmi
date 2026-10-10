@@ -52,7 +52,7 @@ export default function Documents() {
     setUpload(null);
     setDraft(null);
     await q.reload();
-  }, 'رُفعت الملزمة').finally(() => setUpload(null));
+  }, 'رُفع الملف').finally(() => setUpload(null));
 
   // فهرسة الملزمة: قراءة كل الصفحات ثم بناء فهرس الفصول والمواضيع
   const ingest = async (doc: DocumentRow, restart = false) => {
@@ -78,14 +78,14 @@ export default function Documents() {
     await q.reload();
   }, 'تم الحذف');
 
-  if (!d) return <><div className="head"><h1>الملازم</h1></div><Empty>جارٍ التحميل…</Empty></>;
+  if (!d) return <><div className="head"><h1>الكتب والملازم</h1></div><Empty>جارٍ التحميل…</Empty></>;
   const list = d.docs.filter((x) => x.subject_id === active);
 
   return (
     <>
       <div className="head">
-        <h1>الملازم</h1>
-        <button className="btn primary" onClick={() => setDraft({ file: null, subject_id: active!, chapter_id: '', teacher_id: '', kind: 'malzama', title: '' })}>+ رفع ملزمة</button>
+        <h1>الكتب والملازم</h1>
+        <button className="btn primary" onClick={() => setDraft({ file: null, subject_id: active!, chapter_id: '', teacher_id: '', kind: 'malzama', title: '' })}>+ رفع كتاب أو ملزمة</button>
       </div>
       <div className="tabs">
         {d.subjects.map((s) => <button key={s.id} className={s.id === active ? 'on' : ''} onClick={() => setSubjectId(s.id)}>{s.name}</button>)}
@@ -93,7 +93,7 @@ export default function Documents() {
       {list.length === 0 ? <Empty>لا توجد ملازم لهذه المادة بعد.</Empty> : (
         <div className="table-wrap">
           <table>
-            <thead><tr><th>الملزمة</th><th>الفصل</th><th>الحجم</th><th>المساعد الذكي</th><th /></tr></thead>
+            <thead><tr><th>الكتاب / الملزمة</th><th>الفصل</th><th>الحجم</th><th>المساعد الذكي</th><th /></tr></thead>
             <tbody>
               {list.map((doc) => (
                 <tr key={doc.id}>
@@ -130,12 +130,12 @@ export default function Documents() {
           </table>
         </div>
       )}
-      <p className="small dim">«الفهرسة» تجعل المساعد الذكي يقرأ الملف ويجيب منه مع ذكر الصفحة، وتبني فهرس الفصول والمواضيع الذي يفتح منه الطالب أي فصل أو موضوع مباشرة. تستهلك من رصيد Gemini (طلب لكل ٦ صفحات تقريباً + طلب للفهرس). زر «الفهرس» يراجع ويعدّل الفصول والمواضيع.</p>
+      <p className="small dim">«الفهرسة» تجعل المساعد الذكي يقرأ الملف ويجيب منه مع ذكر الصفحة، وتبني فهرس الفصول والمواضيع الذي يفتح منه الطالب أي فصل أو موضوع مباشرة. تقرأ عدة صفحات معاً بعدة مفاتيح في الوقت نفسه (طلب لكل ٤–٨ صفحات + طلب للفهرس). زر «الفهرس» يراجع ويعدّل الفصول والمواضيع.</p>
 
       {outlineOf ? <OutlineEditor doc={outlineOf} onClose={() => { setOutlineOf(null); q.reload(); }} /> : null}
 
       {draft ? (
-        <Modal title="رفع ملزمة" onClose={() => !busy && setDraft(null)}>
+        <Modal title="رفع كتاب أو ملزمة" onClose={() => !busy && setDraft(null)}>
           <Field label="ملف PDF">
             <input className="input" style={{ paddingTop: 8 }} type="file" accept="application/pdf"
               onChange={(e) => {

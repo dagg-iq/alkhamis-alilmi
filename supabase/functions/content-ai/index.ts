@@ -356,35 +356,56 @@ ${previous ? `آخر المواضيع قبل هذا الجزء (من الأجز�
 
     // ٤) تصنيف ملف PDF من أول صفحاته: المادة، الأستاذ، النوع، الفصل، العنوان، وهل هو مصوّر
     if (body.action === 'classify_document') {
-      const key = String(body.key ?? '');
-      if (!key.startsWith('materials/')) throw new HttpError(400, 'مفتاح غير صالح.');
-      const bytes = await getObject(key);
-      const src = await PDFDocument.load(bytes, { ignoreEncryption: true, updateMetadata: false });
-      const pages = src.getPageCount();
-      const first = await PDFDocument.create();
-      const copy = await first.copyPages(src, [...Array(Math.min(4, pages)).keys()]);
-      copy.forEach((p) => first.addPage(p));
-      const sample = await first.save();
+      // لوحة التحكم ترسل أول ٣ صفحات فقط (قطعتها على الجهاز) — لا نحمّل الملف كاملاً هنا (ثقيل ويفشل مع الكتب المصوّرة)
+      let sample: string;
+      let pages: number | null = Number(body.pages) || null;
+      if (typeof body.sample === 'string' && body.sample.length > 100) {
+        sample = body.sample;
+      } else {
+        const key = String(body.key ?? '');
+        if (!key.startsWith('materials/')) throw new HttpError(400, 'مفتاح غير صالح.');
+        const bytes = await getObject(key);
+        const src = await PDFDocument.load(bytes, { ignoreEncryption: true, updateMetadata: false });
+        pages = src.getPageCount();
+        const first = await PDFDocument.create();
+        (await first.copyPages(src, [...Array(Math.min(3, pages)).keys()])).forEach((p) => first.addPage(p));
+        sample = toBase64(await first.save());
+      }
       const cur = await curriculum();
-      const raw = await ai([{
+      // المادة والفصل والأستاذ بأرقام قصيرة (النماذج تخطئ أحياناً في نسخ المعرفات الطويلة)
+      const subs = cur.subjects as { id: string; name: string }[];
+      const chs = cur.chapters as { id: string; book_id: string; number: number; title: string }[];
+      const ts = cur.teachers as { id: string; name: string; subject_id: string | null }[];
+      const list = `المواد:\n${subs.map((x, i) => `S${i + 1} = ${x.name}`).join('\n')}\n\nالفصول:\n${chs.map((c, i) => `C${i + 1} = الفصل ${c.number}: ${c.title}`).join('\n') || '(لا فصول)'}\n\nالأساتذة:\n${ts.map((x, i) => `T${i + 1} = ${x.name}`).join('\n') || '(لا أساتذة)'}`;
+      const raw = await generate(MAIN_MODELS, [{
         role: 'user',
         parts: [
-          { inline_data: { mime_type: 'application/pdf', data: toBase64(sample) } },
+          { inline_data: { mime_type: 'application/pdf', data: sample } },
           {
-            text: `هذه أول صفحات ملف PDF لطلاب الخامس الإعدادي العلمي في العراق (اسم الملف: ${String(body.name ?? '')}).
-${cur.text}
+            text: `هذه أول صفحات ملف PDF لطلاب الخامس العلمي في العراق. اسم الملف: «${String(body.name ?? '')}» (اسم الملف دليل قوي على المادة).
+${list}
 
-أعد JSON واحداً:
-{"subject_id": "معرف المادة", "kind": "malzama" أو "summary" أو "book" أو "other",
- "chapter_id": "معرف الفصل إن كان الملف لفصل واحد وإلا null", "teacher_id": "معرف الأستاذ الموجود أو null",
- "new_teacher": "اسم الأستاذ/المؤلف إن ظهر ولم يكن في القائمة وإلا null",
- "title": "عنوان قصير مرتب (مثل: ملزمة الفيزياء — الفصل الأول)", "scanned": true إذا كانت الصفحات صوراً ممسوحة بلا نص قابل للتحديد}
-لا تخترع معرفات.`,
+أعد JSON واحداً فقط:
+{"subject": "S…", "kind": "book" (كتاب الوزارة المدرسي) أو "malzama" (ملزمة أستاذ) أو "summary" (ملخص) أو "other",
+ "chapter": "C… إن كان الملف لفصل واحد فقط وإلا null", "teacher": "T… إن ظهر أستاذ من القائمة وإلا null",
+ "new_teacher": "اسم الأستاذ إن ظهر ولم يكن في القائمة وإلا null",
+ "title": "عنوان قصير مرتب (مثل: كتاب الرياضيات للصف الخامس العلمي، أو ملزمة الفيزياء — الفصل الأول)",
+ "scanned": true إذا كانت الصفحات صوراً ممسوحة}`,
           },
         ],
-      }], 8192);
-      const parsed = parseJson<unknown>(raw);
-      return json({ ...(Array.isArray(parsed) ? parsed[0] : parsed) as Record<string, unknown>, pages });
+      }], { pool: 'admin', json: true, temperature: 0, maxOutputTokens: 1024, thinking: 'minimal', extraConfig: { mediaResolution: 'MEDIA_RESOLUTION_LOW' }, deadline: Date.now() + 60_000 });
+      const parsed = parseJson<Record<string, unknown>>(raw);
+      const r = (Array.isArray(parsed) ? parsed[0] : parsed) as Record<string, unknown>;
+      const pick = <T,>(code: unknown, arr: T[], prefix: string) => {
+        const n = Number(String(code ?? '').replace(new RegExp(`^${prefix}`, 'i'), ''));
+        return Number.isInteger(n) && n >= 1 && n <= arr.length ? arr[n - 1] : null;
+      };
+      return json({
+        subject_id: pick(r.subject, subs, 'S')?.id ?? null,
+        chapter_id: pick(r.chapter, chs, 'C')?.id ?? null,
+        teacher_id: pick(r.teacher, ts, 'T')?.id ?? null,
+        new_teacher: r.new_teacher ?? null, kind: r.kind, title: r.title, scanned: !!r.scanned, pages,
+      });
     }
 
     // المفاتيح المضافة (أسماؤها فقط) لتبويب «الاستخدام»

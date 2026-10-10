@@ -2,7 +2,7 @@ import { DOCUMENT_KIND_LABELS, type Book, type Chapter, type DocumentKind, type 
 import { useState } from 'react';
 import { askText } from '../components/dialog';
 import { Empty, Field, Modal, Tabs, useAction, useToast } from '../components/ui';
-import { ensureChapter, ensureTeachers, indexLecture, ingestDocument } from '../lib/content-ai';
+import { ensureChapter, ensureTeachers, indexLecture } from '../lib/content-ai';
 import { useLoad } from '../lib/hooks';
 import { callFunction, must, supabase, uploadFile } from '../lib/supabase';
 
@@ -31,9 +31,24 @@ interface FileRow {
   title: string;
   scanned: boolean;
   status: string;
+  /** حقول غيّرها المشرف يدوياً: لا يكتب فوقها التصنيف الآلي حين يصل */
+  touched?: string[];
 }
 
 const NEW = 'new:';
+
+/** تخمين فوري من اسم الملف (قبل أن يرد الذكاء الاصطناعي) */
+const SUBJECT_WORDS: [RegExp, RegExp][] = [
+  [/رياضيات|رياضيات|math/i, /رياضيات/], [/فيزياء|physics/i, /فيزياء/], [/كيمياء|chem/i, /كيمياء/],
+  [/احياء|أحياء|biology|bio\b/i, /أحياء|احياء/], [/عربي|العربية|arabic/i, /العربية/], [/انكليزي|إنكليزي|انجليزي|english/i, /الإنكليزية|الانكليزية/],
+  [/اسلامية|إسلامية|islamic/i, /الإسلامية|الاسلامية/], [/حاسوب|computer/i, /الحاسوب/], [/كردي|كوردي|kurd/i, /الكردية/],
+];
+function guessFromName(name: string, subjects: { id: string; name: string }[]): { subject_id?: string; kind?: DocumentKind } {
+  const out: { subject_id?: string; kind?: DocumentKind } = {};
+  for (const [w, sn] of SUBJECT_WORDS) if (w.test(name)) { const s = subjects.find((x) => sn.test(x.name)); if (s) { out.subject_id = s.id; break; } }
+  if (/ملزم/.test(name)) out.kind = 'malzama'; else if (/ملخص/.test(name)) out.kind = 'summary'; else if (/كتاب|book/i.test(name)) out.kind = 'book';
+  return out;
+}
 const mmss = (s: number | null) => (s ? `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` : '—');
 
 export default function Assistant() {
@@ -298,38 +313,59 @@ function FilesTab({ data: d, reload }: { data: Data; reload: () => Promise<void>
   const { chaptersOf } = useCurriculum(d);
   const [rows, setRows] = useState<FileRow[]>([]);
   const [step, setStep] = useState('');
-  const [indexAfter, setIndexAfter] = useState(true);
   const patch = (i: number, p: Partial<FileRow>) => setRows((r) => r.map((x, k) => (k === i ? { ...x, ...p } : x)));
+
+  // تعديل يدوي: يُسجَّل حتى لا يكتب فوقه التصنيف الآلي
+  const edit = (i: number, p: Partial<FileRow>) => setRows((r) => r.map((x, k) => (k === i ? { ...x, ...p, touched: [...new Set([...(x.touched ?? []), ...Object.keys(p)])] } : x)));
 
   const pick = (files: FileList | null) => run(async () => {
     const list = [...(files ?? [])].filter((f) => f.type === 'application/pdf');
     if (!list.length) throw new Error('اختر ملفات PDF.');
     const start = rows.length;
-    setRows((r) => [...r, ...list.map((f) => ({
-      name: f.name, key: '', size: f.size, pages: null, include: true, subject_id: d.subjects[0]?.id ?? '', chapter_id: '', teacher: '',
-      kind: 'malzama' as DocumentKind, title: f.name.replace(/\.pdf$/i, ''), scanned: false, status: 'بالانتظار',
-    }))]);
-    for (let i = 0; i < list.length; i++) {
+    setRows((r) => [...r, ...list.map((f) => {
+      const g = guessFromName(f.name, d.subjects);
+      return {
+        name: f.name, key: '', size: f.size, pages: null, include: true, subject_id: g.subject_id ?? d.subjects[0]?.id ?? '', chapter_id: '', teacher: '',
+        kind: g.kind ?? 'malzama', title: f.name.replace(/\.pdf$/i, ''), scanned: false, status: 'يقرأ أول الصفحات…',
+      };
+    })]);
+    const { PDFDocument } = await import('pdf-lib');
+    const toB64 = (u8: Uint8Array) => {
+      let bin = '';
+      for (let i = 0; i < u8.length; i += 0x8000) bin += String.fromCharCode(...u8.subarray(i, i + 0x8000));
+      return btoa(bin);
+    };
+    // كل ملف: التصنيف (من أول ٣ صفحات، سريع) والرفع يجريان معاً
+    await Promise.all(list.map(async (f, i) => {
       const idx = start + i;
-      const f = list[i];
+      const classify = (async () => {
+        const src = await PDFDocument.load(await f.arrayBuffer(), { ignoreEncryption: true, updateMetadata: false });
+        const pages = src.getPageCount();
+        const first = await PDFDocument.create();
+        (await first.copyPages(src, [...Array(Math.min(3, pages)).keys()])).forEach((p) => first.addPage(p));
+        const s = await callFunction<Record<string, unknown>>('content-ai', { action: 'classify_document', name: f.name, pages, sample: toB64(await first.save()) });
+        setRows((rs) => rs.map((x, k) => {
+          if (k !== idx) return x;
+          const t = new Set(x.touched ?? []);
+          const sid = !t.has('subject_id') && d.subjects.some((z) => z.id === s.subject_id) ? String(s.subject_id) : x.subject_id;
+          const ch = t.has('chapter_id') ? x.chapter_id : chaptersOf(sid).some((c) => c.id === s.chapter_id) ? String(s.chapter_id) : '';
+          const teacher = t.has('teacher') ? x.teacher : d.teachers.some((z) => z.id === s.teacher_id) ? String(s.teacher_id) : s.new_teacher ? `${NEW}${s.new_teacher}` : '';
+          const kind = t.has('kind') ? x.kind : (['malzama', 'summary', 'book', 'other'] as const).includes(s.kind as DocumentKind) ? s.kind as DocumentKind : x.kind;
+          return {
+            ...x, subject_id: sid, chapter_id: ch, teacher, kind, title: t.has('title') ? x.title : String(s.title ?? x.title),
+            pages, scanned: !!s.scanned,
+          };
+        }));
+      })().catch(() => { /* التخمين من اسم الملف يبقى، والمشرف يراجع */ });
+      const upload = uploadFile(f, 'material', (p) => patch(idx, { status: `يرفع ${Math.round(p * 100)}٪` }))
+        .then((key) => patch(idx, { key }))
+        .catch((e) => { patch(idx, { status: `خطأ في الرفع: ${e instanceof Error ? e.message : ''}`, include: false }); throw e; });
       try {
-        setStep(`رفع ${i + 1}/${list.length}: ${f.name}`);
-        const key = await uploadFile(f, 'material', (p) => patch(idx, { status: `يرفع ${Math.round(p * 100)}٪` }));
-        patch(idx, { key, status: 'يقرأه الذكاء الاصطناعي…' });
-        const s = await callFunction<Record<string, unknown>>('content-ai', { action: 'classify_document', key, name: f.name });
-        const sid = d.subjects.some((x) => x.id === s.subject_id) ? String(s.subject_id) : d.subjects[0]?.id ?? '';
-        const ch = chaptersOf(sid).some((c) => c.id === s.chapter_id) ? String(s.chapter_id) : '';
-        const teacher = d.teachers.some((t) => t.id === s.teacher_id) ? String(s.teacher_id) : s.new_teacher ? `${NEW}${s.new_teacher}` : '';
-        const kind = (['malzama', 'summary', 'book', 'other'] as const).includes(s.kind as DocumentKind) ? s.kind as DocumentKind : 'malzama';
-        patch(idx, {
-          subject_id: sid, chapter_id: ch, teacher, kind, title: String(s.title ?? f.name.replace(/\.pdf$/i, '')),
-          pages: typeof s.pages === 'number' ? s.pages : null, scanned: !!s.scanned, status: 'جاهز للمراجعة',
-        });
-      } catch (e) {
-        patch(idx, { status: `خطأ: ${e instanceof Error ? e.message : ''}`, include: false });
-      }
-    }
-  }).finally(() => setStep(''));
+        await Promise.all([classify, upload]);
+        patch(idx, { status: 'جاهز للمراجعة' });
+      } catch { /* حالة الخطأ كُتبت أعلاه */ }
+    }));
+  });
 
   const save = () => run(async () => {
     const chosen = rows.filter((r) => r.include && r.key);
@@ -348,17 +384,7 @@ function FilesTab({ data: d, reload }: { data: Data; reload: () => Promise<void>
     setRows((rs) => rs.filter((r) => !chosen.includes(r)));
     await reload();
     toast(`حُفظ ${added.length} ملف`);
-    if (indexAfter) {
-      for (let i = 0; i < added.length; i++) {
-        try {
-          await ingestDocument(added[i].id, (n, total, stage) => setStep(stage === 'outline' ? `بناء فهرس الفصول والمواضيع (${i + 1}/${added.length}) «${added[i].title}»…` : `قراءة (${i + 1}/${added.length}) «${added[i].title}» — ${n}/${total} صفحة`));
-        } catch (e) {
-          toast(`${added[i].title}: ${e instanceof Error ? e.message : 'فشلت الفهرسة'}`, true);
-          if (e instanceof Error && e.message.includes('رصيد')) break;
-        }
-      }
-      toast('اكتملت الفهرسة — المساعد يعرف هذه الملفات الآن');
-    }
+    toast('افتح «الكتب والملازم» واضغط «فهرسة» على كل ملف جديد');
   }).finally(() => setStep(''));
 
   const ready = rows.filter((r) => r.include && r.key).length;
@@ -386,27 +412,27 @@ function FilesTab({ data: d, reload }: { data: Data; reload: () => Promise<void>
                       <div className="small dim">{(r.size / 1048576).toFixed(1)} ميغا{r.pages ? ` · ${r.pages} صفحة` : ''}{r.scanned ? ' · مصوّرة' : ''}</div>
                       <div className="small dim">{r.status}</div>
                     </td>
-                    <td data-label="العنوان"><input className="input" style={{ minWidth: 200 }} value={r.title} onChange={(e) => patch(i, { title: e.target.value })} /></td>
+                    <td data-label="العنوان"><input className="input" style={{ minWidth: 200 }} value={r.title} onChange={(e) => edit(i, { title: e.target.value })} /></td>
                     <td data-label="المادة">
-                      <select className="input" style={{ minWidth: 140 }} value={r.subject_id} onChange={(e) => patch(i, { subject_id: e.target.value, chapter_id: '' })}>
+                      <select className="input" style={{ minWidth: 140 }} value={r.subject_id} onChange={(e) => edit(i, { subject_id: e.target.value, chapter_id: '' })}>
                         {d.subjects.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                       </select>
                     </td>
                     <td data-label="الفصل">
-                      <select className="input" style={{ minWidth: 140 }} value={r.chapter_id} onChange={(e) => patch(i, { chapter_id: e.target.value })}>
+                      <select className="input" style={{ minWidth: 140 }} value={r.chapter_id} onChange={(e) => edit(i, { chapter_id: e.target.value })}>
                         <option value="">المادة كاملة</option>
                         {chaptersOf(r.subject_id).map((c) => <option key={c.id} value={c.id}>الفصل {c.number} {c.title}</option>)}
                       </select>
                     </td>
                     <td data-label="الأستاذ">
-                      <select className="input" style={{ minWidth: 140 }} value={r.teacher} onChange={(e) => patch(i, { teacher: e.target.value })}>
+                      <select className="input" style={{ minWidth: 140 }} value={r.teacher} onChange={(e) => edit(i, { teacher: e.target.value })}>
                         <option value="">—</option>
                         {r.teacher.startsWith(NEW) ? <option value={r.teacher}>جديد: {r.teacher.slice(NEW.length)}</option> : null}
                         {d.teachers.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
                       </select>
                     </td>
                     <td data-label="النوع">
-                      <select className="input" style={{ minWidth: 140 }} value={r.kind} onChange={(e) => patch(i, { kind: e.target.value as DocumentKind })}>
+                      <select className="input" style={{ minWidth: 140 }} value={r.kind} onChange={(e) => edit(i, { kind: e.target.value as DocumentKind })}>
                         {Object.entries(DOCUMENT_KIND_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                       </select>
                     </td>
@@ -415,7 +441,7 @@ function FilesTab({ data: d, reload }: { data: Data; reload: () => Promise<void>
               </tbody>
             </table>
           </div>
-          <label className="check"><input type="checkbox" checked={indexAfter} onChange={(e) => setIndexAfter(e.target.checked)} /> فهرسة للمساعد بعد الحفظ (يقرأ كل الصفحات حتى يجيب منها الطلاب)</label>
+          <p className="small dim" style={{ margin: 0 }}>بعد الحفظ تجد الملفات في «الكتب والملازم»، ومن هناك تضغط «فهرسة» لكل ملف (يقرؤه المساعد ويبني فصوله ومواضيعه).</p>
           <div className="row">
             <button className="btn primary" onClick={save} disabled={busy || !ready}>{busy && step ? step : `حفظ ${ready} ملف`}</button>
             <button className="btn ghost" onClick={() => setRows([])} disabled={busy}>مسح القائمة</button>

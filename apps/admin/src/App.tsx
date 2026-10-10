@@ -53,7 +53,7 @@ const NAV: { to: string; label: string; g: Group; end?: boolean; badge?: boolean
   { to: '/assistant', label: 'مساعد المحتوى', g: 'content' },
   { to: '/content', label: 'المواد والفصول', g: 'content' },
   { to: '/lectures', label: 'المحاضرات', g: 'content' },
-  { to: '/documents', label: 'الملازم', g: 'content' },
+  { to: '/documents', label: 'الكتب والملازم', g: 'content' },
   { to: '/questions', label: 'الأسئلة', g: 'content' },
   { to: '/schedules', label: 'الجداول', g: 'plan' },
   { to: '/tasks', label: 'الواجبات والامتحانات', g: 'plan' },

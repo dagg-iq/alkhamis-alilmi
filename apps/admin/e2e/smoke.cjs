@@ -11,7 +11,7 @@ const t = new Date().toISOString();
 const profile = { id: UID, full_name: 'علي حسين كاظم', avatar_url: null, section_id: 'sec1', role: 'admin', status: 'approved', is_verified: true, onboarded: true, created_at: t, sections: { name: 'أ' } };
 const data = {
   profiles: [profile, { ...profile, id: 'p2', full_name: 'محمد جاسم علي', role: 'student', status: 'pending', is_verified: false }],
-  subjects: [{ id: 's0', name: 'الفيزياء', sort: 1 }, { id: 's1', name: 'الكيمياء', sort: 2 }],
+  subjects: [{ id: 's0', name: 'الفيزياء', sort: 1 }, { id: 's1', name: 'الكيمياء', sort: 2 }, { id: 's2', name: 'الرياضيات', sort: 3 }],
   sections: [{ id: 'sec1', name: 'أ', sort: 1 }], books: [{ id: 'b0', subject_id: 's0', name: 'الكتاب', sort: 1 }],
   chapters: [{ id: 'c1', book_id: 'b0', number: 1, title: 'المتسعات', sort: 1 }],
   teachers: [{ id: 't1', name: 'أحمد', subject_id: 's0', channel_url: null }],
@@ -99,7 +99,7 @@ const data = {
           { name: 'GEMINI_API_KEY', ok: true, detail: 'يعمل' }, { name: 'GEMINI_API_KEY_2', ok: false, detail: 'يعمل لكن حصته انتهت مؤقتاً' },
           { name: 'YOUTUBE_API_KEY', ok: true, detail: 'يعمل' }] }
         : b.action === 'key_slots' ? { slots: ['GEMINI_ADMIN_API_KEY', 'GEMINI_API_KEY', 'GEMINI_API_KEY_2', 'GEMINI_API_KEY_3', 'GEMINI_API_KEY_4'], per_model: 20, models: ['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite'], fallback: ['gemini-2.5-flash', 'gemini-2.5-flash-lite'] }
-        : b.action === 'classify_document' ? { subject_id: 's0', kind: 'malzama', chapter_id: 'c1', teacher_id: null, new_teacher: 'أحمد السوداني', title: 'ملزمة الفيزياء — الفصل الأول', scanned: true, pages: 48 }
+        : b.action === 'classify_document' ? (console.log('CLASSIFY', JSON.stringify({ name: b.name, pages: b.pages, sample: (b.sample || '').length, key: b.key || null })), { subject_id: 's2', kind: 'book', chapter_id: null, teacher_id: null, new_teacher: null, title: 'كتاب الرياضيات للصف الخامس العلمي', scanned: true, pages: b.pages })
         : b.action === 'classify_lectures' ? { items: [
           { youtube_id: 'dQw4w9WgXcQ', subject_id: 's0', chapter_id: 'c1', teacher_id: null, new_teacher: 'احمد السوداني', lecture_number: 3, title: 'المحاضرة ٣ — ربط التوالي', skip: false },
           { youtube_id: 'aaaaaaaaaa2', subject_id: 's0', chapter_id: null, new_chapter: { number: 2, title: 'الحث' }, skip: true, title: 'اشترك' },
@@ -115,6 +115,7 @@ const data = {
     const page = await ctx.newPage();
     const errs = [];
     page.on('pageerror', (e) => errs.push(e.message));
+    if (process.env.DBG) page.on('console', (m) => console.log('C', m.type(), m.text().slice(0, 200)));
     await page.goto((process.env.BASE || 'http://localhost:4176') + r, { waitUntil: 'networkidle' });
     await page.waitForTimeout(600);
     // FILL="textarea=نص" ثم CLICK="نص الزر" (لتجربة نموذج في الصفحة)
@@ -157,8 +158,10 @@ const data = {
       await page.waitForTimeout(1200);
     }
     if (process.env.UPLOAD) {
-      await page.setInputFiles('input[type=file]', process.env.UPLOAD.split(','));
-      await page.waitForTimeout(2500);
+      await page.setInputFiles(process.env.UPLOAD_SEL || 'input[type=file]', process.env.UPLOAD.split(','));
+      await page.waitForTimeout(Number(process.env.UPLOAD_WAIT || 2500));
+      if (process.env.DBG) console.log('INPUTS', JSON.stringify(await page.evaluate(() => [...document.querySelectorAll('input[type=file]')].map((i) => ({ accept: i.accept, disabled: i.disabled, files: i.files.length })))));
+      if (process.env.DBG) console.log('BODY', (await page.evaluate(() => document.body.innerText)).replace(/\s+/g, ' ').slice(0, 600));
     }
     if (process.env.CLICK) {
       await page.getByRole('button', { name: process.env.CLICK }).first().click();
