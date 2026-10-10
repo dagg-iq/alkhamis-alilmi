@@ -52,7 +52,7 @@ check('مجموع الطلبات الناجحة = ٤٨٠ (٣ مفاتيح × ٨ 
 check('بعد انتهاء الكل: رسالة «مشغول» لا خطأ غامض', answers[answers.length - 1] === 'QUOTA');
 // كل (مفتاح، نموذج) استُهلك بالضبط ٢١ مرة كحد أقصى (٢٠ ناجحة + 429 واحدة) — القفل يمنع تكرار الطلبات الفاشلة
 check('لا طلبات ضائعة بعد القفل', Object.values(used).every((n) => n <= 21), JSON.stringify(Object.values(used).filter((n) => n > 21)));
-check('القفل اليومي حتى ٣:٠٠ فجراً بتوقيت العراق (منتصف الليل UTC)', Object.values(blocksTable).every((b) => { const d = new Date(Date.parse(b.blocked_until) - 30_000); return d.getUTCHours() === 0 && d.getUTCMinutes() === 0 && Date.parse(b.blocked_until) > Date.now(); }));
+check('القفل اليومي حتى أقرب موعد تجدد (منتصف ليل كاليفورنيا أو UTC)', Object.values(blocksTable).every((b) => Math.abs(Date.parse(b.blocked_until) - 30_000 - g.nextQuotaReset()) < 5_000 && Date.parse(b.blocked_until) > Date.now()));
 check('العدادات تُسجَّل', usage['GEMINI_API_KEY|gemini-3.8-flash']?.ok === 20 && usage['GEMINI_API_KEY|gemini-3.8-flash']?.err === 1);
 
 // ٢) مفتاح اللوحة المحجوب يُقفل كله من أول محاولة ثم يُستخدم الاحتياط
@@ -86,6 +86,12 @@ check('حد الدقيقة (limit: 5, retry 30s) ليس يومياً', !g.isDail
 // الساعة ١٢:١٦ ظهراً بتوقيت العراق (09:16 UTC) ← التجدد ٣:٠٠ فجراً = 00:00 UTC اليوم التالي
 check('موعد التجدد من ١٢:١٦ ظهراً', new Date(g.nextIraqReset(Date.UTC(2026, 9, 10, 9, 16))).toISOString() === '2026-10-11T00:00:00.000Z');
 check('موعد التجدد من ٢:٥٠ فجراً (23:50 UTC) بعد ١٠ دقائق', g.nextIraqReset(Date.UTC(2026, 9, 10, 23, 50)) - Date.UTC(2026, 9, 10, 23, 50) === 600_000);
+// Google تجدد الحصة منتصف ليل كاليفورنيا: صيفاً 07:00 UTC (١٠ صباحاً بغداد)، شتاءً 08:00 UTC (١١ صباحاً)
+check('بعد ٣:١٩ فجراً بغداد (00:19 UTC): المحاولة التالية ١٠:٠٠ صباحاً لا ٣ فجراً الغد', new Date(g.nextQuotaReset(Date.UTC(2026, 9, 10, 0, 19))).toISOString() === '2026-10-10T07:00:00.000Z');
+check('بعد ١٠ صباحاً: نجرب ٣ فجراً احتياطاً (أقرب الموعدين)', new Date(g.nextQuotaReset(Date.UTC(2026, 9, 10, 9, 0))).toISOString() === '2026-10-11T00:00:00.000Z');
+check('شتاءً: منتصف ليل كاليفورنيا = 08:00 UTC', new Date(g.nextPacificMidnight(Date.UTC(2026, 11, 1, 1, 0))).toISOString() === '2026-12-01T08:00:00.000Z');
+check('ليلة تغيير التوقيت (١ تشرين الثاني)', new Date(g.nextPacificMidnight(Date.UTC(2026, 10, 1, 12, 0))).toISOString() === '2026-11-02T08:00:00.000Z');
+check('يوم الحصة = تاريخ كاليفورنيا', g.pacificDay(Date.UTC(2026, 9, 10, 0, 19)) === '2026-10-09' && g.pacificDay(Date.UTC(2026, 9, 10, 7, 1)) === '2026-10-10');
 check('fileRef الجديد والقديم', g.fileRef('s:GEMINI_API_KEY_3|https://x/f').slot === 'GEMINI_API_KEY_3' && g.fileRef('k1|https://x/f').keyIndex === 1);
 
 // ٥ب) القرّاء المتوازون: القارئ ١ يبدأ بالمفتاح الثاني، والقارئ ٢ بالثالث (لا تزاحم على مفتاح واحد)

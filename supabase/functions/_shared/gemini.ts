@@ -138,7 +138,7 @@ export function retryAfterMs(detail: string): number | null {
 }
 
 /**
- * حصة يومية (لا دقيقة)؟ الحد اليومي في الطبقة المجانية ٢٠ لكل نموذج ويتجدد ٣:٠٠ فجراً بتوقيت العراق لكل النماذج،
+ * حصة يومية (لا دقيقة)؟ الحد اليومي في الطبقة المجانية ٢٠ لكل نموذج (يتجدد منتصف ليل كاليفورنيا — انظر nextQuotaReset)،
  * وحد الدقيقة ٥ (انتظاره ثوانٍ). فـ «limit: 20» أو انتظار أطول من ١٠ دقائق = يومي.
  */
 export const isDailyQuota = (detail: string) => {
@@ -153,6 +153,34 @@ export const isDailyQuota = (detail: string) => {
 export function nextIraqReset(now = Date.now()): number {
   const n = new Date(now);
   return Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate() + 1);
+}
+
+const PT = 'America/Los_Angeles';
+/** فرق توقيت كاليفورنيا عن UTC (بالمللي ثانية، سالب) في لحظة معينة — يتغير مع التوقيت الصيفي */
+function ptOffset(ts: number): number {
+  const p = Object.fromEntries(new Intl.DateTimeFormat('en-US', {
+    timeZone: PT, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit',
+  }).formatToParts(ts).map((x) => [x.type, x.value]));
+  return Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute, +p.second) - Math.floor(ts / 1000) * 1000;
+}
+/** يوم الحصة عند Google (تاريخ كاليفورنيا) */
+export function pacificDay(now = Date.now()): string {
+  return new Date(now + ptOffset(now)).toISOString().slice(0, 10);
+}
+/** منتصف الليل القادم بتوقيت كاليفورنيا (١٠:٠٠ صباحاً بغداد صيفاً، ١١:٠٠ شتاءً) */
+export function nextPacificMidnight(now = Date.now()): number {
+  const d = new Date(now + ptOffset(now));
+  const midLocal = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1);
+  const t = midLocal - ptOffset(now);
+  return midLocal - ptOffset(t); // إن تغيّر التوقيت الصيفي في الليلة نفسها
+}
+/**
+ * متى نجرّب النموذج بعد انتهاء حصته اليومية: Google تجدد الحصة اليومية عند منتصف الليل بتوقيت كاليفورنيا
+ * (رأينا ذلك فعلاً: نماذج رفضت بعد ٣:٠٠ فجراً بغداد بحجة الحصة اليومية)، ونجرب أيضاً عند منتصف ليل UTC (٣ فجراً)
+ * احتياطاً — أقرب الموعدين. إن لم تتجدد بعدُ يُقفل النموذج من جديد حتى الموعد التالي (طلب واحد فقط يضيع).
+ */
+export function nextQuotaReset(now = Date.now()): number {
+  return Math.min(nextIraqReset(now), nextPacificMidnight(now));
 }
 
 /**
@@ -285,8 +313,8 @@ export async function generate(model: string | string[], contents: Content[], op
       if (status === 429) {
         // انتهت حصة هذا النموذج على هذا المفتاح: نقفله حتى الوقت الذي تحدده Google وننتقل للتالي
         busy = true;
-        // يومي ← مقفل حتى ٣:٠٠ فجراً بتوقيت العراق (موعد تجدد كل النماذج)؛ دقيقة ← المدة التي تطلبها Google
-        if (isDailyQuota(detail)) await block(a.slot, a.m, nextIraqReset() - Date.now() + 30_000, 'انتهت الحصة اليومية — تعود ٣:٠٠ فجراً');
+        // يومي ← مقفل حتى أقرب موعد تجدد (nextQuotaReset)؛ دقيقة ← المدة التي تطلبها Google
+        if (isDailyQuota(detail)) await block(a.slot, a.m, nextQuotaReset() - Date.now() + 30_000, 'انتهت الحصة اليومية');
         else await block(a.slot, a.m, (retryAfterMs(detail) ?? 60_000) + 2000, 'حد الدقيقة (٥ طلبات)');
         break;
       }
@@ -352,7 +380,7 @@ export async function embed(texts: string[], taskType: 'RETRIEVAL_DOCUMENT' | 'R
       await logCall(s.slot, EMBED_MODEL, false, res.status, detail.slice(0, 200));
       if (res.status === 429) {
         quota = true;
-        await block(s.slot, EMBED_MODEL, isDailyQuota(detail) ? nextIraqReset() - Date.now() + 30_000 : (retryAfterMs(detail) ?? 60_000) + 2000, 'حصة التضمين');
+        await block(s.slot, EMBED_MODEL, isDailyQuota(detail) ? nextQuotaReset() - Date.now() + 30_000 : (retryAfterMs(detail) ?? 60_000) + 2000, 'حصة التضمين');
       } else if (res.status === 401 || res.status === 403) {
         await block(s.slot, '*', 6 * 3600_000, `مرفوض ${res.status}`);
       } else if (res.status < 500 && res.status !== 400) {

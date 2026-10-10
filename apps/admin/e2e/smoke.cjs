@@ -8,6 +8,7 @@ const jwt = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: UID, role: 'authe
 const session = { access_token: jwt, refresh_token: 'r', expires_in: 36000, expires_at: now + 36000, token_type: 'bearer',
   user: { id: UID, aud: 'authenticated', role: 'authenticated', email: 't@x.com', app_metadata: {}, user_metadata: {}, created_at: new Date().toISOString() } };
 const t = new Date().toISOString();
+const ptDay = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Los_Angeles' }).format(new Date());
 const profile = { id: UID, full_name: 'علي حسين كاظم', avatar_url: null, section_id: 'sec1', role: 'admin', status: 'approved', is_verified: true, onboarded: true, created_at: t, sections: { name: 'أ' } };
 const data = {
   profiles: [profile, { ...profile, id: 'p2', full_name: 'محمد جاسم علي', role: 'student', status: 'pending', is_verified: false }],
@@ -48,10 +49,10 @@ const data = {
     { id: 'e2', schedule_id: 'sc2', day: null, on_date: '2026-11-04', sort: 2, start_time: '09:00', end_time: '11:00', subject_id: 's1', title: null, teacher: null, place: null, note: null },
   ],
   ai_key_usage: [
-    ...['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash'].map((m) => ({ day: t.slice(0, 10), slot: 'GEMINI_API_KEY', model: m, requests: 20, errors: 1, last_status: 429, last_error: 'Quota exceeded', last_at: t })),
-    { day: t.slice(0, 10), slot: 'GEMINI_API_KEY', model: 'gemini-3.5-flash', requests: 7, errors: 0, last_status: 200, last_error: null, last_at: t },
-    { day: t.slice(0, 10), slot: 'GEMINI_API_KEY_2', model: 'gemini-3.8-flash', requests: 3, errors: 1, last_status: 429, last_error: 'per minute', last_at: t },
-    { day: t.slice(0, 10), slot: 'GEMINI_API_KEY', model: 'gemini-embedding-001', requests: 40, errors: 0, last_status: 200, last_error: null, last_at: t },
+    ...['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash'].map((m) => ({ day: ptDay, slot: 'GEMINI_API_KEY', model: m, requests: 20, errors: 1, last_status: 429, last_error: 'Quota exceeded', last_at: t })),
+    { day: ptDay, slot: 'GEMINI_API_KEY', model: 'gemini-3.5-flash', requests: 7, errors: 0, last_status: 200, last_error: null, last_at: t },
+    { day: ptDay, slot: 'GEMINI_API_KEY_2', model: 'gemini-3.8-flash', requests: 3, errors: 1, last_status: 429, last_error: 'per minute', last_at: t },
+    { day: ptDay, slot: 'GEMINI_API_KEY', model: 'gemini-embedding-001', requests: 40, errors: 0, last_status: 200, last_error: null, last_at: t },
   ],
   ai_key_blocks: [
     ...['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash'].map((m) => ({ slot: 'GEMINI_API_KEY', model: m, blocked_until: new Date(Date.now() + 3 * 3600e3).toISOString(), reason: 'انتهت الحصة اليومية — تعود ٣:٢٩ ص' })),

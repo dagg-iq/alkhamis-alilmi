@@ -6,7 +6,7 @@ import { callFunction, must, supabase } from '../lib/supabase';
 /**
  * استخدام Gemini: كم طلباً بقي لكل مفتاح ولكل نموذج اليوم، وما المقفل ومتى يعود، وكم استخدم كل طالب.
  * حصة Google المجانية: ٢٠ طلباً يومياً و٥ في الدقيقة لكل نموذج في كل مشروع.
- * اليوم يتجدد ٣:٠٠ فجراً بتوقيت بغداد (= منتصف الليل UTC).
+ * الحصة اليومية تتجدد عند Google منتصف الليل بتوقيت كاليفورنيا (١٠:٠٠ صباحاً بغداد صيفاً، ١١:٠٠ شتاءً).
  */
 interface Slots { slots: string[]; per_model: number; models: string[]; fallback: string[] }
 interface UsageRow { day: string; slot: string; model: string; requests: number; errors: number; last_status: number | null; last_error: string | null; last_at: string | null }
@@ -18,13 +18,28 @@ const short = (m: string) => m.replace('gemini-', '').replace('-flash-lite', ' F
 export const slotLabel = (s: string) => s === 'GEMINI_ADMIN_API_KEY' ? 'مفتاح لوحة التحكم' : s === 'GEMINI_API_KEY' ? 'مفتاح الطلاب ١' : `مفتاح الطلاب ${s.replace('GEMINI_API_KEY_', '')}`;
 const ar = (n: number) => n.toLocaleString('ar-IQ');
 const time = (iso: string) => new Date(iso).toLocaleTimeString('ar-IQ', { hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Baghdad' });
-/** يوم الحصة: يبدأ ٣ فجراً بغداد = منتصف الليل UTC */
-const quotaDay = (d = new Date()) => d.toISOString().slice(0, 10);
+const PT = 'America/Los_Angeles';
+/** فرق توقيت كاليفورنيا عن UTC الآن (يتغير مع التوقيت الصيفي) */
+function ptOffset(ts: number) {
+  const p = Object.fromEntries(new Intl.DateTimeFormat('en-US', {
+    timeZone: PT, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit',
+  }).formatToParts(ts).map((x) => [x.type, x.value]));
+  return Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute, +p.second) - Math.floor(ts / 1000) * 1000;
+}
+/** يوم الحصة عند Google = تاريخ كاليفورنيا (كما يسجله الخادم) */
+const quotaDay = (now = Date.now()) => new Date(now + ptOffset(now)).toISOString().slice(0, 10);
+/** بداية يوم الحصة الحالي ونهايته (منتصف ليل كاليفورنيا) */
+function quotaWindow(now: number) {
+  const d = new Date(now + ptOffset(now));
+  const startLocal = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+  const start = startLocal - ptOffset(startLocal - ptOffset(now));
+  const endLocal = startLocal + 86400000;
+  const end = endLocal - ptOffset(endLocal - ptOffset(now));
+  return { start, end };
+}
 
 function untilReset(now: number) {
-  const n = new Date(now);
-  const next = Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate() + 1);
-  const m = Math.max(0, Math.round((next - now) / 60000));
+  const m = Math.max(0, Math.round((quotaWindow(now).end - now) / 60000));
   return `${ar(Math.floor(m / 60))} س ${ar(m % 60)} د`;
 }
 
@@ -72,7 +87,7 @@ export default function Usage() {
 
   const q = useLoad(async () => {
     const today = quotaDay();
-    const week = quotaDay(new Date(Date.now() - 6 * 86400000));
+    const week = quotaDay(Date.now() - 6 * 86400000);
     const [slots, usage, blocks, students] = await Promise.all([
       callFunction<Slots>('content-ai', { action: 'key_slots' }),
       must(supabase.from('ai_key_usage').select('*').eq('day', today)) as Promise<UsageRow[]>,
@@ -97,8 +112,10 @@ export default function Usage() {
         const u = useOf(slot, model);
         const b = blockOf(slot, model);
         const used = u?.requests ?? 0;
-        const daily = !!b && (/اليومية/.test(b.reason ?? '') || Date.parse(b.blocked_until) - now > 10 * 60_000);
-        const left = dead ? 0 : daily ? 0 : Math.max(0, per - used);
+        // «انتهت حصته» فقط إن كان السبب الحصة اليومية فعلاً؛ غيره (نموذج غير متاح…) يظهر بسببه
+        const daily = !!b && /اليومية/.test(b.reason ?? '');
+        const long = !!b && Date.parse(b.blocked_until) - now > 10 * 60_000;
+        const left = dead || daily || long ? 0 : Math.max(0, per - used);
         return { model, used, errors: u?.errors ?? 0, left, block: b, daily, lastError: u?.last_error };
       });
       const used = rows.reduce((a, r) => a + r.used, 0);
@@ -134,18 +151,17 @@ export default function Usage() {
       </div>
       <p className="small dim" style={{ marginTop: 0 }}>
         حصة Google المجانية: {ar(calc.per)} طلباً يومياً و٥ في الدقيقة <b>لكل نموذج في كل مفتاح</b>. الترتيب: كل نماذج المفتاح الأول (3.8 ← 3.7 ← … ← 3.1) ثم المفتاح التالي، ثم 2.5 احتياطاً.
-        يتجدد العدّ <b>٣:٠٠ فجراً</b> (بعد {untilReset(now)}). النموذج الذي تنتهي حصته يُقفل حتى الوقت الذي تحدده Google.
+        تتجدد الحصة اليومية عند Google <b>منتصف الليل بتوقيت كاليفورنيا = {time(new Date(quotaWindow(now).end).toISOString())} بتوقيت بغداد</b> (بعد {untilReset(now)}). النموذج الذي تنتهي حصته يُقفل حتى الوقت الذي تحدده Google.
       </p>
 
       <div className="usage-rings">
         <Ring value={calc.capacity ? calc.used / calc.capacity : 0} label="المستخدم من السعة اليومية"
           center={`${ar(Math.round(calc.capacity ? (calc.used / calc.capacity) * 100 : 0))}٪`} sub={`${ar(calc.used)} من ${ar(calc.capacity)}`} />
         {(() => {
-          // اليوم من ٣:٠٠ فجراً إلى ٣:٠٠ فجراً: كم مضى وكم بقي حتى تتجدد كل النماذج
-          const n = new Date(now);
-          const start = Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate());
-          const passed = (now - start) / 86400000;
-          return <Ring value={passed} color="var(--ok)" label="الوقت حتى تجدد الحصة (٣:٠٠ فجراً)" center={untilReset(now)} sub={`مضى ${ar(Math.round(passed * 100))}٪`} />;
+          // يوم الحصة عند Google (من منتصف ليل كاليفورنيا إلى التالي): كم مضى وكم بقي حتى تتجدد كل النماذج
+          const w = quotaWindow(now);
+          const passed = (now - w.start) / (w.end - w.start);
+          return <Ring value={passed} color="var(--ok)" label={`الوقت حتى تجدد الحصة (${time(new Date(w.end).toISOString())})`} center={untilReset(now)} sub={`مضى ${ar(Math.round(passed * 100))}٪`} />;
         })()}
         <Ring value={calc.total ? calc.working / calc.total : 0} color="var(--accent)" label="المفاتيح التي تعمل" center={`${ar(calc.working)}/${ar(calc.total)}`} sub="مفتاح" />
       </div>
@@ -207,6 +223,7 @@ export default function Usage() {
                       {k.dead ? <span className="pill bad">المفتاح متوقف</span>
                         : r.block ? <span className={`pill ${r.daily ? 'bad' : 'warn'}`} title={r.block.reason ?? ''}>{r.daily ? 'انتهت حصته' : r.block.reason ?? 'مقفل'} — يعود {time(r.block.blocked_until)}</span>
                           : r.left > 0 ? <span className="pill ok">متاح ({ar(r.left)})</span> : <span className="pill warn">قارب الانتهاء</span>}
+                      {r.block && !r.daily && r.lastError ? <div className="small dim" style={{ marginTop: 4, maxWidth: 320 }} dir="ltr">Google: {r.lastError.slice(0, 140)}</div> : null}
                     </td>
                     <td className="small dim" title={r.lastError ?? ''}>{r.errors ? ar(r.errors) : '—'}</td>
                   </tr>
