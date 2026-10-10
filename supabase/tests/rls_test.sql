@@ -232,4 +232,48 @@ do $$ begin
 end $$;
 reset role;
 
+-- ١١. طابور الفهرسة: للمشرفين فقط، والحجز بترتيب دخول الكتب ثم الصفحات، وعامل واحد في الوقت نفسه
+insert into public.ingest_chunks (document_id, from_page, to_page, total_pages, file_key) values
+  ('00000000-0000-0000-0000-0000000000d2', 1, 8, 50, 'material/q1.pdf'),
+  ('00000000-0000-0000-0000-0000000000d1', 9, 16, 100, 'material/q3.pdf'),
+  ('00000000-0000-0000-0000-0000000000d1', 1, 8, 100, 'material/q2.pdf');
+update public.documents set queued_at = now() - interval '1 hour' where id = '00000000-0000-0000-0000-0000000000d1';
+update public.documents set queued_at = now() where id = '00000000-0000-0000-0000-0000000000d2';
+do $$
+declare a public.ingest_chunks; b public.ingest_chunks;
+begin
+  select * into a from public.claim_ingest_chunks(1, 60);
+  assert a.document_id = '00000000-0000-0000-0000-0000000000d1' and a.from_page = 1 and a.status = 'running' and a.attempts = 1, 'الحجز لا يبدأ بأول كتاب وأول صفحة';
+  select * into b from public.claim_ingest_chunks(1, 60);
+  assert b.document_id = '00000000-0000-0000-0000-0000000000d1' and b.from_page = 9, 'الحجز لا يكمل الكتاب نفسه بالترتيب';
+  assert (select count(*) from public.claim_ingest_chunks(5, 60)) = 1, 'حُجز جزء محجوز مرتين';
+  assert (select count(*) from public.claim_ingest_chunks(5, 60)) = 0, 'لا شيء يبقى للحجز';
+  update public.ingest_chunks set lease_until = now() - interval '1 second' where id = a.id;
+  assert (select count(*) from public.claim_ingest_chunks(5, 60)) = 1, 'جزء انتهى حجزه (عامل توقف) لا يُستعاد';
+  update public.documents set queued_at = null where id = '00000000-0000-0000-0000-0000000000d1';
+  update public.ingest_chunks set status = 'pending', lease_until = null where document_id = '00000000-0000-0000-0000-0000000000d1';
+  assert (select count(*) from public.claim_ingest_chunks(5, 60)) = 0, 'كتاب خارج الطابور يُقرأ';
+  assert public.ingest_worker_lock(60) = true, 'القفل الأول';
+  assert public.ingest_worker_lock(60) = false, 'عاملان معاً';
+  perform public.ingest_worker_unlock();
+  assert public.ingest_worker_lock(60) = true, 'القفل بعد الفتح';
+  perform public.ingest_worker_unlock();
+  perform private.ingest_tick(); -- بلا رابط إشعارات: لا يفعل شيئاً ولا يفشل
+end $$;
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000b');
+do $$ begin
+  assert (select count(*) from public.ingest_chunks) = 0, 'طالب يرى طابور الفهرسة';
+  begin
+    perform public.claim_ingest_chunks(1, 60);
+    raise exception 'طالب يحجز من الطابور!';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000a');
+do $$ begin
+  assert (select count(*) from public.ingest_chunks) = 3, 'الأدمن لا يرى الطابور';
+end $$;
+reset role;
+
 select 'ALL RLS TESTS PASSED' as result;

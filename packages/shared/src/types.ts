@@ -59,6 +59,8 @@ export interface DocumentRow {
   ingest_error: string | null;
   outline_status?: 'none' | 'running' | 'done' | 'error';
   outline_error?: string | null;
+  /** في طابور الفهرسة على الخادم منذ هذا الوقت (null = ليس في الطابور) */
+  queued_at?: string | null;
 }
 export interface QuestionSet {
   id: string;

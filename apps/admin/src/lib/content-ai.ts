@@ -1,4 +1,4 @@
-import { callFunction, must, signedUrl, supabase } from './supabase';
+import { callFunction, must, signedUrl, supabase, uploadFile } from './supabase';
 
 /** فهرسة محاضرة بالدقيقة: جزء ١٠ دقائق في كل طلب حتى النهاية */
 export async function indexLecture(lectureId: string, onProgress?: (done: number, total: number | null) => void) {
@@ -25,20 +25,21 @@ export async function embedDocumentOutline(documentId: string) {
 }
 
 /**
- * فهرسة كتاب أو ملزمة للمساعد، ثم بناء فهرس الفصول والمواضيع.
- * اللوحة تقطع من الكتاب صفحات قليلة (٦–٨) وترسلها وحدها — بدل أن يُرسل الكتاب كاملاً مع كل طلب — فتكون أسرع بكثير،
- * وتقرأ بقارئ لكل مفتاح معاً (حتى ٨)، وتكمل دائماً من الصفحات الناقصة فقط (لا تعيد من البداية).
- * stage: 'pages' أثناء القراءة، 'outline' أثناء بناء الفهرس.
+ * إدخال كتاب أو ملزمة في طابور الفهرسة على الخادم (يكمل ولو أُغلق الموقع).
+ * اللوحة تحمّل الكتاب مرة وتقطع صفحاته الناقصة فقط إلى أجزاء صغيرة (٤–٨ صفحات) وترفعها،
+ * ثم عامل الخادم (ingest-worker، كل دقيقة) يقرؤها بعدة مفاتيح معاً، يعيد أي جزء يفشل، وينتظر تجدد الحصة إن انتهت،
+ * ثم يبني فهرس الفصول والمواضيع وينتقل للكتاب التالي في الطابور.
+ * الصفحة يجب أن تبقى مفتوحة أثناء التحضير فقط (ثوانٍ إلى دقيقة).
  */
-export async function ingestDocument(
+export async function enqueueDocument(
   documentId: string,
-  onProgress?: (done: number, total: number, stage: 'pages' | 'outline') => void,
+  onProgress?: (done: number, total: number) => void,
   restart = false,
 ) {
   const doc = await must(supabase.from('documents').select('id, file_key').eq('id', documentId).single()) as { id: string; file_key: string };
-  if (restart) await callFunction('ingest', { documentId, action: 'restart' });
+  // أجزاء قديمة (فاشلة أو من محاولة سابقة) تُحذف أولاً؛ وإعادة القراءة تمسح الصفحات أيضاً
+  await callFunction('ingest', { documentId, action: restart ? 'restart' : 'clear_queue' });
 
-  // الكتاب نفسه (مرة واحدة) ← عدد صفحاته
   const { PDFDocument } = await import('pdf-lib');
   const res = await fetch(await signedUrl(doc.file_key));
   if (!res.ok) throw new Error('تعذّر تحميل الملف من التخزين');
@@ -51,7 +52,7 @@ export async function ingestDocument(
   const missing: number[] = [];
   for (let n = 1; n <= total; n++) if (!have.has(n)) missing.push(n);
 
-  // دفعات من صفحات متتالية: ٨ للملفات الخفيفة، و٤ للمصوّرة الثقيلة
+  // أجزاء من صفحات متتالية: ٨ للملفات الخفيفة، و٤ للمصوّرة الثقيلة
   const avgPage = buf.byteLength / Math.max(1, total);
   const size = avgPage > 400_000 ? 4 : avgPage > 150_000 ? 6 : 8;
   // صفحات ثقيلة = غالباً مصوّرة (ماسح ضوئي): تُقرأ من الصورة بتفكير أكثر (المعادلات والجداول)
@@ -62,49 +63,46 @@ export async function ingestDocument(
     if (b && b[b.length - 1] === n - 1 && b.length < size) b.push(n); else batches.push([n]);
   }
 
-  let done = have.size;
-  onProgress?.(done, total, 'pages');
-  let stop: Error | null = null;
-  const failed: number[] = [];
-  const toB64 = (u8: Uint8Array) => {
-    let bin = '';
-    for (let i = 0; i < u8.length; i += 0x8000) bin += String.fromCharCode(...u8.subarray(i, i + 0x8000));
-    return btoa(bin);
-  };
-  // قارئ لكل مفتاح يعمل (كل قارئ يبدأ بمفتاحه): ٨ مفاتيح = ٨ دفعات معاً
-  const slots = await callFunction<{ slots: string[] }>('content-ai', { action: 'key_slots' }).then((r) => r.slots.length).catch(() => 3);
-  const lanes = Math.max(3, Math.min(8, slots));
-  const runBatch = async (pages: number[], lane: number) => {
-    const sub = await PDFDocument.create();
-    (await sub.copyPages(src, pages.map((n) => n - 1))).forEach((pg) => sub.addPage(pg));
-    const pdf = toB64(await sub.save());
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        const r = await callFunction<{ read: number[] }>('ingest', { documentId, action: 'read', from: pages[0], to: pages[pages.length - 1], total, pdf, lane, scanned });
-        done += r.read.length;
-        onProgress?.(Math.min(done, total), total, 'pages');
-        if (r.read.length < pages.length) failed.push(...pages.filter((n) => !r.read.includes(n)));
-        return;
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        // انتهت الحصة على كل المفاتيح: نتوقف كلنا (ونكمل لاحقاً من حيث وقفنا)
-        if (/حصة|رصيد|quota/i.test(msg) || attempt === 1) { stop ??= new Error(msg); return; }
-      }
-    }
-  };
+  // تقطيع ورفع (٤ معاً)
+  const rows: { document_id: string; from_page: number; to_page: number; total_pages: number; file_key: string; scanned: boolean }[] = [];
+  let done = 0;
+  onProgress?.(0, batches.length);
   const queue = [...batches];
-  await Promise.all(Array.from({ length: lanes }, async (_, lane) => {
-    // بداية متدرجة قليلاً حتى لا تصل كل الطلبات في اللحظة نفسها
-    await new Promise((r) => setTimeout(r, lane * 400));
-    while (queue.length && !stop) await runBatch(queue.shift()!, lane);
+  await Promise.all(Array.from({ length: 4 }, async () => {
+    while (queue.length) {
+      const pages = queue.shift()!;
+      const sub = await PDFDocument.create();
+      (await sub.copyPages(src, pages.map((n) => n - 1))).forEach((pg) => sub.addPage(pg));
+      const bytes = await sub.save();
+      const file = new File([bytes as Uint8Array<ArrayBuffer>], `part-${pages[0]}.pdf`, { type: 'application/pdf' });
+      let key = '';
+      for (let attempt = 0; ; attempt++) {
+        try { key = await uploadFile(file, 'material'); break; } catch (e) { if (attempt >= 2) throw e; }
+      }
+      rows.push({ document_id: documentId, from_page: pages[0], to_page: pages[pages.length - 1], total_pages: total, file_key: key, scanned });
+      onProgress?.(++done, batches.length);
+    }
   }));
-  if (stop) throw stop;
-  if (failed.length) throw new Error(`تعذّرت قراءة ${failed.length} صفحة (${failed.slice(0, 8).join('، ')}${failed.length > 8 ? '…' : ''}). اضغط «إكمال» لإعادة محاولة الناقصة فقط.`);
-  onProgress?.(1, 1, 'outline');
-  const out = await buildDocumentOutline(documentId);
-  // الربط بين الكتاب والملازم (طلب منفصل؛ فشله لا يمنع الفهرس)
-  await embedDocumentOutline(documentId).catch(() => {});
-  return out;
+  for (let i = 0; i < rows.length; i += 100) {
+    const { error } = await supabase.from('ingest_chunks').insert(rows.slice(i, i + 100));
+    if (error) throw new Error(error.message);
+  }
+  // الآن فقط يدخل الطابور (بعد اكتمال كل أجزائه) — ترتيب الدخول = ترتيب الفهرسة
+  const { error } = await supabase.from('documents').update({
+    queued_at: new Date().toISOString(), pages: total, ingest_status: 'running', ingest_error: null,
+  }).eq('id', documentId);
+  if (error) throw new Error(error.message);
+  return { chunks: rows.length, missing: missing.length, total };
+}
+
+/** إيقاف فهرسة كتاب (إخراجه من الطابور؛ الصفحات المقروءة تبقى) */
+export async function dequeueDocument(documentId: string) {
+  await callFunction('ingest', { documentId, action: 'clear_queue' });
+}
+
+/** يوقظ عامل الفهرسة الآن بدل انتظار الدقيقة القادمة */
+export function kickIngestWorker() {
+  return callFunction('ingest-worker', {}).catch(() => {});
 }
 
 /** أساتذة جدد بالاسم (إن لم يوجدوا) ← خريطة الاسم إلى المعرّف */

@@ -16,7 +16,16 @@ const data = {
   chapters: [{ id: 'c1', book_id: 'b0', number: 1, title: 'المتسعات', sort: 1 }],
   teachers: [{ id: 't1', name: 'أحمد', subject_id: 's0', channel_url: null }],
   lectures: [{ id: 'l1', chapter_id: 'c1', teacher_id: 't1', title: 'المحاضرة ١', youtube_id: 'x', sort: 1, is_published: true }],
-  documents: [{ id: 'd1', subject_id: 's0', chapter_id: null, teacher_id: 't1', kind: 'malzama', title: 'ملزمة الفيزياء', file_key: 'k', size_bytes: 1000000, pages: 40, sort: 1, is_published: true, ingested_pages: 40, ingest_status: 'done', outline_status: 'done' }],
+  documents: [{ id: 'd1', subject_id: 's0', chapter_id: null, teacher_id: 't1', kind: 'malzama', title: 'ملزمة الفيزياء', file_key: 'k', size_bytes: 1000000, pages: 40, sort: 1, is_published: true, ingested_pages: 40, ingest_status: 'done', outline_status: 'done' },
+    { id: 'd2', subject_id: 's0', chapter_id: null, teacher_id: null, kind: 'book', title: 'كتاب الرياضيات', file_key: 'k2', size_bytes: 9500000, pages: 258, sort: 2, is_published: true, ingested_pages: 64, ingest_status: 'running', outline_status: 'none', queued_at: new Date(Date.now() - 600e3).toISOString() },
+    { id: 'd3', subject_id: 's0', chapter_id: null, teacher_id: null, kind: 'malzama', title: 'ملزمة الكيمياء', file_key: 'k3', size_bytes: 3000000, pages: 60, sort: 3, is_published: true, ingested_pages: 0, ingest_status: 'running', outline_status: 'none', queued_at: new Date().toISOString() },
+    { id: 'd4', subject_id: 's0', chapter_id: null, teacher_id: null, kind: 'malzama', title: 'ملزمة جديدة', file_key: 'k4', size_bytes: 2000000, pages: null, sort: 4, is_published: false, ingested_pages: 0, ingest_status: 'none', outline_status: 'none' }],
+  ingest_chunks: [
+    ...Array.from({ length: 16 }, (_, i) => ({ document_id: 'd2', status: 'done', from_page: i * 4 + 1, to_page: i * 4 + 4, next_at: t, last_error: null })),
+    { document_id: 'd2', status: 'running', from_page: 65, to_page: 68, next_at: t, last_error: null },
+    ...Array.from({ length: 47 }, (_, i) => ({ document_id: 'd2', status: 'pending', from_page: 69 + i * 4, to_page: 72 + i * 4, next_at: t, last_error: null })),
+    ...Array.from({ length: 8 }, (_, i) => ({ document_id: 'd3', status: 'pending', from_page: i * 8 + 1, to_page: i * 8 + 8, next_at: t, last_error: null })),
+  ],
   document_outline: [
     { id: 'o1', document_id: 'd1', level: 1, title: 'المتسعات', start_page: 1, end_page: 20, sort: 1, parent_id: null },
     { id: 'o2', document_id: 'd1', level: 2, title: 'قانون كولوم', start_page: 3, end_page: 7, sort: 2, parent_id: 'o1' },

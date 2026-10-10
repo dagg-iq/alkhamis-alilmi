@@ -3,3 +3,6 @@ project_id = "saey"
 
 [functions.push]
 verify_jwt = false
+
+[functions.ingest-worker]
+verify_jwt = false
