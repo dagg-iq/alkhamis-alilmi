@@ -91,7 +91,12 @@ jobs:
             [ "$name" = "_shared" ] && continue
             [ -f "$dir/index.ts" ] || continue
             echo "== $name"
-            supabase functions deploy "$name" --project-ref "$PROJECT_REF" --use-api
+            # خطأ داخلي مؤقت من Supabase لا يوقف النشر: ٣ محاولات
+            for try in 1 2 3; do
+              supabase functions deploy "$name" --project-ref "$PROJECT_REF" --use-api && break
+              [ "$try" = 3 ] && exit 1
+              echo "retry $name in 10s"; sleep 10
+            done
           done
 
       - name: Apply new migrations (12 and later)

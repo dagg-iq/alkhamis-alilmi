@@ -32,7 +32,9 @@ export default function Documents() {
       must(supabase.from('teachers').select('*').order('name')),
       must(supabase.from('documents').select('*').order('sort').order('created_at')),
     ]);
-    const chunks = await must(supabase.from('ingest_chunks').select('document_id, status, from_page, to_page, next_at, last_error')) as ChunkRow[];
+    // حالة الطابور إضافية: إن تعذّرت (مثلاً قبل تطبيق migration ٢٠) تبقى الصفحة تعمل
+    const { data: chunkRows } = await supabase.from('ingest_chunks').select('document_id, status, from_page, to_page, next_at, last_error');
+    const chunks = (chunkRows ?? []) as ChunkRow[];
     return { subjects: subjects as Subject[], books: books as Book[], chapters: chapters as Chapter[], teachers: teachers as Teacher[], docs: docs as DocumentRow[], chunks };
   });
   const d = q.data;
