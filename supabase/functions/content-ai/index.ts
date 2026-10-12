@@ -3,7 +3,7 @@
 import { PDFDocument } from 'npm:pdf-lib@1.17.1';
 import { handler, HttpError, json } from '../_shared/cors.ts';
 import { admin, getCaller, getSetting } from '../_shared/supabase.ts';
-import { ADMIN_VAR, DAILY_PER_MODEL, embed, FALLBACK_MODELS, generate, GeminiQuotaError, MAIN_MODELS, modelChain, parseJson, STUDENT_VARS, toBase64 } from '../_shared/gemini.ts';
+import { ADMIN_VAR, DAILY_PER_LITE, DAILY_PER_MODEL, embed, FALLBACK_MODELS, generate, GeminiQuotaError, MAIN_MODELS, modelChain, parseJson, STUDENT_VARS, toBase64 } from '../_shared/gemini.ts';
 import { getObject } from '../_shared/storage.ts';
 
 interface Video { youtube_id: string; title: string; duration_sec: number | null; channel?: string | null }
@@ -410,7 +410,7 @@ ${list}
 
     // المفاتيح المضافة (أسماؤها فقط) لتبويب «الاستخدام»
     if (body.action === 'key_slots') {
-      return json({ slots: [ADMIN_VAR, ...STUDENT_VARS].filter((v) => Deno.env.get(v)), per_model: DAILY_PER_MODEL, models: MAIN_MODELS, fallback: FALLBACK_MODELS });
+      return json({ slots: [ADMIN_VAR, ...STUDENT_VARS].filter((v) => Deno.env.get(v)), per_model: DAILY_PER_MODEL, per_lite: DAILY_PER_LITE, models: MAIN_MODELS, fallback: FALLBACK_MODELS });
     }
 
     // ٥) فحص المفاتيح: أيها يعمل وأيها مرفوض ولماذا

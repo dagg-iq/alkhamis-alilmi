@@ -7,7 +7,7 @@ const API = 'https://generativelanguage.googleapis.com';
  * - الطلاب: GEMINI_API_KEY ثم GEMINI_API_KEY_2 … GEMINI_API_KEY_8 (كل مفتاح من مشروع/حساب مختلف بحصته الخاصة)
  * - لوحة التحكم: GEMINI_ADMIN_API_KEY أولاً ثم مفاتيح الطلاب احتياطاً
  *
- * حصة Google المجانية لكل مشروع: ٢٠ طلباً يومياً و٥ في الدقيقة **لكل نموذج**.
+ * حصة Google المجانية لكل مشروع: ٢٠ طلباً يومياً (٥٠٠ لـ Flash-Lite) و٥ في الدقيقة **لكل نموذج**.
  * لذلك الترتيب: كل نماذج المفتاح الأول (3.8 ← 3.7 ← … ← 3.1) ثم المفتاح الثاني… ثم 2.5 احتياطاً على كل المفاتيح.
  * النموذج الذي تنتهي حصته يُقفل في قاعدة البيانات حتى الوقت الذي تحدده Google (retryDelay)،
  * فلا تضيع طلبات عليه من أي دالة أو طالب آخر.
@@ -16,6 +16,9 @@ export type Pool = 'student' | 'admin';
 export const STUDENT_VARS = ['GEMINI_API_KEY', 'GEMINI_API_KEY_2', 'GEMINI_API_KEY_3', 'GEMINI_API_KEY_4', 'GEMINI_API_KEY_5', 'GEMINI_API_KEY_6', 'GEMINI_API_KEY_7', 'GEMINI_API_KEY_8'];
 export const ADMIN_VAR = 'GEMINI_ADMIN_API_KEY';
 export const DAILY_PER_MODEL = 20;
+/** نماذج Flash-Lite حصتها اليومية أكبر بكثير (~٥٠٠ طلب لكل مفتاح) */
+export const DAILY_PER_LITE = 500;
+export const dailyLimit = (model: string) => (model.includes('lite') ? DAILY_PER_LITE : DAILY_PER_MODEL);
 
 export interface KeySlot { slot: string; key: string }
 
