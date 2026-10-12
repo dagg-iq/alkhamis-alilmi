@@ -20,6 +20,7 @@ import { OfflineBanner } from '@/components/offline-banner';
 import { MessageBanner } from '@/components/message-banner';
 import { NotConfigured } from '@/components/not-configured';
 import { useWidgetSync } from '@/widgets/sync';
+import { startOutbox } from '@/lib/outbox';
 
 // التطبيق عربي بالكامل: من اليمين لليسار
 if (Platform.OS !== 'web') {
@@ -125,6 +126,9 @@ function Navigator() {
   useEffect(() => {
     if (approvedId) registerPush(approvedId);
   }, [approvedId]);
+
+  // رسائل كُتبت بلا إنترنت: تُرسل عند فتح التطبيق وعند عودة الاتصال
+  useEffect(() => (approvedId ? startOutbox() : undefined), [approvedId]);
 
   // ويدجتات الشاشة الرئيسية (أندرويد)
   useWidgetSync(approvedId);

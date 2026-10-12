@@ -66,7 +66,7 @@ export default function Home() {
       unreadNotifs: unreadNotifs.count ?? 0,
       sched,
     };
-  }, [me.id]);
+  }, [me.id], { key: `home:${me.id}` });
 
   useFocusEffect(useCallback(() => {
     q.reload();

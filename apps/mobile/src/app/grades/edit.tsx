@@ -26,7 +26,7 @@ export default function EditGrades() {
   const [original, setOriginal] = useState<Record<string, string>>({});
   const [loadingPeriod, setLoadingPeriod] = useState(true);
   const [busy, setBusy] = useState(false);
-  const subjects = useLoad(loadSubjects);
+  const subjects = useLoad(loadSubjects, [], { key: 'subjects' });
   const inputs = useRef<Record<string, TextInput | null>>({});
 
   useEffect(() => {

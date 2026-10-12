@@ -19,10 +19,20 @@ import { Avatar, Field, IconButton, NameLine, Row, T, MAX_WIDTH } from '@/compon
 import { useAuth, useMe } from '@/lib/auth';
 import { ATTACHMENT_LABELS, REACTIONS, conversationTitle, type ConversationRow, type CurriculumAttachment } from '@/lib/chat';
 import { compressImage, signedUrls, uploadFile } from '@/lib/files';
+import { readSnapshot, writeSnapshot } from '@/lib/offline';
+import { cancel as cancelQueued, enqueue, flushOutbox, isOfflineError, onOutbox, pendingFor, uuid, type OutboxItem } from '@/lib/outbox';
 import { must, supabase } from '@/lib/supabase';
 import { fonts, useTheme } from '@/lib/theme';
 
 type Member = Pick<Profile, 'id' | 'full_name' | 'avatar_url' | 'is_verified' | 'role'>;
+interface ChatSnap { conv: ConversationRow | null; members: Record<string, Member>; messages: Message[] }
+
+/** رسالة من صندوق الصادر بشكل رسالة عادية (تظهر في المحادثة بانتظار الإنترنت) */
+const fromOutbox = (x: OutboxItem): Message => ({
+  id: x.id, conversation_id: x.conversation_id, sender_id: x.sender_id, body: x.body, attachment: null,
+  reply_to_id: x.reply_to_id, mentions: x.mentions, created_at: x.created_at, edited_at: null, deleted_at: null,
+} as unknown as Message);
+const byNewest = (a: Message, b: Message) => (a.created_at < b.created_at ? 1 : -1);
 interface Reaction { message_id: string; user_id: string; emoji: string }
 const PAGE = 40;
 
@@ -54,6 +64,11 @@ export default function ChatScreen() {
   const [pending, setPending] = useState<Set<string>>(() => new Set());
   const pendingRef = useRef(pending);
   pendingRef.current = pending;
+  // رسائل كُتبت بلا إنترنت وتنتظر في صندوق الصادر
+  const [queued, setQueued] = useState<Set<string>>(() => new Set());
+  const queuedRef = useRef(queued);
+  queuedRef.current = queued;
+  const fromSnap = useRef(false);
   const inputRef = useRef<TextInput>(null);
   // الرسالة المؤقتة والمحفوظة تحملان نفس المفتاح حتى لا تومض الفقاعة عند الاستبدال
   const keyOf = useRef<Record<string, string>>({});
@@ -80,9 +95,23 @@ export default function ChatScreen() {
     setReactions((prev) => [...prev.filter((r) => !ids.includes(r.message_id)), ...((data ?? []) as Reaction[])]);
   }, []);
 
-  // التحميل الأول
+  // التحميل الأول: آخر ما ظهر (فوراً وبلا إنترنت) ثم الخادم
   useEffect(() => {
+    let alive = true;
     (async () => {
+      const [snap, waiting] = await Promise.all([readSnapshot<ChatSnap>(`chat:${id}`), pendingFor(id)]);
+      if (!alive) return;
+      const queuedMsgs = waiting.map(fromOutbox);
+      if (queuedMsgs.length) setQueued(new Set(waiting.map((x) => x.id)));
+      if (snap) {
+        fromSnap.current = true;
+        setConv(snap.conv);
+        setMembers(snap.members);
+        setMessages([...queuedMsgs, ...snap.messages.filter((m) => !waiting.some((x) => x.id === m.id))].sort(byNewest));
+        setLoading(false);
+      } else if (queuedMsgs.length) {
+        setMessages(queuedMsgs);
+      }
       try {
         const [convs, mem, msgs] = await Promise.all([
           must(supabase.rpc('my_conversations')) as Promise<ConversationRow[]>,
@@ -94,18 +123,47 @@ export default function ChatScreen() {
         for (const row of mem as unknown as { profiles: Member | null }[]) if (row.profiles) map[row.profiles.id] = row.profiles;
         setMembers(map);
         const list = msgs as Message[];
-        setMessages(list);
+        if (!alive) return;
+        // المنتظر في صندوق الصادر يبقى ظاهراً فوق ما جاء من الخادم
+        const still = await pendingFor(id);
+        setMessages([...still.map(fromOutbox).filter((m) => !list.some((x) => x.id === m.id)), ...list].sort(byNewest));
         setHasMore(list.length === PAGE);
         loadImages(list);
         loadReactions(list.map((m) => m.id));
         markRead();
       } catch (e) {
-        Alert.alert('تعذّر فتح المحادثة', e instanceof Error ? e.message : '');
+        // بلا إنترنت ومعنا نسخة محفوظة: نعرضها بصمت (شريط «بدون إنترنت» يوضح الحال)
+        if (alive && !fromSnap.current) Alert.alert('تعذّر فتح المحادثة', e instanceof Error ? e.message : '');
       } finally {
-        setLoading(false);
+        if (alive) setLoading(false);
       }
     })();
+    return () => { alive = false; };
   }, [id, loadImages, loadReactions, markRead]);
+
+  // حفظ آخر ما ظهر (بدون المنتظر في الصادر — له مخزنه)
+  useEffect(() => {
+    if (loading) return;
+    const t = setTimeout(() => {
+      writeSnapshot(`chat:${id}`, {
+        conv, members,
+        messages: messages.filter((m) => !queuedRef.current.has(m.id) && !pendingRef.current.has(m.id)).slice(0, PAGE),
+      } satisfies ChatSnap);
+    }, 800);
+    return () => clearTimeout(t);
+  }, [id, conv, members, messages, loading]);
+
+  // صندوق الصادر: رسالة منتظرة وصلت للخادم أو رُفضت
+  useEffect(() => onOutbox((e) => {
+    if (e.item.conversation_id !== id) return;
+    setQueued((q) => { const n = new Set(q); n.delete(e.item.id); return n; });
+    if (e.type === 'sent') {
+      setMessages((prev) => prev.map((x) => (x.id === e.item.id ? e.message : x)));
+    } else {
+      setMessages((prev) => prev.filter((x) => x.id !== e.item.id));
+      Alert.alert('لم تُرسل رسالة منتظرة', `«${e.item.body.slice(0, 60)}»\n${e.error}`);
+    }
+  }), [id]);
 
   // اللحظي
   const firstSub = useRef(false);
@@ -201,7 +259,8 @@ export default function ChatScreen() {
     }
     // الرسالة تظهر فوراً (قبل رد الخادم) ثم تُستبدل بالنسخة المحفوظة
     const mentionIds = mentions.filter((p) => body.includes(`@${p.full_name.split(' ').slice(0, 2).join('_')}`)).map((p) => p.id);
-    const tempId = `tmp-${Date.now()}`;
+    // معرّف ثابت من الهاتف: نفس الرسالة إن أُعيد إرسالها لا تتكرر
+    const tempId = uuid();
     const temp = {
       id: tempId, conversation_id: id, sender_id: me.id, body: body || null, attachment: attachment ?? null,
       reply_to_id: replyTo?.id ?? null, mentions: mentionIds, created_at: new Date().toISOString(), edited_at: null, deleted_at: null,
@@ -213,6 +272,7 @@ export default function ChatScreen() {
     setMentions([]);
     setReplyTo(null);
     const { data, error } = await supabase.from('messages').insert({
+      id: tempId,
       conversation_id: id,
       sender_id: me.id,
       body: body || null,
@@ -221,6 +281,13 @@ export default function ChatScreen() {
       mentions: mentionIds,
     }).select('*').single();
     setPending((p) => { const n = new Set(p); n.delete(tempId); return n; });
+    if ((error || !data) && !attachment && body && isOfflineError(error)) {
+      // بلا إنترنت: تبقى في المحادثة بانتظار الاتصال وتُرسل وحدها عند عودته
+      await enqueue({ id: tempId, conversation_id: id, sender_id: me.id, body, reply_to_id: temp.reply_to_id, mentions: mentionIds, created_at: temp.created_at });
+      setQueued((q) => new Set(q).add(tempId));
+      flushOutbox().catch(() => {});
+      return;
+    }
     if (error || !data) {
       setMessages((prev) => prev.filter((x) => x.id !== tempId));
       setText((t) => t || savedText);
@@ -342,8 +409,22 @@ export default function ChatScreen() {
                   reactions={reactions.filter((r) => r.message_id === item.id)}
                   myId={me.id}
                   pending={pending.has(item.id)}
+                  queued={queued.has(item.id)}
                   onImage={setViewing}
-                  onLongPress={() => !item.deleted_at && !pending.has(item.id) && setActionFor(item)}
+                  onLongPress={() => {
+                    if (queued.has(item.id)) {
+                      Alert.alert('رسالة بانتظار الإنترنت', 'تُرسل تلقائياً عند عودة الاتصال.', [
+                        { text: 'إبقاء', style: 'cancel' },
+                        { text: 'حذفها', style: 'destructive', onPress: () => {
+                          cancelQueued(item.id).catch(() => {});
+                          setQueued((q) => { const n = new Set(q); n.delete(item.id); return n; });
+                          setMessages((prev) => prev.filter((x) => x.id !== item.id));
+                        } },
+                      ]);
+                      return;
+                    }
+                    if (!item.deleted_at && !pending.has(item.id)) setActionFor(item);
+                  }}
                   onReact={(e) => react(item, e)}
                 />
               </View>
@@ -488,9 +569,9 @@ function MembersSheet({ visible, onClose, members, title, type }: {
   );
 }
 
-function Bubble({ m, mine, sender, showName, reply, replySender, imageUrl, reactions, myId, pending, onLongPress, onReact, onImage }: {
+function Bubble({ m, mine, sender, showName, reply, replySender, imageUrl, reactions, myId, pending, queued, onLongPress, onReact, onImage }: {
   m: Message; mine: boolean; sender?: Member; showName: boolean; reply?: Message; replySender?: string;
-  imageUrl?: string; reactions: Reaction[]; myId: string; pending?: boolean; onLongPress: () => void; onReact: (e: string) => void;
+  imageUrl?: string; reactions: Reaction[]; myId: string; pending?: boolean; queued?: boolean; onLongPress: () => void; onReact: (e: string) => void;
   onImage: (url: string) => void;
 }) {
   const { c } = useTheme();
@@ -535,7 +616,7 @@ function Bubble({ m, mine, sender, showName, reply, replySender, imageUrl, react
           </>
         )}
         <T size={10} color={sub} style={{ alignSelf: 'flex-end', lineHeight: 17 }}>
-          {m.edited_at && !m.deleted_at ? 'معدّلة · ' : ''}{formatTime(new Date(m.created_at))}{mine ? (pending ? ' · يُرسل' : '') : ''}
+          {m.edited_at && !m.deleted_at ? 'معدّلة · ' : ''}{formatTime(new Date(m.created_at))}{mine ? (queued ? ' · بانتظار الإنترنت' : pending ? ' · يُرسل' : '') : ''}
         </T>
       </Pressable>
       {grouped.length ? (

@@ -31,7 +31,8 @@ export interface OfflineFetchOptions {
 const PREFIX = 'saey.c1.';
 const INDEX = `${PREFIX}index`;
 // جداول لا نحفظها: ضخمة أو حساسة أو لا فائدة منها بلا إنترنت
-const SKIP_TABLES = new Set(['messages', 'ai_messages', 'content_chunks', 'push_tokens', 'audit_log', 'ai_cache', 'ai_usage']);
+// (الرسائل تُحفظ: آخر صفحة من كل محادثة تظهر بلا إنترنت — وتُمسح عند الخروج مع الباقي)
+const SKIP_TABLES = new Set(['content_chunks', 'push_tokens', 'audit_log', 'ai_cache', 'ai_usage']);
 // دوال قراءة فقط يمكن حفظ نتيجتها
 const READ_RPC = new Set(['my_conversations']);
 
@@ -50,15 +51,25 @@ const headerOf = (init: RequestInit | undefined, name: string): string => {
   return k ? rec[k] : '';
 };
 
-const isNetworkError = (e: unknown) => e instanceof TypeError || (e as { name?: string })?.name === 'AbortError';
+/**
+ * الأوقات الكاملة في الرابط (مثل «منذ ٦٠ يوماً» أو «بعد الآن») تتغير مع كل طلب، فلا يطابق المحفوظ أبداً بلا إنترنت.
+ * نستبدلها بعلامة ثابتة في مفتاح الحفظ فقط (الطلب نفسه يُرسل كما هو): بلا إنترنت يظهر آخر رد لنفس الاستعلام.
+ */
+export function cacheUrl(url: string): string {
+  let u = url;
+  try { u = decodeURIComponent(url); } catch { /* رابط غير مرمّز */ }
+  return u.replace(/\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})?/g, '<t>');
+}
+
+export const isNetworkError = (e: unknown) => e instanceof TypeError || (e as { name?: string })?.name === 'AbortError';
 
 interface Entry { s: number; ct: string; cr: string; b: string }
 type Index = [string, number, number][]; // [المفتاح، الحجم، الوقت]
 
 export function createCachingFetch(o: OfflineFetchOptions): typeof fetch {
-  const maxEntries = o.maxEntries ?? 150;
-  const maxBytes = o.maxBytes ?? 3_000_000;
-  const timeoutMs = o.timeoutMs ?? 15000;
+  const maxEntries = o.maxEntries ?? 300;
+  const maxBytes = o.maxBytes ?? 4_000_000;
+  const timeoutMs = o.timeoutMs ?? 8000;
   let offline = false;
   const setOffline = (v: boolean) => { if (v !== offline) { offline = v; o.onState?.(v); } };
 
@@ -118,7 +129,7 @@ export function createCachingFetch(o: OfflineFetchOptions): typeof fetch {
     }
 
     const body = method === 'POST' && typeof init?.body === 'string' ? init.body : '';
-    const key = `${PREFIX}${hash(`${uid}|${method}|${url}|${headerOf(init, 'accept')}|${body}`)}`;
+    const key = `${PREFIX}${hash(`${uid}|${method}|${cacheUrl(url)}|${headerOf(init, 'accept')}|${body}`)}`;
     const cached = async (): Promise<Entry | null> => {
       try { const raw = await o.store.get(key); return raw ? (JSON.parse(raw) as Entry) : null; } catch { return null; }
     };
@@ -136,6 +147,11 @@ export function createCachingFetch(o: OfflineFetchOptions): typeof fetch {
       const res = await o.base(input, reqInit);
       if (timer) clearTimeout(timer);
       setOffline(false);
+      // رمز دخول منتهٍ (أُرسل لأن التجديد لم يتم بعد عودة الإنترنت): نعرض المحفوظ بدل خطأ، والتجديد يجري بالخلفية
+      if (res.status === 401) {
+        const hit = await cached();
+        if (hit) return fromCache(hit);
+      }
       if (!storable) { /* لا نحفظ */ } else if (res.ok && res.status !== 204 && method !== 'HEAD') {
         res.clone().text().then((b) => remember(key, {
           s: res.status, ct: res.headers.get('content-type') ?? 'application/json', cr: res.headers.get('content-range') ?? '', b,
@@ -150,6 +166,10 @@ export function createCachingFetch(o: OfflineFetchOptions): typeof fetch {
       setOffline(true);
       const hit = await cached();
       if (!hit) throw e;
+      return fromCache(hit);
+    }
+
+    function fromCache(hit: Entry): Response {
       const headers: Record<string, string> = { 'x-saey-cache': '1' };
       if (hit.ct) headers['content-type'] = hit.ct;
       if (hit.cr) headers['content-range'] = hit.cr;

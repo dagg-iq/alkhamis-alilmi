@@ -27,7 +27,7 @@ export default function NewTask() {
   const [scope, setScope] = useState<TaskScope>('personal');
   const [sectionId, setSectionId] = useState<string | null>(me.section_id);
   const [busy, setBusy] = useState(false);
-  const subjects = useLoad(loadSubjects);
+  const subjects = useLoad(loadSubjects, [], { key: 'subjects' });
   const sections = useLoad(async () => (isStaff ? must(supabase.from('sections').select('*').order('sort')) as Promise<Section[]> : []), [isStaff]);
 
   const due = new Date();

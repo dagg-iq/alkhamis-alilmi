@@ -59,7 +59,7 @@ export default function SubjectScreen() {
       qsets: qsets as QuestionSet[],
       progress: progress as { item_type: string; item_id: string; state: string }[],
     };
-  }, [id, me.id]);
+  }, [id, me.id], { key: `subject:${id}` });
 
   useFocusEffect(useCallback(() => {
     q.reload();

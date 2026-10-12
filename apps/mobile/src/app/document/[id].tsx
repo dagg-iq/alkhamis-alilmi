@@ -20,9 +20,9 @@ export default function DocumentScreen() {
   const [prog, setProg] = useState<{ got: number; total: number } | null>(null);
   // حالة «محفوظ» صريحة: تتحدث فور انتهاء التحميل وعند العودة للشاشة (كان زر التحميل يبقى ظاهراً بعد انتهائه)
   const [savedNow, setSavedNow] = useState<boolean | null>(null);
-  const q = useLoad(async () => must(supabase.from('documents').select('*, subjects(name)').eq('id', id).single()) as Promise<DocumentRow & { subjects: { name: string } }>, [id]);
+  const q = useLoad(async () => must(supabase.from('documents').select('*, subjects(name)').eq('id', id).single()) as Promise<DocumentRow & { subjects: { name: string } }>, [id], { key: `document:${id}` });
 
-  const outline = useLoad(() => loadOutline(id), [id]);
+  const outline = useLoad(() => loadOutline(id), [id], { key: `outline:${id}` });
 
   // معاينة الصفحة الأولى: من الملف المحفوظ إن وُجد، وإلا من رابط مؤقت (يحمّل الصفحة الأولى فقط)
   const key = q.data?.file_key;

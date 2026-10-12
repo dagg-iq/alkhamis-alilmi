@@ -13,7 +13,7 @@ export default function More() {
     if (!me.section_id) return null;
     const { data } = await supabase.from('sections').select('name').eq('id', me.section_id).single();
     return data?.name ?? null;
-  }, [me.section_id]);
+  }, [me.section_id], { key: `section:${me.section_id}` });
 
   return (
     <Screen>

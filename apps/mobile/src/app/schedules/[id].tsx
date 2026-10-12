@@ -25,7 +25,7 @@ export default function ScheduleScreen() {
   const { c } = useTheme();
   const settings = useScheduleSettings();
   const now = useNow();
-  const q = useLoad(() => loadSchedule(id), [id]);
+  const q = useLoad(() => loadSchedule(id), [id], { key: `schedule:${id}` });
   const [picked, setPicked] = useState<number | null>(null);
   const [view, setView] = useState<'day' | 'week'>('day');
 

@@ -17,7 +17,7 @@ export default function ChatList() {
   const { isStaff } = useAuth();
   const settings = useSettings();
   const dmEnabled = (settings.chat as { direct_messages?: boolean } | undefined)?.direct_messages !== false;
-  const q = useLoad(async () => must(supabase.rpc('my_conversations')) as Promise<ConversationRow[]>);
+  const q = useLoad(async () => must(supabase.rpc('my_conversations')) as Promise<ConversationRow[]>, [], { key: 'chats' });
 
   useFocusEffect(useCallback(() => {
     q.reload();
