@@ -1,3 +1,4 @@
+import { isSafeUrl } from '@saey/shared';
 import { useState } from 'react';
 import { Linking, View } from 'react-native';
 import { WebView } from 'react-native-webview';
@@ -15,7 +16,9 @@ export function HtmlView({ html }: { html: string }) {
         onMessage={(e) => {
           const d = e.nativeEvent.data;
           if (d.startsWith('link:')) {
-            Linking.openURL(d.slice(5)).catch(() => {});
+            // روابط الويب فقط: المحتوى قد يكتبه طالب آخر (لا intent: ولا روابط التطبيق الداخلية)
+            const url = d.slice(5);
+            if (isSafeUrl(url)) Linking.openURL(url).catch(() => {});
             return;
           }
           const h = Number(d);

@@ -68,6 +68,16 @@ export async function compressImage(file: File, maxSide = 1600, quality = 0.72):
   }
 }
 
+/**
+ * يحذف ملفات من التخزين بعد حذف صفوفها (الخادم يتجاهل أي ملف ما زال صف يشير إليه).
+ * أفضل جهد: فشله لا يوقف العملية (يبقى ملف يتيم فقط).
+ */
+export async function deleteFiles(keys: (string | null | undefined)[]): Promise<void> {
+  const list = [...new Set(keys.filter((k): k is string => !!k))];
+  if (!list.length) return;
+  await callFunction('files', { action: 'delete', keys: list }).catch(() => {});
+}
+
 export async function signedUrl(key: string): Promise<string> {
   const res = await callFunction<{ url: string }>('files', { action: 'download', key });
   return res.url;

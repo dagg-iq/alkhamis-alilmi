@@ -4,7 +4,8 @@ import { askText } from '../components/dialog';
 import { Empty, Field, Modal, Tabs, useAction, useToast } from '../components/ui';
 import { ensureChapter, ensureTeachers, indexLecture } from '../lib/content-ai';
 import { useLoad } from '../lib/hooks';
-import { callFunction, must, supabase, uploadFile } from '../lib/supabase';
+import { callFunction, deleteFiles, must, supabase, uploadFile } from '../lib/supabase';
+import { slotLabel } from './Usage';
 
 /**
  * مساعد المحتوى: يلصق المشرف رابط قائمة تشغيل أو يسحب ملفات PDF،
@@ -78,10 +79,8 @@ export default function Assistant() {
 
 type Data = { subjects: Subject[]; books: Book[]; chapters: Chapter[]; teachers: Teacher[] };
 
-const KEY_LABELS: Record<string, string> = {
-  GEMINI_ADMIN_API_KEY: 'مفتاح لوحة التحكم', GEMINI_API_KEY: 'مفتاح الطلاب ١', GEMINI_API_KEY_2: 'مفتاح الطلاب ٢',
-  GEMINI_API_KEY_3: 'مفتاح الطلاب ٣', GEMINI_API_KEY_4: 'مفتاح الطلاب ٤', YOUTUBE_API_KEY: 'مفتاح YouTube',
-};
+/** اسم مقروء لكل سر (كل مفاتيح الطلاب ١–٨ بنفس تسمية صفحة «الاستخدام») */
+const keyLabel = (name: string) => (name === 'YOUTUBE_API_KEY' ? 'مفتاح YouTube' : /^GEMINI_/.test(name) ? slotLabel(name) : name);
 
 /** يجرب كل مفتاح بطلب صغير ويعرض أيها يعمل ولماذا رُفض غيره */
 function KeyCheck() {
@@ -98,7 +97,7 @@ function KeyCheck() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {results.map((r) => (
               <div key={r.name} className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
-                <b>{KEY_LABELS[r.name] ?? r.name}</b>
+                <b>{keyLabel(r.name)}</b>
                 <span className={`pill ${r.ok ? 'ok' : r.detail === 'غير مضاف' ? '' : r.detail.includes('حصته') ? 'warn' : 'bad'}`} style={{ whiteSpace: 'normal', textAlign: 'start' }} dir="auto">{r.detail}</span>
               </div>
             ))}
@@ -444,7 +443,7 @@ function FilesTab({ data: d, reload }: { data: Data; reload: () => Promise<void>
           <p className="small dim" style={{ margin: 0 }}>بعد الحفظ تجد الملفات في «الكتب والملازم»، ومن هناك تضغط «فهرسة» لكل ملف (يقرؤه المساعد ويبني فصوله ومواضيعه).</p>
           <div className="row">
             <button className="btn primary" onClick={save} disabled={busy || !ready}>{busy && step ? step : `حفظ ${ready} ملف`}</button>
-            <button className="btn ghost" onClick={() => setRows([])} disabled={busy}>مسح القائمة</button>
+            <button className="btn ghost" onClick={() => { deleteFiles(rows.map((r) => r.key)); setRows([]); }} disabled={busy}>مسح القائمة</button>
           </div>
         </>
       ) : null}

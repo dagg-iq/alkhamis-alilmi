@@ -25,6 +25,9 @@ const toRow = (i: ScheduleItem): Row => ({
 const blank = (over: Partial<Row>): Row => ({
   id: uid(), day: null, on_date: '', sort: 1, start_time: '', end_time: '', subject_id: '', title: '', teacher: '', place: '', note: '', ...over,
 });
+/** بصمة الجدول للمقارنة (الصفوف الفارغة لا تُحفظ فلا تُحسب) */
+const signature = (meta: unknown, rows: Row[]) =>
+  JSON.stringify([meta, rows.filter((r) => r.subject_id || r.title.trim() || r.on_date).map((r) => [r.id, r.day, r.on_date, r.sort, r.start_time, r.end_time, r.subject_id, r.title.trim(), r.teacher.trim(), r.place.trim(), r.note.trim()]).sort()]);
 const hhmm = (m: number) => `${String(Math.floor(m / 60) % 24).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
 const toItem = (r: Row, scheduleId: string) => ({
   id: r.id, schedule_id: scheduleId, day: r.day, on_date: r.on_date || null, sort: r.sort,
@@ -162,6 +165,13 @@ function Editor({ id: initialId, data, onClose }: { id: string | null; data: Edi
   });
   const [rows, setRows] = useState<Row[]>([]);
   const [loaded, setLoaded] = useState(!initialId);
+  // آخر نسخة محفوظة: الرجوع للقائمة بتعديلات غير محفوظة يسأل أولاً (كانت تضيع بصمت)
+  const [saved, setSaved] = useState(() => signature(meta, []));
+  const dirty = loaded && signature(meta, rows) !== saved;
+  const back = async () => {
+    if (dirty && !(await askConfirm('في الجدول تعديلات لم تُحفظ. الرجوع بدون حفظ؟', { ok: 'رجوع بدون حفظ', danger: true }))) return;
+    onClose();
+  };
   const [auto, setAuto] = useState({ start: data.settings.start, lesson: 45, gap: 5 });
   const days = data.settings.school_days;
   const weekly = meta.kind === 'weekly';
@@ -176,8 +186,10 @@ function Editor({ id: initialId, data, onClose }: { id: string | null; data: Edi
         for (let n = 1; n <= Math.max(...have); n++) if (!have.has(n)) loadedRows.push(blank({ day: d, sort: n }));
       }
       setRows(loadedRows);
+      setSaved(signature(meta, loadedRows));
       setLoaded(true);
     }).catch((e) => toast(e instanceof Error ? e.message : 'تعذّر التحميل', true));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialId, toast]);
 
   const patch = (rid: string, p: Partial<Row>) => setRows((rs) => rs.map((r) => (r.id === rid ? { ...r, ...p } : r)));
@@ -239,6 +251,7 @@ function Editor({ id: initialId, data, onClose }: { id: string | null; data: Edi
     const del = supabase.from('schedule_items').delete().eq('schedule_id', sid!);
     await check(keep.length ? del.not('id', 'in', `(${keep.join(',')})`) : del);
     setRows(clean);
+    setSaved(signature(meta, clean));
   }, 'حُفظ الجدول');
 
   const print = () => {
@@ -264,7 +277,7 @@ function Editor({ id: initialId, data, onClose }: { id: string | null; data: Edi
         <h1>{id ? 'تعديل الجدول' : 'جدول جديد'}</h1>
         <div className="row">
           <button className="btn" onClick={print}>طباعة A4</button>
-          <button className="btn" onClick={onClose}>رجوع للقائمة</button>
+          <button className="btn" onClick={back}>رجوع للقائمة</button>
           <button className="btn primary" onClick={save} disabled={busy || !loaded}>حفظ</button>
         </div>
       </div>

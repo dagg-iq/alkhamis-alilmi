@@ -4,7 +4,7 @@ import { askConfirm } from '../components/dialog';
 import { Empty, Field, Modal, check, useAction } from '../components/ui';
 import { useAuth } from '../lib/auth';
 import { useLoad } from '../lib/hooks';
-import { compressImage, must, supabase, uploadFile } from '../lib/supabase';
+import { compressImage, deleteFiles, must, supabase, uploadFile } from '../lib/supabase';
 
 const KIND_PILL: Record<PostKind, string> = { news: 'accent', holiday: 'ok', exam: 'warn', urgent: 'bad' };
 
@@ -29,6 +29,8 @@ export default function News() {
       published_at: edit.published_at ?? new Date().toISOString(),
     };
     await check(edit.id ? supabase.from('posts').update(row).eq('id', edit.id) : supabase.from('posts').insert({ ...row, author_id: profile!.id }));
+    // صورة استُبدلت: القديمة لم تعد لازمة
+    if (edit.id && edit.cover && edit.cover_key && edit.cover_key !== cover_key) await deleteFiles([edit.cover_key]);
     setEdit(null);
     await q.reload();
   }, edit?.id ? 'تم الحفظ' : 'نُشر الخبر ووصل إشعار للطلاب');
@@ -55,7 +57,7 @@ export default function News() {
                   <td>
                     <div className="row" style={{ justifyContent: 'flex-end', flexWrap: 'nowrap' }}>
                       <button className="btn sm" onClick={() => setEdit(p)}>تعديل</button>
-                      <button className="btn danger sm" onClick={async () => (await askConfirm('حذف الخبر؟')) && run(async () => { await check(supabase.from('posts').delete().eq('id', p.id)); await q.reload(); }, 'تم الحذف')}>حذف</button>
+                      <button className="btn danger sm" onClick={async () => (await askConfirm('حذف الخبر؟')) && run(async () => { await check(supabase.from('posts').delete().eq('id', p.id)); await deleteFiles([p.cover_key]); await q.reload(); }, 'تم الحذف')}>حذف</button>
                     </div>
                   </td>
                 </tr>

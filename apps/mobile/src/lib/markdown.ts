@@ -1,7 +1,8 @@
 import katex from 'katex';
 import { KATEX_INLINE_CSS } from './katex-css';
 import 'katex/contrib/mhchem';
-import { marked } from 'marked';
+import { Marked } from 'marked';
+import { isSafeUrl, sanitizeHtml } from '@saey/shared';
 
 /**
  * تحويل إجابات المساعد والأسئلة (Markdown + LaTeX) إلى HTML جاهز داخل التطبيق نفسه.
@@ -46,6 +47,20 @@ export function needsHtml(text: string): boolean {
 export function esc(s: string) {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
+
+/**
+ * Markdown آمن: النص قد يكتبه طالب آخر (إجابة مشاركة في الدردشة)، فلا يمر HTML خام إلا وسوم التنسيق
+ * (التظليل <mark> وأمثاله)، والروابط والصور بمخطط ويب فقط — وإلا يُعرض النص وحده.
+ */
+const md = new Marked({
+  breaks: true,
+  async: false,
+  renderer: {
+    html: (html) => sanitizeHtml(html),
+    link: (href, _title, text) => (isSafeUrl(href) ? false : text),
+    image: (href, _title, text) => (isSafeUrl(href) ? false : esc(text)),
+  },
+});
 
 const decodeEntities = (s: string) => s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&');
 
@@ -121,7 +136,7 @@ export function renderMarkdown(src: string): string {
   // التظليل ==نص==
   s = s.replace(/==([^=\n]+)==/g, (_, m: string) => `<mark>${m}</mark>`);
 
-  let html = marked.parse(s, { breaks: true, async: false }) as string;
+  let html = md.parse(s) as string;
   // اتجاه كل فقرة حسب أول حرف فيها: الجمل الإنكليزية من اليسار
   html = html.replace(/<(p|li|h[1-6]|td|th)>/g, '<$1 dir="auto">');
   // روابط تفتح خارج الصفحة
