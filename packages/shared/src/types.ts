@@ -141,6 +141,8 @@ export interface Message {
   created_at: string;
   edited_at: string | null;
   deleted_at: string | null;
+  /** أُعيد توجيهها من محادثة أخرى */
+  forwarded?: boolean;
 }
 export interface AiSource { title: string; subject?: string; chapter?: string; page?: number; printed?: string; document_id?: string; lecture_id?: string; start?: number }
 export interface AiMessage { id: string; chat_id: string; role: 'user' | 'assistant'; content: string; sources: AiSource[] | null; created_at: string }

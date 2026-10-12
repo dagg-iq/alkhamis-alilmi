@@ -17,6 +17,8 @@ export interface OutboxItem {
   reply_to_id: string | null;
   mentions: string[];
   created_at: string;
+  /** إعادة توجيه (تظهر بعلامة «مُعاد توجيهها») */
+  forwarded?: boolean;
 }
 
 type Event = { type: 'sent'; item: OutboxItem; message: Message } | { type: 'failed'; item: OutboxItem; error: string };
@@ -87,6 +89,7 @@ async function doFlush() {
       attachment: null,
       reply_to_id: item.reply_to_id,
       mentions: item.mentions,
+      ...(item.forwarded ? { forwarded: true } : {}),
     }).select('*').single();
     let message = data as Message | null;
     if (error) {

@@ -23,6 +23,7 @@ const PATHS: Record<string, string[]> = {
   image: ['M4 5h16v14H4z', 'M4 16l5-5 4 4 3-3 4 4'],
   send: ['M20 12L4 4l3 8-3 8z', 'M7 12h7'],
   reply: ['M14 8l4 4-4 4', 'M18 12H9a4 4 0 0 0-4 4v2'],
+  'forward-msg': ['M10 8l-4 4 4 4', 'M6 12h9a4 4 0 0 1 4 4v2'],
   paperclip: ['M17 11l-6 6a4 4 0 0 1-6-6l7-7a3 3 0 0 1 4 4l-7 7a1.5 1.5 0 0 1-2-2l6-6'],
   sparkle: ['M12 3l2 6 6 2-6 2-2 6-2-6-6-2 6-2z'],
   timer: ['M12 8v5l3 2', 'M9 2h6'],

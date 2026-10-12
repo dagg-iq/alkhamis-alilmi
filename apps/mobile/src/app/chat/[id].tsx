@@ -5,15 +5,18 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, Platform, Pressable, ScrollView, TextInput, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, FlatList, I18nManager, Platform, Pressable, ScrollView, TextInput, View, useWindowDimensions } from 'react-native';
 import { Alert } from '@/lib/dialog';
-import Animated, { FadeIn } from 'react-native-reanimated';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import Animated, { FadeIn, interpolate, runOnJS, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AttachmentCard } from '@/components/attachment-card';
 import { ImageViewer } from '@/components/image-viewer';
 import { KeyboardView } from '@/components/motion';
 import { Icon } from '@/components/icon';
 import { ConversationMark } from '@/components/group-mark';
+import { ForwardSheet } from '@/components/forward-sheet';
+import { tap } from '@/components/motion';
 import { Sheet, SheetItem } from '@/components/sheet';
 import { Avatar, Field, IconButton, NameLine, Row, T, MAX_WIDTH } from '@/components/ui';
 import { useAuth, useMe } from '@/lib/auth';
@@ -30,7 +33,7 @@ interface ChatSnap { conv: ConversationRow | null; members: Record<string, Membe
 /** رسالة من صندوق الصادر بشكل رسالة عادية (تظهر في المحادثة بانتظار الإنترنت) */
 const fromOutbox = (x: OutboxItem): Message => ({
   id: x.id, conversation_id: x.conversation_id, sender_id: x.sender_id, body: x.body, attachment: null,
-  reply_to_id: x.reply_to_id, mentions: x.mentions, created_at: x.created_at, edited_at: null, deleted_at: null,
+  reply_to_id: x.reply_to_id, mentions: x.mentions, created_at: x.created_at, edited_at: null, deleted_at: null, forwarded: !!x.forwarded,
 } as unknown as Message);
 const byNewest = (a: Message, b: Message) => (a.created_at < b.created_at ? 1 : -1);
 interface Reaction { message_id: string; user_id: string; emoji: string }
@@ -69,6 +72,14 @@ export default function ChatScreen() {
   const queuedRef = useRef(queued);
   queuedRef.current = queued;
   const fromSnap = useRef(false);
+  const [forwardOf, setForwardOf] = useState<Message | null>(null);
+  // الرسالة الأصلية بعد الضغط على اقتباس الرد: تومض لحظة
+  const [highlight, setHighlight] = useState<string | null>(null);
+  const listRef = useRef<FlatList<Message>>(null);
+  const messagesRef = useRef<Message[]>([]);
+  messagesRef.current = messages;
+  const hasMoreRef = useRef(true);
+  hasMoreRef.current = hasMore;
   const inputRef = useRef<TextInput>(null);
   // الرسالة المؤقتة والمحفوظة تحملان نفس المفتاح حتى لا تومض الفقاعة عند الاستبدال
   const keyOf = useRef<Record<string, string>>({});
@@ -230,6 +241,38 @@ export default function ChatScreen() {
     loadReactions(list.map((m) => m.id));
   };
 
+  // الضغط على اقتباس الرد: ننتقل للرسالة الأصلية (نجلب الأقدم إن لم تكن محمّلة) ونومّضها
+  const jumpTo = async (target: string) => {
+    let list = messagesRef.current;
+    let more = hasMoreRef.current;
+    for (let i = 0; i < 10 && more && !list.some((m) => m.id === target); i++) {
+      const oldest = list[list.length - 1]?.created_at;
+      if (!oldest) break;
+      const { data, error } = await supabase.from('messages').select('*').eq('conversation_id', id)
+        .lt('created_at', oldest).order('created_at', { ascending: false }).limit(PAGE);
+      if (error) break;
+      const older = (data ?? []) as Message[];
+      more = older.length === PAGE;
+      list = [...list, ...older.filter((m) => !list.some((x) => x.id === m.id))];
+      setHasMore(more);
+      setMessages((prev) => [...prev, ...older.filter((m) => !prev.some((x) => x.id === m.id))]);
+      loadImages(older);
+      loadReactions(older.map((m) => m.id));
+      if (!older.length) break;
+    }
+    if (!list.some((m) => m.id === target)) {
+      Alert.alert('الرسالة الأصلية غير متاحة', 'ربما حُذفت أو أنها قديمة جداً.');
+      return;
+    }
+    setTimeout(() => {
+      const index = messagesRef.current.findIndex((m) => m.id === target);
+      if (index < 0) return;
+      listRef.current?.scrollToIndex({ index, viewPosition: 0.5, animated: true });
+      setHighlight(target);
+      setTimeout(() => setHighlight((h) => (h === target ? null : h)), 1600);
+    }, 60);
+  };
+
   // الإشارة @
   const mentionQuery = useMemo(() => {
     const m = text.match(/@([^\s@]*)$/);
@@ -381,8 +424,14 @@ export default function ChatScreen() {
 
       {loading ? <ActivityIndicator color={c.accent} style={{ marginTop: 40 }} /> : (
         <FlatList
+          ref={listRef}
           inverted
           data={messages}
+          onScrollToIndexFailed={(info) => {
+            // العنصر لم يُرسم بعد: نقترب منه تقريبياً ثم نعيد المحاولة
+            listRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: false });
+            setTimeout(() => listRef.current?.scrollToIndex({ index: info.index, viewPosition: 0.5, animated: true }), 120);
+          }}
           keyExtractor={(m) => keyOf.current[m.id] ?? m.id}
           contentContainerStyle={{ padding: 12, gap: 4, width: '100%', maxWidth: MAX_WIDTH, alignSelf: 'center' }}
           onEndReached={loadOlder}
@@ -392,7 +441,7 @@ export default function ChatScreen() {
             const showName = isGroup && item.sender_id !== me.id && older?.sender_id !== item.sender_id;
             const dayChanged = !older || new Date(older.created_at).toDateString() !== new Date(item.created_at).toDateString();
             return (
-              <View>
+              <View style={{ borderRadius: 16, backgroundColor: highlight === item.id ? c.soft : 'transparent' }}>
                 {dayChanged ? (
                   <View style={{ alignSelf: 'center', marginVertical: 10, paddingHorizontal: 12, paddingVertical: 4, borderRadius: 999, backgroundColor: c.card }}>
                     <T dim size={12}>{new Date(item.created_at).toDateString() === new Date().toDateString() ? 'اليوم' : new Date(item.created_at).toLocaleDateString('ar-IQ')}</T>
@@ -404,6 +453,12 @@ export default function ChatScreen() {
                   sender={members[item.sender_id]}
                   showName={showName}
                   reply={item.reply_to_id ? byId[item.reply_to_id] : undefined}
+                  onReplyPress={item.reply_to_id ? () => jumpTo(item.reply_to_id!) : undefined}
+                  onSwipeReply={item.deleted_at || queued.has(item.id) || pending.has(item.id) || !canPost ? undefined : () => {
+                    setEditing(null);
+                    setReplyTo(item);
+                    inputRef.current?.focus();
+                  }}
                   replySender={item.reply_to_id && byId[item.reply_to_id] ? members[byId[item.reply_to_id].sender_id]?.full_name : undefined}
                   imageUrl={item.attachment?.type === 'image' ? images[item.attachment.key] : undefined}
                   reactions={reactions.filter((r) => r.message_id === item.id)}
@@ -497,10 +552,11 @@ export default function ChatScreen() {
                 </Pressable>
               ))}
             </Row>
-            <SheetItem icon="reply" label="رد" onPress={() => { setReplyTo(actionFor); setActionFor(null); inputRef.current?.focus(); }} />
+            {canPost ? <SheetItem icon="reply" label="رد" onPress={() => { setReplyTo(actionFor); setActionFor(null); inputRef.current?.focus(); }} /> : null}
+            <SheetItem icon="forward-msg" label="إعادة توجيه" onPress={() => { setForwardOf(actionFor); setActionFor(null); }} />
  {actionFor.body ? <SheetItem icon="sparkles" label="اسأل مساعد سعي عنها" onPress={() => { const b = actionFor.body ?? ''; setActionFor(null); router.push({ pathname: '/ai', params: { prompt: b } }); }} /> : null}
             {actionFor.body ? <SheetItem icon="copy" label="نسخ النص" onPress={() => { Clipboard.setStringAsync(actionFor.body ?? ''); setActionFor(null); }} /> : null}
-            {actionFor.sender_id === me.id && actionFor.body ? (
+            {actionFor.sender_id === me.id && actionFor.body && !actionFor.forwarded ? (
               <SheetItem icon="edit" label="تعديل" onPress={() => { setEditing(actionFor); setText(actionFor.body ?? ''); setActionFor(null); inputRef.current?.focus(); }} />
             ) : null}
             {actionFor.sender_id === me.id || isStaff ? <SheetItem icon="trash" label="حذف" danger onPress={() => remove(actionFor)} /> : null}
@@ -524,6 +580,7 @@ export default function ChatScreen() {
       <CurriculumPicker visible={curriculumOpen} onClose={() => setCurriculumOpen(false)}
         onPick={(a) => { setCurriculumOpen(false); send(a); }} />
       <ImageViewer url={viewing} onClose={() => setViewing(null)} />
+      <ForwardSheet message={forwardOf} fromConversation={id} onClose={() => setForwardOf(null)} />
     </KeyboardView>
   );
 }
@@ -569,8 +626,15 @@ function MembersSheet({ visible, onClose, members, title, type }: {
   );
 }
 
-function Bubble({ m, mine, sender, showName, reply, replySender, imageUrl, reactions, myId, pending, queued, onLongPress, onReact, onImage }: {
+const SWIPE = 64;
+// التطبيق يقلب يسار/يمين في وضع RTL (swapLeftAndRightInRTL)، والسحب بالبكسل الفعلي: نحدد الجهة الفعلية
+const FLIP = I18nManager.isRTL && I18nManager.doLeftAndRightSwapInRTL;
+const PHYS_LEFT = FLIP ? { right: 0 } : { left: 0 };
+const PHYS_RIGHT = FLIP ? { left: 0 } : { right: 0 };
+
+function Bubble({ m, mine, sender, showName, reply, replySender, imageUrl, reactions, myId, pending, queued, onLongPress, onReact, onImage, onReplyPress, onSwipeReply }: {
   m: Message; mine: boolean; sender?: Member; showName: boolean; reply?: Message; replySender?: string;
+  onReplyPress?: () => void; onSwipeReply?: () => void;
   imageUrl?: string; reactions: Reaction[]; myId: string; pending?: boolean; queued?: boolean; onLongPress: () => void; onReact: (e: string) => void;
   onImage: (url: string) => void;
 }) {
@@ -583,10 +647,56 @@ function Bubble({ m, mine, sender, showName, reply, replySender, imageUrl, react
   // الرسائل الجديدة فقط تدخل بحركة (لا نحرّك السجل القديم عند الفتح أو التمرير)
   const [fresh] = useState(() => Date.now() - new Date(m.created_at).getTime() < 5000);
 
+  // السحب الأفقي على الفقاعة = رد (مثل واتساب وتيليجرام)؛ الاهتزاز عند تجاوز الحد
+  const tx = useSharedValue(0);
+  const armed = useSharedValue(false);
+  const swipe = Gesture.Pan()
+    .enabled(!!onSwipeReply)
+    .activeOffsetX([-18, 18])
+    .failOffsetY([-12, 12])
+    .onUpdate((e) => {
+      const d = e.translationX;
+      // مقاومة بعد الحد
+      tx.value = Math.sign(d) * (Math.abs(d) < SWIPE ? Math.abs(d) : SWIPE + (Math.abs(d) - SWIPE) * 0.25);
+      const over = Math.abs(d) >= SWIPE;
+      if (over !== armed.value) {
+        armed.value = over;
+        if (over) runOnJS(tap)('select');
+      }
+    })
+    .onEnd(() => {
+      if (armed.value && onSwipeReply) runOnJS(onSwipeReply)();
+      armed.value = false;
+      tx.value = withSpring(0, { damping: 20, stiffness: 260 });
+    });
+  const rowStyle = useAnimatedStyle(() => ({ transform: [{ translateX: tx.value }] }));
+  // أيقونة الرد تظهر في الفراغ الذي يتركه السحب (يسار الشاشة عند السحب يميناً والعكس)
+  const leftIcon = useAnimatedStyle(() => ({
+    opacity: interpolate(tx.value, [10, SWIPE], [0, 1], 'clamp'),
+    transform: [{ scale: interpolate(tx.value, [10, SWIPE], [0.6, 1], 'clamp') }],
+  }));
+  const rightIcon = useAnimatedStyle(() => ({
+    opacity: interpolate(-tx.value, [10, SWIPE], [0, 1], 'clamp'),
+    transform: [{ scale: interpolate(-tx.value, [10, SWIPE], [0.6, 1], 'clamp') }],
+  }));
+  const replyIcon = (
+    <View style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: c.card, borderWidth: 1, borderColor: c.line, alignItems: 'center', justifyContent: 'center' }}>
+      <Icon name="reply" size={16} color={c.accent} />
+    </View>
+  );
+
   return (
+    <View>
+    {onSwipeReply ? (
+      <>
+        <Animated.View pointerEvents="none" style={[{ position: 'absolute', top: 0, bottom: 0, justifyContent: 'center', paddingHorizontal: 6 }, PHYS_LEFT, leftIcon]}>{replyIcon}</Animated.View>
+        <Animated.View pointerEvents="none" style={[{ position: 'absolute', top: 0, bottom: 0, justifyContent: 'center', paddingHorizontal: 6 }, PHYS_RIGHT, rightIcon]}>{replyIcon}</Animated.View>
+      </>
+    ) : null}
+    <GestureDetector gesture={swipe}>
     <Animated.View
       entering={fresh ? FadeIn.duration(120) : undefined}
-      style={{ alignSelf: mine ? 'flex-end' : 'flex-start', maxWidth: '82%', marginTop: showName ? 8 : 0 }}>
+      style={[{ alignSelf: mine ? 'flex-end' : 'flex-start', maxWidth: '82%', marginTop: showName ? 8 : 0 }, rowStyle]}>
       {showName && sender ? (
         <View style={{ marginBottom: 2, paddingHorizontal: 6 }}>
           <NameLine name={sender.full_name} verified={sender.is_verified} size={12} />
@@ -598,11 +708,22 @@ function Bubble({ m, mine, sender, showName, reply, replySender, imageUrl, react
           <T size={14} color={sub} style={{ fontStyle: 'italic' }}>رسالة محذوفة</T>
         ) : (
           <>
-            {reply ? (
-              <View style={{ borderRightWidth: 3, borderRightColor: mine ? '#FFFFFF' : c.accent, paddingRight: 8, opacity: 0.85 }}>
-                <T size={12} weight="bold" color={fg}>{replySender ?? ''}</T>
-                <T size={13} color={fg} lines={2}>{reply.deleted_at ? 'رسالة محذوفة' : reply.body ?? 'مرفق'}</T>
-              </View>
+            {m.forwarded ? (
+              <Row gap={4}>
+                <Icon name="forward-msg" size={13} color={sub} />
+                <T size={11} color={sub} style={{ fontStyle: 'italic' }}>مُعاد توجيهها</T>
+              </Row>
+            ) : null}
+            {m.reply_to_id ? (
+              <Pressable onPress={onReplyPress} disabled={!onReplyPress} accessibilityRole="button" accessibilityLabel="الانتقال للرسالة الأصلية"
+                style={{ borderRightWidth: 3, borderRightColor: mine ? '#FFFFFF' : c.accent, paddingRight: 8, paddingVertical: 2, borderRadius: 4, backgroundColor: mine ? 'rgba(255,255,255,0.12)' : c.soft }}>
+                {reply ? (
+                  <>
+                    <T size={12} weight="bold" color={mine ? fg : c.accent}>{replySender ?? ''}</T>
+                    <T size={13} color={fg} lines={2}>{reply.deleted_at ? 'رسالة محذوفة' : reply.body ?? (reply.attachment?.type === 'image' ? 'صورة' : 'مرفق')}</T>
+                  </>
+                ) : <T size={13} color={fg}>رد على رسالة أقدم — اضغط للانتقال</T>}
+              </Pressable>
             ) : null}
             {a?.type === 'image' ? (
               imageUrl ? (
@@ -634,6 +755,8 @@ function Bubble({ m, mine, sender, showName, reply, replySender, imageUrl, react
         </Row>
       ) : null}
     </Animated.View>
+    </GestureDetector>
+    </View>
   );
 }
 
