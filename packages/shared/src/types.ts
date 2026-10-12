@@ -57,6 +57,8 @@ export interface DocumentRow {
   sort: number;
   is_published: boolean;
   ingested_pages: number;
+  /** كل الصفحات المقروءة (ingested_pages = المتتالية من ١ فقط) */
+  read_pages?: number | null;
   ingest_status: 'none' | 'running' | 'done' | 'error';
   ingest_error: string | null;
   outline_status?: 'none' | 'running' | 'done' | 'error';

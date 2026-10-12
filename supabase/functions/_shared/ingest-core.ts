@@ -33,15 +33,18 @@ const INLINE_PROMPT = (from: number, to: number) => `هذا الملف يحتو�
 ${READ_PROMPT(from, to).split('\n').slice(1).join('\n')}`;
 
 /** صفحات محددة من ملف PDF صغير (قطعته لوحة التحكم): أسرع بكثير من إرسال الكتاب كاملاً، وأي مفتاح يقرؤه */
+// لا نبدأ قراءة إلا ومعها هذا الوقت على الأقل (القطع قبل الجواب يضيّع الطلب من الحصة)
+const MIN_READ_MS = 40_000;
+
 export async function readInline(pdf: Uint8Array | string, from: number, to: number, deadline: number, lane?: number, scanned = false): Promise<ReadPage[]> {
-  if (Date.now() > deadline) return [];
+  if (deadline - Date.now() < MIN_READ_MS) return [];
   const b64 = typeof pdf === 'string' ? pdf : toBase64(pdf);
   let pages: ReadPage[] = [];
   try {
     const raw = await generate(READ_MODELS, [{
       role: 'user',
       parts: [{ inline_data: { mime_type: 'application/pdf', data: b64 } }, { text: INLINE_PROMPT(from, to) }],
-    }], { json: true, temperature: 0, maxOutputTokens: 32768, pool: 'admin', lane, fallback: READ_FALLBACK, thinking: scanned ? 'low' : 'minimal', extraConfig: { mediaResolution: 'MEDIA_RESOLUTION_HIGH' }, deadline });
+    }], { json: true, temperature: 0, maxOutputTokens: 32768, pool: 'admin', lane, fallback: READ_FALLBACK, minTimeMs: MIN_READ_MS, thinking: scanned ? 'low' : 'minimal', extraConfig: { mediaResolution: 'MEDIA_RESOLUTION_HIGH' }, deadline });
     const parsed = parseJson<ReadPage[] | { pages: ReadPage[] }>(raw);
     const list = Array.isArray(parsed) ? parsed : parsed.pages;
     pages = (Array.isArray(list) ? list : []).filter((p) => Number.isInteger(Number(p?.page)) && Number(p.page) >= from && Number(p.page) <= to)
@@ -56,7 +59,7 @@ export async function readInline(pdf: Uint8Array | string, from: number, to: num
     console.error('read inline failed', from, to, String((e as Error).message ?? e).slice(0, 200));
   }
   const got = new Set(pages.map((p) => p.page));
-  if (from === to || Date.now() > deadline) {
+  if (from === to || deadline - Date.now() < MIN_READ_MS) {
     // الصفحة المنفردة التي فشلت لا تُكتب فارغة: تبقى ناقصة وتُعاد في المرة القادمة
     return pages;
   }
@@ -109,7 +112,7 @@ export async function storePages(doc: Record<string, any>, read: ReadPage[], tot
   let upTo = 0;
   while (have.has(upTo + 1)) upTo++;
   const done = upTo >= total;
-  await admin.from('documents').update({ pages: total, ingested_pages: upTo, ingest_status: done ? 'done' : 'running', ingest_error: null }).eq('id', doc.id);
+  await admin.from('documents').update({ pages: total, ingested_pages: upTo, read_pages: have.size, ingest_status: done ? 'done' : 'running', ingest_error: null }).eq('id', doc.id);
   return { done, ingested: upTo, pages: total, have: have.size };
 }
 

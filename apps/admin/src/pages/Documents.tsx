@@ -193,7 +193,7 @@ export default function Documents() {
                               {qi.left === 0 ? 'يبني الفهرس…' : qi.waitingQuota ? 'ينتظر تجدد حصة Gemini' : qi.pos > 0 && !qi.running ? `في الطابور (${qi.pos + 1})` : 'يُفهرس على الخادم'}
                             </span>
                             <div className="small dim" style={{ marginTop: 4 }}>
-                              {doc.ingested_pages}/{doc.pages ?? '?'} صفحة · {qi.doneParts}/{qi.total} جزء
+                              {(doc.read_pages ?? doc.ingested_pages).toLocaleString('ar-IQ')}/{(doc.pages ?? 0).toLocaleString('ar-IQ') || '?'} صفحة مقروءة · بقي {qi.left.toLocaleString('ar-IQ')} جزء
                               {qi.waitingQuota && qi.nextAt ? ` · يعاود ${hhmm(qi.nextAt)}` : ''}
                             </div>
                           </>
@@ -201,7 +201,7 @@ export default function Documents() {
                       })()
                       : doc.ingest_status === 'done' ? (doc.outline_status === 'done' ? <span className="pill ok">مفهرسة + فهرس</span> : <span className="pill warn" title={doc.outline_error ?? ''}>مقروءة — الفهرس غير جاهز</span>)
                         : doc.ingest_status === 'error' ? <span className="pill bad" title={doc.ingest_error ?? ''}>خطأ — أعد المحاولة</span>
-                          : doc.ingest_status === 'running' ? <span className="pill warn">ناقصة ({doc.ingested_pages}/{doc.pages ?? '?'})</span>
+                          : doc.ingest_status === 'running' ? <span className="pill warn">ناقصة ({doc.read_pages ?? doc.ingested_pages}/{doc.pages ?? '?'})</span>
                             : <span className="pill">غير مفهرسة</span>}
                     {!ingesting[doc.id] && !doc.queued_at && (doc.ingest_error || doc.outline_error) ? <div className="small" style={{ color: 'var(--bad)', marginTop: 4, maxWidth: 260 }}>{doc.ingest_error ?? doc.outline_error}</div> : null}
                     {!ingesting[doc.id] && !doc.queued_at && doc.ingest_status === 'done' && doc.outline_status !== 'done' ? <div className="small dim" style={{ marginTop: 4, maxWidth: 260 }}>اضغط «الفهرس» ثم «إعادة البناء بالذكاء الاصطناعي».</div> : null}
@@ -225,7 +225,7 @@ export default function Documents() {
           </table>
         </div>
       )}
-      <p className="small dim">«الفهرسة» تجعل المساعد الذكي يقرأ الملف ويجيب منه مع ذكر الصفحة، وتبني فهرس الفصول والمواضيع. تجري على الخادم: اللوحة تقطع الصفحات الناقصة فقط (دقيقة تقريباً) ثم يمكنك إغلاق الموقع — الخادم يقرأ كل دقيقة بعدة مفاتيح معاً، الكتب بالترتيب، يعيد أي جزء يفشل تلقائياً، يقرأ بالنماذج القوية أولاً ثم Flash-Lite عند انتهائها، وإن انتهت حصة كل النماذج ينتظر تجددها (منتصف ليل كاليفورنيا = ١٠ صباحاً بغداد، ١١ شتاءً) ويكمل وحده. «فهرسة الكل» تضع كل الملفات غير المفهرسة في الطابور. زر «الفهرس» يراجع ويعدّل الفصول والمواضيع.</p>
+      <p className="small dim">«الفهرسة» تجعل المساعد الذكي يقرأ الملف ويجيب منه مع ذكر الصفحة، وتبني فهرس الفصول والمواضيع. تجري على الخادم: اللوحة تقطع الصفحات الناقصة فقط (دقيقة تقريباً) ثم يمكنك إغلاق الموقع — الخادم يقرأ كل دقيقة بعدة مفاتيح معاً، الكتب بالترتيب، يعيد أي جزء يفشل تلقائياً، يقرأ بالنماذج القوية أولاً ثم Flash-Lite عند انتهائها، ولا يبدأ جزءاً إلا ومعه وقت كافٍ (القطع قبل الجواب يضيّع الحصة)، وإن انتهت حصة كل النماذج ينتظر تجددها (منتصف ليل كاليفورنيا = ١٠ صباحاً بغداد، ١١ شتاءً) ويكمل وحده. «فهرسة الكل» تضع كل الملفات غير المفهرسة في الطابور. زر «الفهرس» يراجع ويعدّل الفصول والمواضيع.</p>
 
       {outlineOf ? <OutlineEditor doc={outlineOf} onClose={() => { setOutlineOf(null); q.reload(); }} /> : null}
 

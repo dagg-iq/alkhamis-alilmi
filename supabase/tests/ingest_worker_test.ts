@@ -28,6 +28,7 @@ function q(t: string) {
   const b: any = {
     select: () => b, order: () => b, limit: () => b, single: () => { b._single = true; return b; }, maybeSingle: () => { b._single = true; return b; },
     eq: (c: string, v: any) => { filters.push((r) => r[c] === v); return b; }, gt: () => b, gte: () => b, lte: () => b,
+    lt: (c: string, v: any) => { filters.push((r) => String(r[c]) < String(v)); return b; },
     is: (c: string, v: any) => { filters.push((r) => (r[c] ?? null) === v); return b; },
     not: (c: string, _o: string, v: any) => { filters.push((r) => (r[c] ?? null) !== v); return b; },
     in: (c: string, v: any[]) => { filters.push((r) => v.includes(r[c])); return b; },
@@ -152,6 +153,7 @@ quota = true;
 r = await call();
 const c4 = db.ingest_chunks.find((c) => c.id === 'c4')!;
 check('الحصة: الجزء ينتظر (لا فشل ولا محاولة محسوبة)', r.json.quota === true && c4.status === 'pending' && c4.attempts === 0 && new Date(c4.next_at).getTime() > Date.now() + 5 * 60_000 && /حصة/.test(c4.last_error), JSON.stringify(c4));
+check('الحصة: كل الأجزاء المنتظرة تُؤجَّل معاً', db.ingest_chunks.filter((x) => x.status === 'pending').every((x) => new Date(x.next_at).getTime() > Date.now() + 5 * 60_000));
 check('الحصة: الكتاب ما زال في الطابور', !!db.documents.find((d) => d.id === 'd3')!.queued_at);
 check('الحصة: لا خطأ ظاهر على الكتاب', db.documents.find((d) => d.id === 'd3')!.ingest_status !== 'error');
 

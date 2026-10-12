@@ -7,7 +7,11 @@ import { GeminiQuotaError, GeminiTimeoutError, poolSlots, toBase64 } from '../_s
 import { deleteObject, getObject } from '../_shared/storage.ts';
 import { admin, getCaller } from '../_shared/supabase.ts';
 
-const BUDGET_MS = 115_000; // حد الدالة ~١٥٠ ث
+// حد الدالة ~١٥٠ ث. قراءة جزء (٤–٨ صفحات) تأخذ ٢٠–٩٠ ث؛ قطعها قبل الجواب يضيّع الطلب من حصة Google
+// (تحسبه ولو لم نستلم الجواب) — كانت هذه أكبر خسارة: أجزاء تبدأ قبل نهاية الوقت بثوانٍ فتُقطع.
+// لذلك لا يبدأ جزء إلا وأمامه READ_MS كاملة.
+const HARD_MS = 140_000;
+const READ_MS = 100_000;
 const MAX_ATTEMPTS = 5;
 
 interface Chunk { id: string; document_id: string; from_page: number; to_page: number; total_pages: number; file_key: string; scanned: boolean; attempts: number }
@@ -20,10 +24,10 @@ async function release(c: Chunk, delayMs: number, error?: string, fail = false) 
 }
 
 /** كتاب انتهت كل أجزائه: نبني فهرسه ونخرجه من الطابور (والتالي يبدأ تلقائياً) */
-async function finishDocuments(deadline: number) {
+async function finishDocuments(hard: number) {
   const { data: docs } = await admin.from('documents').select('*').not('queued_at', 'is', null).order('queued_at');
   for (const doc of (docs ?? []) as Record<string, any>[]) {
-    if (Date.now() > deadline - 95_000) return; // لا وقت لبناء فهرس الآن (الدقيقة القادمة)
+    if (Date.now() > hard - 100_000) return; // لا وقت لبناء فهرس الآن (المرة القادمة)
     const { data: left } = await admin.from('ingest_chunks').select('id, status, from_page, to_page').eq('document_id', doc.id).in('status', ['pending', 'running']);
     if ((left ?? []).length) continue;
     const { data: failed } = await admin.from('ingest_chunks').select('from_page, to_page, last_error').eq('document_id', doc.id).eq('status', 'failed');
@@ -51,19 +55,19 @@ async function finishDocuments(deadline: number) {
 
 async function work() {
   const started = Date.now();
-  const deadline = started + BUDGET_MS;
-  const { data: locked } = await admin.rpc('ingest_worker_lock', { p_seconds: 140 });
+  const hard = started + HARD_MS;
+  const { data: locked } = await admin.rpc('ingest_worker_lock', { p_seconds: 150 });
   if (locked === false) return { busy: true };
   let read = 0;
   let quota = false;
   try {
     // أولاً: كتب اكتملت قراءتها ← فهرسها
-    await finishDocuments(deadline);
+    await finishDocuments(hard);
     const lanes = Math.max(2, Math.min(8, poolSlots('admin').length));
     const docs = new Map<string, Record<string, any>>();
     const runLane = async (lane: number) => {
       await new Promise((r) => setTimeout(r, lane * 300));
-      while (!quota && Date.now() < deadline - 25_000) {
+      while (!quota && hard - Date.now() >= READ_MS) {
         const { data } = await admin.rpc('claim_ingest_chunks', { p_limit: 1, p_lease_seconds: 200 });
         const c = ((data ?? []) as Chunk[])[0];
         if (!c) return;
@@ -74,7 +78,7 @@ async function work() {
           }
           const doc = docs.get(c.document_id)!;
           const b64 = toBase64(await getObject(c.file_key));
-          const pages = await readInline(b64, c.from_page, c.to_page, Math.min(deadline - 10_000, Date.now() + 100_000), lane, c.scanned);
+          const pages = await readInline(b64, c.from_page, c.to_page, hard - 5_000, lane, c.scanned);
           if (pages.length) await storePages(doc, pages, c.total_pages);
           read += pages.length;
           const want = c.to_page - c.from_page + 1;
@@ -89,17 +93,20 @@ async function work() {
           if (e instanceof GeminiQuotaError) {
             // انتهت حصة كل المفاتيح: نعيد الجزء ونتوقف حتى تتجدد (لا تُحسب محاولة)
             quota = true;
-            await admin.from('ingest_chunks').update({ status: 'pending', lease_until: null, attempts: Math.max(0, c.attempts - 1), next_at: new Date(Date.now() + 10 * 60_000).toISOString(), last_error: 'انتظار تجدد حصة Gemini' }).eq('id', c.id);
+            const later = new Date(Date.now() + 10 * 60_000).toISOString();
+            await admin.from('ingest_chunks').update({ status: 'pending', lease_until: null, attempts: Math.max(0, c.attempts - 1), next_at: later, last_error: 'انتظار تجدد حصة Gemini' }).eq('id', c.id);
+            // كل الأجزاء المنتظرة تنتظر معاً (كانت تُؤجَّل واحداً كل دقيقة فتظهر «في الطابور» وكأن شيئاً لا يحدث)
+            await admin.from('ingest_chunks').update({ next_at: later, last_error: 'انتظار تجدد حصة Gemini' }).eq('status', 'pending').lt('next_at', later);
             return;
           }
-          const msg = e instanceof GeminiTimeoutError ? 'انتهت المهلة' : String((e as Error).message ?? e);
+          const msg = e instanceof GeminiTimeoutError ? 'انتهت المهلة (جواب بطيء)' : String((e as Error).message ?? e);
           if (c.attempts >= MAX_ATTEMPTS) await release(c, 0, msg, true);
           else await release(c, Math.min(30, 2 ** c.attempts) * 60_000, msg);
         }
       }
     };
     await Promise.all(Array.from({ length: lanes }, (_, i) => runLane(i)));
-    if (!quota) await finishDocuments(deadline);
+    if (!quota) await finishDocuments(hard);
   } finally {
     await admin.rpc('ingest_worker_unlock');
   }
