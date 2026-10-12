@@ -127,9 +127,9 @@ check('بُني الفهرس لكليهما وخرجا من الطابور', d1.
 check('حُذفت الأجزاء من الجدول والتخزين', db.ingest_chunks.length === 0 && removed.length === 3, removed.join());
 check('المصوّر يُقرأ بتفكير أعلى من النصي', thinking.some((t) => /low/i.test(t)) && thinking.some((t) => /minimal/i.test(t)), thinking.join(' '));
 check('القفل فُتح بعد الانتهاء', lock === false);
-check('قراءة الصفحات بالنماذج القوية فقط (لا Flash-Lite)', readModels.size > 0 && [...readModels].every((m) => !m.includes('lite')), [...readModels].join());
+check('قراءة الصفحات بالنماذج القوية أولاً (لا Flash-Lite ما دامت متاحة)', readModels.size > 0 && [...readModels].every((m) => !m.includes('lite')), [...readModels].join());
 
-// كل النماذج القوية مقفلة (حصة يومية) و Flash-Lite متاح: لا يقرأ به، بل ينتظر
+// كل النماذج القوية مقفلة (حصة يومية) و Flash-Lite متاح: يكمل القراءة به بدل الانتظار
 {
   strongQuota = true;
   quota = false;
@@ -138,7 +138,8 @@ check('قراءة الصفحات بالنماذج القوية فقط (لا Flas
   readModels.clear();
   const r5 = await call();
   const c5 = db.ingest_chunks.find((c) => c.id === 'c5')!;
-  check('القوية منتهية: ينتظر ولا يقرأ بـ Flash-Lite', r5.json.quota === true && readModels.size === 0 && c5.status === 'pending' && c5.attempts === 0, JSON.stringify({ r: r5.json, models: [...readModels], c5 }));
+  const d5 = db.documents.find((d) => d.id === 'd5')!;
+  check('القوية منتهية: يقرأ بـ Flash-Lite ويكمل', r5.json.quota !== true && readModels.size > 0 && [...readModels].every((m) => m.includes('lite')) && !c5 && d5.ingested_pages === 2, JSON.stringify({ r: r5.json, models: [...readModels], c5, d5 }));
   strongQuota = false;
   db.documents = db.documents.filter((d) => d.id !== 'd5');
   db.ingest_chunks = db.ingest_chunks.filter((c) => c.id !== 'c5');

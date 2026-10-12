@@ -84,11 +84,13 @@ export const LITE_MODELS = ['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'g
 /** الاحتياط الأخير بعد انتهاء كل النماذج على كل المفاتيح */
 export const FALLBACK_MODELS = ['gemini-2.5-flash', 'gemini-2.5-flash-lite'];
 /**
- * قراءة صفحات الكتب (الفهرسة): النماذج القوية فقط — Flash-Lite أضعف في المعادلات والصفحات المصوّرة،
- * فإن انتهت حصة القوية ينتظر طابور الفهرسة تجددها بدل القراءة بدقة أقل.
+ * قراءة صفحات الكتب والملازم (الفهرسة): النماذج القوية أولاً على كل المفاتيح ثم 2.5 Flash،
+ * وبعد انتهائها كلها Flash-Lite (أضعف قليلاً في المعادلات والمصوّر لكن الفهرسة تكمل بدل الانتظار)،
+ * وإن انتهى كل شيء ينتظر طابور الفهرسة تجدد الحصة.
  */
-export const READ_MODELS = MAIN_MODELS.filter((m) => !m.includes('lite'));
-export const READ_FALLBACK = ['gemini-2.5-flash'];
+const STRONG = MAIN_MODELS.filter((m) => !m.includes('lite'));
+export const READ_MODELS = [...STRONG, 'gemini-2.5-flash', ...MAIN_MODELS.filter((m) => m.includes('lite'))];
+export const READ_FALLBACK = ['gemini-2.5-flash-lite'];
 
 /**
  * سلسلة النماذج: ثابتة بالترتيب أعلاه. إعداد النموذج القديم في لوحة التحكم حُذف ويُتجاهل
