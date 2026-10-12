@@ -9,6 +9,7 @@ import { useAuth, useMe } from '@/lib/auth';
 import { loadSubjects, shortSubject } from '@/lib/queries';
 import { must, supabase } from '@/lib/supabase';
 import { useTheme } from '@/lib/theme';
+import { cancelTaskReminder } from '@/lib/reminders';
 import { useLoad } from '@/lib/use-load';
 
 type View_ = 'upcoming' | 'all' | 'done';
@@ -32,16 +33,23 @@ export default function Planner() {
   }, []));
 
   const toggle = async (t: Task) => {
-    if (q.data!.done.has(t.id)) await supabase.from('task_status').delete().match({ task_id: t.id, user_id: me.id });
-    else await supabase.from('task_status').insert({ task_id: t.id, user_id: me.id });
+    const wasDone = q.data!.done.has(t.id);
+    const { error } = wasDone
+      ? await supabase.from('task_status').delete().match({ task_id: t.id, user_id: me.id })
+      : await supabase.from('task_status').insert({ task_id: t.id, user_id: me.id });
+    if (error) return Alert.alert('لم يُحفظ', 'تحقق من الإنترنت وحاول مرة أخرى.');
+    if (!wasDone) cancelTaskReminder(t.id); // أنجزها: لا حاجة لتذكيرها
     q.reload();
   };
 
   const remove = (t: Task) => Alert.alert('حذف المهمة', t.title, [
     { text: 'إلغاء', style: 'cancel' },
     { text: 'حذف', style: 'destructive', onPress: async () => {
-      const { error } = await supabase.from('tasks').delete().eq('id', t.id);
+      // نتحقق أن صفاً حُذف فعلاً (بلا صلاحية لا يرجع خطأ، يرجع صفر صفوف)
+      const { data, error } = await supabase.from('tasks').delete().eq('id', t.id).select('id');
       if (error) Alert.alert('تعذّر الحذف', error.message);
+      else if (!data?.length) Alert.alert('تعذّر الحذف', 'لا تملك صلاحية حذف هذه المهمة.');
+      else cancelTaskReminder(t.id);
       q.reload();
     } },
   ]);

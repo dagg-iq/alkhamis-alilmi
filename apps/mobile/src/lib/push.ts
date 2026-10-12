@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
 import * as Device from 'expo-device';
 import type * as NotificationsModule from 'expo-notifications';
@@ -79,15 +80,26 @@ export async function notifyDownload(title: string, body: string, done: boolean)
 }
 const TIMER_SOUND = 'saey_alarm.wav';
 
-export type PushResult = 'ok' | 'denied' | 'unsupported' | 'not-configured' | 'error';
+export type PushResult = 'ok' | 'denied' | 'unsupported' | 'not-configured' | 'error' | 'disabled';
+
+// رمز هذا الجهاز (لحذفه وحده عند الخروج) وإيقاف الطالب للإشعارات على هذا الجهاز
+const TOKEN_KEY = 'saey.push.token';
+const OFF_KEY = 'saey.push.off';
+
+/** هل أوقف الطالب الإشعارات من الإعدادات على هذا الجهاز؟ (التسجيل التلقائي عند فتح التطبيق يحترمه) */
+export async function pushDisabled(): Promise<boolean> {
+  return (await AsyncStorage.getItem(OFF_KEY).catch(() => null)) === '1';
+}
 
 /**
  * يطلب الإذن ويسجل رمز الجهاز في قاعدة البيانات.
  * بلا حساب Expo: نستخدم رمز Firebase المباشر (يحتاج google-services.json داخل ملف APK).
+ * auto = التسجيل التلقائي عند فتح التطبيق: لا يعمل إن أوقف الطالب الإشعارات بنفسه.
  */
-export async function registerPush(userId: string): Promise<PushResult> {
+export async function registerPush(userId: string, opts: { auto?: boolean } = {}): Promise<PushResult> {
   const N = notifications();
   if (!N || !Device.isDevice) return 'unsupported';
+  if (opts.auto && await pushDisabled()) return 'disabled';
   try {
     await setupChannels();
     let { status } = await N.getPermissionsAsync();
@@ -111,20 +123,46 @@ export async function registerPush(userId: string): Promise<PushResult> {
     const { error } = await supabase.from('push_tokens').upsert({
       user_id: userId, token, platform, updated_at: new Date().toISOString(),
     });
-    return error ? 'error' : 'ok';
+    if (error) return 'error';
+    await AsyncStorage.setItem(TOKEN_KEY, token).catch(() => {});
+    if (!opts.auto) await AsyncStorage.removeItem(OFF_KEY).catch(() => {});
+    return 'ok';
   } catch {
     return 'error';
   }
 }
 
-/** هل هذا الجهاز مسجل لاستقبال الإشعارات؟ */
+/** هل هذا الجهاز مسجل لاستقبال الإشعارات؟ (هذا الجهاز تحديداً لا أي جهاز للطالب) */
 export async function pushRegistered(userId: string): Promise<boolean> {
-  const { count } = await supabase.from('push_tokens').select('token', { count: 'exact', head: true }).eq('user_id', userId);
+  if (await pushDisabled()) return false;
+  const token = await AsyncStorage.getItem(TOKEN_KEY).catch(() => null);
+  let q = supabase.from('push_tokens').select('token', { count: 'exact', head: true }).eq('user_id', userId);
+  if (token) q = q.eq('token', token);
+  const { count } = await q;
   return (count ?? 0) > 0;
 }
 
-export async function unregisterPush(userId: string) {
-  await supabase.from('push_tokens').delete().eq('user_id', userId);
+/**
+ * يحذف رمز هذا الجهاز فقط (أجهزة الطالب الأخرى تبقى تستقبل).
+ * disable = الطالب أوقف الإشعارات بنفسه فلا يعيدها التسجيل التلقائي. يُستدعى قبل الخروج والجلسة ما زالت صالحة.
+ */
+export async function unregisterPush(userId: string, opts: { disable?: boolean } = {}) {
+  if (opts.disable) await AsyncStorage.setItem(OFF_KEY, '1').catch(() => {});
+  let token = await AsyncStorage.getItem(TOKEN_KEY).catch(() => null);
+  const N = notifications();
+  if (!token && N) {
+    // نسخة قديمة لم تحفظ الرمز: نقرؤه من النظام (لا يطلب إذناً)
+    try {
+      if ((await N.getPermissionsAsync()).status === 'granted') token = String((await N.getDevicePushTokenAsync()).data);
+    } catch { /* لا رمز */ }
+  }
+  if (token) await supabase.from('push_tokens').delete().eq('user_id', userId).eq('token', token);
+  await AsyncStorage.removeItem(TOKEN_KEY).catch(() => {});
+}
+
+/** عند تسجيل الخروج: الحساب التالي على الهاتف يبدأ بالإشعارات مفعّلة */
+export async function resetPushPrefs() {
+  await AsyncStorage.multiRemove([TOKEN_KEY, OFF_KEY]).catch(() => {});
 }
 
 /** تذكير محلي (للمهام والمؤقت) — يعيد معرف التذكير */
@@ -182,16 +220,51 @@ export async function cancelReminder(id: string) {
   if (N) await N.cancelScheduledNotificationAsync(id).catch(() => {});
 }
 
-/** عند الضغط على إشعار — يعيد دالة لإلغاء الاستماع */
+type Response = import('expo-notifications').NotificationResponse;
+// الإشعار الواحد لا يُفتح مرتين (المستمع ورد الإقلاع قد يصلان معاً)
+let lastHandled = '';
+function dataOf(res: Response): Record<string, string> | null {
+  const id = `${res.notification.request.identifier}|${res.notification.date}|${res.actionIdentifier}`;
+  if (id === lastHandled) return null;
+  lastHandled = id;
+  // إشعارات Firebase المباشرة تحمل البيانات في الرسالة البعيدة
+  const req = res.notification.request;
+  const remote = (req.trigger as { remoteMessage?: { data?: Record<string, string> } } | null)?.remoteMessage?.data;
+  const d = (req.content.data && Object.keys(req.content.data).length ? req.content.data : remote) as Record<string, string> | undefined;
+  return d ?? null;
+}
+
+/** عند الضغط على إشعار والتطبيق مفتوح أو في الخلفية — يعيد دالة لإلغاء الاستماع */
 export function onNotificationTap(cb: (data: Record<string, string>) => void): () => void {
   const N = notifications();
   if (!N) return () => {};
   const sub = N.addNotificationResponseReceivedListener((res) => {
-    // إشعارات Firebase المباشرة تحمل البيانات في الرسالة البعيدة
-    const req = res.notification.request;
-    const remote = (req.trigger as { remoteMessage?: { data?: Record<string, string> } } | null)?.remoteMessage?.data;
-    const d = (req.content.data && Object.keys(req.content.data).length ? req.content.data : remote) as Record<string, string> | undefined;
+    const d = dataOf(res);
     if (d) cb(d);
   });
   return () => sub.remove();
+}
+
+/** الإشعار الذي فتح التطبيق وهو مغلق تماماً (المستمع لا يصله): يُعالج مرة واحدة بعد جاهزية الدخول */
+export async function initialNotificationTap(cb: (data: Record<string, string>) => void): Promise<void> {
+  const N = notifications();
+  if (!N) return;
+  try {
+    const res = typeof N.getLastNotificationResponse === 'function' ? N.getLastNotificationResponse() : await N.getLastNotificationResponseAsync();
+    if (!res) return;
+    const d = dataOf(res);
+    if (typeof N.clearLastNotificationResponse === 'function') N.clearLastNotificationResponse();
+    else await N.clearLastNotificationResponseAsync().catch(() => {});
+    if (d) cb(d);
+  } catch { /* لا شيء */ }
+}
+
+/** الشاشة المناسبة لبيانات إشعار (الدردشة، الخبر، الأسئلة، المنظِّم…) */
+export function notificationRoute(d: Record<string, string>): string {
+  if (d.conversation_id) return `/chat/${d.conversation_id}`;
+  if (d.post_id) return `/news/${d.post_id}`;
+  if (d.question_set_id) return `/questions/${d.question_set_id}`;
+  if (d.task_id) return '/planner';
+  if (d.url === '/timer' || d.url === '/about') return d.url;
+  return '/notifications';
 }

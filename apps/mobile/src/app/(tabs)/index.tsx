@@ -16,6 +16,8 @@ import { useGradingRules } from '@/lib/settings';
 import { must, supabase } from '@/lib/supabase';
 import { useTheme } from '@/lib/theme';
 import { useLoad } from '@/lib/use-load';
+import { Alert } from '@/lib/dialog';
+import { cancelTaskReminder } from '@/lib/reminders';
 
 /** تحية بحسب ساعة الهاتف: الصباح يبدأ ٤ فجراً (قبلها ما زال ليلاً)، والعصر حتى المغرب */
 function greeting(now = new Date()) {
@@ -82,7 +84,9 @@ export default function Home() {
   const firstName = me.full_name.split(' ')[0];
 
   const toggleTask = async (t: Task) => {
-    await supabase.from('task_status').insert({ task_id: t.id, user_id: me.id });
+    const { error } = await supabase.from('task_status').insert({ task_id: t.id, user_id: me.id });
+    if (error) return Alert.alert('لم يُحفظ', 'تحقق من الإنترنت وحاول مرة أخرى.');
+    cancelTaskReminder(t.id);
     q.reload();
   };
 

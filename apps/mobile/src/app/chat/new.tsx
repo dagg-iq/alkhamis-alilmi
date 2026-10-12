@@ -28,7 +28,9 @@ export default function NewChat() {
     router.replace(`/chat/${data}`);
   };
 
-  const list = (q.data?.people ?? []).filter((p) => p.full_name.includes(search.trim()));
+  // البحث يتجاهل الهمزات والتاء المربوطة والألف المقصورة (أحمد = احمد)
+  const norm = (t: string) => t.replace(/[\u064B-\u0652\u0640]/g, '').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي').replace(/\s+/g, ' ').trim().toLowerCase();
+  const list = (q.data?.people ?? []).filter((p) => norm(p.full_name).includes(norm(search)));
   return (
     <Screen>
       <Header title="رسالة جديدة" />

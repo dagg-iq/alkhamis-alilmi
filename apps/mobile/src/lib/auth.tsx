@@ -6,6 +6,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { clearLocalPrefs, flushPrefs, hydratePrefs } from './prefs';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { clearOfflineCache, setCacheUser } from './offline';
+import { resetPushPrefs, unregisterPush } from './push';
 import { sessionStorageKey, supabase } from './supabase';
 
 WebBrowser.maybeCompleteAuthSession();
@@ -73,6 +74,7 @@ const LAST_USER = 'saey.lastUser';
 async function clearDeviceData() {
   await clearLocalPrefs().catch(() => {});
   await clearOfflineCache().catch(() => {});
+  await resetPushPrefs().catch(() => {});
   import('@/widgets/sync').then((m) => m.clearWidgets()).catch(() => {});
 }
 
@@ -198,6 +200,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
     signOut: async () => {
       await flushPrefs().catch(() => {});
+      // رمز هذا الجهاز يُحذف والجلسة ما زالت صالحة، وإلا تصل إشعارات هذا الطالب (ورسائله الخاصة) لمن يدخل بعده على الهاتف
+      const uid = session?.user.id;
+      if (uid) await unregisterPush(uid).catch(() => {});
       await supabase.auth.signOut();
       setProfile(null);
       setCacheUser(null);
