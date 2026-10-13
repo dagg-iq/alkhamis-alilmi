@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# يجمع موقع سعي التعريفي + لوحة التحكم في مجلد hosting/ لنشره على Firebase Hosting
+# يجمع موقع سعي التعريفي + لوحة التحكم + صفحة العرض في مجلد hosting/ لنشره على Firebase Hosting
 #   saeyiq.web.app/                 ← الموقع التعريفي (apps/site)
 #   saeyiq.web.app/saey-dashboard/  ← لوحة التحكم (apps/admin)
+#   saeyiq.web.app/showcase/        ← صفحة عرض التطبيق (showcase)
 # متغيرات اختيارية لزر التنزيل: DOWNLOAD_URL و DOWNLOAD_VERSION و DOWNLOAD_SIZE_MB
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -19,6 +20,7 @@ DEV_PHOTO_URL="${DEV_PHOTO_URL:-https://e.top4top.io/p_3665za6ix1.jpg}"
 curl -fsSL --max-time 30 -o hosting/developer.jpg "$DEV_PHOTO_URL" && echo "✓ صورة المطوّر" || { rm -f hosting/developer.jpg; echo "⚠ لم تُنزّل صورة المطوّر"; }
 ADMIN_BASE=/saey-dashboard/ npm run build -w apps/admin >/dev/null
 cp -r apps/admin/dist hosting/saey-dashboard
+mkdir -p hosting/showcase && cp -r showcase/. hosting/showcase/ && rm -f hosting/showcase/README.md
 node -e '
 // رابط التنزيل: متغير DOWNLOAD_URL إن وُجد، وإلا رابط Dropbox (أو Drive) من apps/site/download-config.json
 const fs = require("fs");

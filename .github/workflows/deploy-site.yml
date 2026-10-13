@@ -9,6 +9,7 @@ on:
     branches: [main, claude/repository-name-arabic-iegosv]
     paths:
       - 'apps/site/**'
+      - 'showcase/**'
       - 'apps/admin/**'
       - 'packages/shared/**'
       - 'firebase.json'
