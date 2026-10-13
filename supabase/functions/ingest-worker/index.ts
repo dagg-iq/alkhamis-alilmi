@@ -95,7 +95,15 @@ async function work() {
           if (saved.length >= want) {
             pages = saved;
           } else {
-            const b64 = toBase64(await getObject(c.file_key));
+            let bytes: Uint8Array;
+            try {
+              bytes = await getObject(c.file_key);
+            } catch (e) {
+              // خادم التخزين لا يرد (انقطاع/مهلة اتصال): ليس خطأ قراءة — ننتظر ونعيد بلا احتساب محاولة
+              await admin.from('ingest_chunks').update({ status: 'pending', lease_until: null, attempts: Math.max(0, c.attempts - 1), next_at: new Date(Date.now() + 3 * 60_000).toISOString(), last_error: `تعذّر الوصول للتخزين — يُعاد: ${String((e as Error).message ?? e).slice(0, 120)}` }).eq('id', c.id);
+              continue;
+            }
+            const b64 = toBase64(bytes);
             pages = await readInline(b64, c.from_page, c.to_page, hard - 5_000, lane, c.scanned);
             read += pages.length;
             // صفحات لا يعيدها النموذج بعد عدة محاولات (بيضاء/صورة): نكمّلها من المحفوظ أو فارغة
