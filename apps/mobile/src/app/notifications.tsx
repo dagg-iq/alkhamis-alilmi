@@ -10,7 +10,7 @@ import { useTheme } from '@/lib/theme';
 import { useLoad } from '@/lib/use-load';
 
 interface Notif { id: string; type: string; title: string; body: string | null; payload: Record<string, string>; read_at: string | null; created_at: string }
-const ICON: Record<string, IconName> = { post: 'news', mention: 'at', task: 'calendar', approved: 'check', message: 'chat', questions: 'quiz' };
+const ICON: Record<string, IconName> = { post: 'news', mention: 'at', task: 'calendar', approved: 'check', message: 'chat', questions: 'quiz', reminder: 'calendar' };
 
 export default function Notifications() {
   const { c } = useTheme();

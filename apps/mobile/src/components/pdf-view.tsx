@@ -1,8 +1,9 @@
-import { forwardRef, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { arDigits } from '@saey/shared';
 import { pdfViewerHtml } from '@/lib/pdf-viewer-html';
+import { FILE_WEBVIEW_PROPS, useViewerFile } from '@/lib/pdf-viewer-file';
 import { useTheme } from '@/lib/theme';
 import { T } from './ui';
 
@@ -18,6 +19,10 @@ export interface PdfViewHandle {
 export interface PdfViewProps {
   base64?: string;
   url?: string;
+  /** ملف على الهاتف (file://): يُقرأ مباشرة بلا تحويله إلى نص — الأخف على الذاكرة للكتب الكبيرة */
+  fileUri?: string;
+  /** فشل عرض الملف المحلي مباشرة: يقرر المستدعي البديل (base64 للملف الصغير، أو فتحه بتطبيق آخر) */
+  onFallback?: () => void;
   /** نطاق الصفحات المعروض (افتراضياً الملف كله) */
   from?: number;
   to?: number;
@@ -31,14 +36,20 @@ export interface PdfViewProps {
  * عارض PDF داخل التطبيق (pdf.js مضمّن فيعمل بلا إنترنت): الصفحات تُرسم عند الوصول إليها،
  * والتكبير بإصبعين. يقبل ملفاً محلياً (base64) أو رابطاً، ونطاق صفحات (فصل) وصفحة يبدأ منها.
  */
-export const PdfView = forwardRef<PdfViewHandle, PdfViewProps>(function PdfView({ base64, url, from, to, goto, onPage }, handle) {
+export const PdfView = forwardRef<PdfViewHandle, PdfViewProps>(function PdfView({ base64, url, fileUri, onFallback, from, to, goto, onPage }, handle) {
   const { c, dark } = useTheme();
   const ref = useRef<WebView>(null);
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [pages, setPages] = useState(0);
   const exporting = useRef<{ images: PageImage[]; resolve: (v: PageImage[]) => void; reject: (e: Error) => void } | null>(null);
 
-  const html = useMemo(() => pdfViewerHtml(dark), [dark]);
+  // ملف محلي: صفحة العارض نفسها تُفتح من ملف على الهاتف حتى يُسمح لها بقراءة الكتاب مباشرة
+  const viewer = useViewerFile(dark, !!fileUri);
+  const html = useMemo(() => (fileUri ? '' : pdfViewerHtml(dark)), [dark, fileUri]);
+  const fallback = useRef(onFallback);
+  fallback.current = onFallback;
+  const failFile = () => { if (fallback.current) fallback.current(); else setState('error'); };
+  useEffect(() => { if (fileUri && viewer === null) failFile(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [fileUri, viewer]);
 
   useImperativeHandle(handle, () => ({
     exportImages: (width = 1240, quality = 0.9) => new Promise<PageImage[]>((resolve, reject) => {
@@ -50,16 +61,16 @@ export const PdfView = forwardRef<PdfViewHandle, PdfViewProps>(function PdfView(
   }), [state]);
 
   const start = () => {
-    const src = base64 ? { data: base64 } : { url };
+    const src = base64 ? { data: base64 } : { url: fileUri ?? url };
     ref.current?.injectJavaScript(`window.openPdf(${JSON.stringify(src)},${JSON.stringify({ from, to, goto })});true;`);
   };
 
   return (
     <View style={{ flex: 1 }}>
-      <WebView
+      {fileUri && !viewer ? null : <WebView
         ref={ref}
         originWhitelist={['*']}
-        source={{ html, baseUrl: 'https://saeyiq.web.app/' }}
+        source={fileUri && viewer ? { uri: viewer } : { html, baseUrl: 'https://saeyiq.web.app/' }}
         onLoadEnd={start}
         onMessage={(e) => {
           const d = e.nativeEvent.data;
@@ -73,14 +84,17 @@ export const PdfView = forwardRef<PdfViewHandle, PdfViewProps>(function PdfView(
             exporting.current?.resolve(exporting.current.images);
             exporting.current = null;
           } else if (d.startsWith('error')) {
-            if (exporting.current) { exporting.current.reject(new Error('تعذّر تحويل الصفحات إلى صور')); exporting.current = null; } else setState('error');
+            if (exporting.current) { exporting.current.reject(new Error('تعذّر تحويل الصفحات إلى صور')); exporting.current = null; }
+            else if (fileUri) failFile();
+            else setState('error');
           }
         }}
+        {...(fileUri ? FILE_WEBVIEW_PROPS : {})}
         javaScriptEnabled
         setBuiltInZoomControls
         setDisplayZoomControls={false}
         style={{ backgroundColor: 'transparent' }}
-      />
+      />}
       {state !== 'ready' ? (
         <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: c.bg }}>
           {state === 'loading' ? <ActivityIndicator color={c.accent} /> : null}

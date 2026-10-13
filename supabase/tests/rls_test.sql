@@ -370,4 +370,27 @@ end $$;
 reset role;
 select private.daily_cleanup();
 
+-- ٢٦) تذكير الخادم بمهام الإدارة: إشعار واحد للطالب بما عليه غداً، لا يتكرر، ولا يشمل ما أنجزه ولا الأدمن
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000a');
+insert into public.tasks (scope, type, title, due_at) values
+  ('school', 'exam', 'الفيزياء', ((now() at time zone 'Asia/Baghdad')::date + 1 + time '09:00') at time zone 'Asia/Baghdad'),
+  ('school', 'homework', 'حل تمارين الكيمياء', ((now() at time zone 'Asia/Baghdad')::date + 1 + time '12:00') at time zone 'Asia/Baghdad'),
+  ('school', 'homework', 'بعد غد', ((now() at time zone 'Asia/Baghdad')::date + 2 + time '09:00') at time zone 'Asia/Baghdad');
+insert into public.tasks (scope, section_id, type, title, due_at)
+select 'section', id, 'preparation', 'تحضير شعبة ب', ((now() at time zone 'Asia/Baghdad')::date + 1 + time '09:00') at time zone 'Asia/Baghdad'
+from public.sections where name = 'ب';
+reset role;
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000b');
+insert into public.task_status (task_id) select id from public.tasks where title = 'حل تمارين الكيمياء';
+reset role;
+do $$ begin
+  assert private.task_reminders() = 1, 'عدد التذكيرات (الطالب ب فقط)';
+  assert private.task_reminders() = 0, 'التذكير تكرر في نفس اليوم';
+  assert (select title from public.notifications where type = 'reminder' and user_id = '00000000-0000-0000-0000-00000000000b') = 'غداً: امتحان الفيزياء',
+    'التذكير يشمل مهمة منجزة أو مهمة شعبة أخرى أو مهمة بعد غد';
+  assert (select count(*) from public.notifications where type = 'reminder' and user_id = '00000000-0000-0000-0000-00000000000a') = 0, 'الأدمن وصله تذكير';
+end $$;
+
 select 'ALL RLS TESTS PASSED' as result;

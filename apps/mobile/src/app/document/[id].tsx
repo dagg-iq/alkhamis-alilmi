@@ -28,7 +28,7 @@ export default function DocumentScreen() {
   const key = q.data?.file_key;
   const preview = useLoad(async () => {
     if (!key) return null;
-    if (isDownloaded(key)) return { base64: await downloadMaterial(key).then((f) => f.base64()) };
+    if (isDownloaded(key)) return { fileUri: (await downloadMaterial(key)).uri };
     return { url: await signedUrl(key) };
   }, [key]);
 

@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { pdfViewerHtml } from '@/lib/pdf-viewer-html';
+import { FILE_WEBVIEW_PROPS, useViewerFile } from '@/lib/pdf-viewer-file';
 import { useTheme } from '@/lib/theme';
 import { Icon } from './icon';
 
@@ -10,17 +11,20 @@ import { Icon } from './icon';
  * معاينة أول صفحة من ملف PDF كصورة (تُرسم مرة واحدة بـ pdf.js داخل WebView مخفي).
  * تعمل بملف محلي (base64) أو برابط مؤقت (تحمّل الصفحة الأولى فقط عادةً).
  */
-export function PdfThumb({ base64, url, width = 360, onPages }: { base64?: string; url?: string; width?: number; onPages?: (n: number) => void }) {
+export function PdfThumb({ base64, url, fileUri, width = 360, onPages }: { base64?: string; url?: string; fileUri?: string; width?: number; onPages?: (n: number) => void }) {
   const { c } = useTheme();
   const ref = useRef<WebView>(null);
   const [img, setImg] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
+  // ملف محفوظ على الهاتف: يُقرأ مباشرة (كان الكتاب كله يُحوَّل إلى نص لرسم صفحته الأولى فقط)
+  const viewer = useViewerFile(false, !!fileUri);
   const html = useMemo(() => pdfViewerHtml(false), []);
-  useEffect(() => { setImg(null); setFailed(false); }, [base64, url]);
+  useEffect(() => { setImg(null); setFailed(false); }, [base64, url, fileUri]);
+  useEffect(() => { if (fileUri && viewer === null) setFailed(true); }, [fileUri, viewer]);
 
   const start = () => {
-    if (!base64 && !url) return;
-    const src = base64 ? { data: base64 } : { url };
+    if (!base64 && !url && !fileUri) return;
+    const src = base64 ? { data: base64 } : { url: fileUri ?? url };
     ref.current?.injectJavaScript(`window.thumb(${JSON.stringify(src)},${Math.round(width * 2)});true;`);
   };
 
@@ -30,9 +34,10 @@ export function PdfThumb({ base64, url, width = 360, onPages }: { base64?: strin
       {img ? <Image source={{ uri: img }} style={{ width: '100%', height: '100%' }} contentFit="cover" transition={150} />
         : failed ? <Icon name="file" size={44} color={c.ink3} />
           : <ActivityIndicator color={c.accent} />}
-      {!img && !failed && (base64 || url) ? (
+      {!img && !failed && (base64 || url || (fileUri && viewer)) ? (
         <View style={{ position: 'absolute', width: 1, height: 1, opacity: 0 }} pointerEvents="none">
-          <WebView ref={ref} originWhitelist={['*']} source={{ html, baseUrl: 'https://saeyiq.web.app/' }} onLoadEnd={start} javaScriptEnabled
+          <WebView ref={ref} originWhitelist={['*']} source={fileUri && viewer ? { uri: viewer } : { html, baseUrl: 'https://saeyiq.web.app/' }} onLoadEnd={start} javaScriptEnabled
+            {...(fileUri ? FILE_WEBVIEW_PROPS : {})}
             onMessage={(e) => {
               const d = e.nativeEvent.data;
               if (d.startsWith('thumb:')) setImg(d.slice(6));
