@@ -54,7 +54,7 @@ export async function readInline(pdf: Uint8Array | string, from: number, to: num
     const raw = await generate(READ_MODELS, [{
       role: 'user',
       parts: [{ inline_data: { mime_type: 'application/pdf', data: b64 } }, { text: INLINE_PROMPT(from, to) }],
-    }], { json: true, temperature: 0, maxOutputTokens: 32768, pool: 'admin', lane, fallback: READ_FALLBACK, minTimeMs: MIN_READ_MS, thinking: scanned ? 'low' : 'minimal', extraConfig: { mediaResolution: 'MEDIA_RESOLUTION_HIGH' }, deadline });
+    }], { json: true, temperature: 0, maxOutputTokens: Math.min(32768, 6000 * (to - from + 1)), pool: 'admin', lane, fallback: READ_FALLBACK, minTimeMs: MIN_READ_MS, thinking: scanned ? 'low' : 'minimal', extraConfig: { mediaResolution: 'MEDIA_RESOLUTION_HIGH' }, deadline });
     const parsed = parseJson<ReadPage[] | { pages: ReadPage[] }>(raw);
     const list = Array.isArray(parsed) ? parsed : parsed.pages;
     pages = (Array.isArray(list) ? list : []).filter((p) => Number.isInteger(Number(p?.page)) && Number(p.page) >= from && Number(p.page) <= to)
