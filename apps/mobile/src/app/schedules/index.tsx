@@ -20,7 +20,7 @@ const GROUPS: { kind: ScheduleKind; title: string }[] = [
 export default function Schedules() {
   const { c } = useTheme();
   const settings = useScheduleSettings();
-  const q = useLoad(loadSchedules);
+  const q = useLoad(loadSchedules, [], { key: 'schedules' });
   const now = new Date();
   const target = targetSchoolDay(now, settings);
 

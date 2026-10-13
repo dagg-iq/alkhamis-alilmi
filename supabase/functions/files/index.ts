@@ -1,7 +1,7 @@
 // روابط رفع وتحميل مؤقتة للملفات بعد التحقق من الصلاحية (Supabase Storage أو R2/B2)
 import { handler, HttpError, json } from '../_shared/cors.ts';
 import { admin, getCaller } from '../_shared/supabase.ts';
-import { deleteObject, MAX_UPLOAD_BYTES, presign } from '../_shared/storage.ts';
+import { deleteObject, getObject, MAX_UPLOAD_BYTES, presign, putObject } from '../_shared/storage.ts';
 
 type Kind = 'material' | 'chat' | 'scan' | 'cover';
 const PREFIX: Record<Kind, string> = { material: 'materials', chat: 'chat', scan: 'scans', cover: 'covers' };
@@ -86,6 +86,31 @@ Deno.serve(handler(async (req) => {
       await deleteObject(key).then(() => { deleted++; }).catch((e) => console.error('delete', key, e));
     }
     return json({ ok: true, deleted });
+  }
+
+  // إعادة توجيه مرفق رسالة إلى محادثة أخرى: ملفات المحادثة لا يقرؤها إلا أعضاؤها،
+  // فننسخ الملف إلى مجلد المحادثة الهدف (بعد التحقق من عضوية المرسل في المحادثتين)
+  if (body.action === 'forward') {
+    const to = String(body.to ?? '');
+    const keys: string[] = (Array.isArray(body.keys) ? body.keys : [body.key]).slice(0, 10);
+    const { data: inTarget } = await caller.client.rpc('is_member', { p_conversation: to });
+    if (!inTarget) throw new HttpError(403, 'لست عضواً في المحادثة الهدف.');
+    const out: Record<string, string> = {};
+    for (const key of keys) {
+      if (typeof key !== 'string' || key.includes('..')) throw new HttpError(400, 'مفتاح غير صالح.');
+      const [root, sub, name] = key.split('/');
+      if (root !== 'chat' || !sub || !name) throw new HttpError(400, 'مفتاح غير صالح.');
+      if (sub === to) { out[key] = key; continue; }
+      const { data: inSource } = await caller.client.rpc('is_member', { p_conversation: sub });
+      if (!inSource && caller.role !== 'admin') throw new HttpError(403, 'لا تملك صلاحية هذا الملف.');
+      const ext = name.split('.').pop() ?? '';
+      const type = Object.entries(EXT).find(([, e]) => e === ext)?.[0];
+      if (!type) throw new HttpError(400, 'صيغة الملف غير مدعومة.');
+      const copy = `chat/${to}/${crypto.randomUUID()}.${ext}`;
+      await putObject(copy, await getObject(key), type);
+      out[key] = copy;
+    }
+    return json({ keys: out });
   }
 
   throw new HttpError(400, 'عملية غير معروفة.');

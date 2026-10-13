@@ -75,6 +75,7 @@ async function clearDeviceData() {
   await clearLocalPrefs().catch(() => {});
   await clearOfflineCache().catch(() => {});
   await resetPushPrefs().catch(() => {});
+  import('./outbox').then((m) => m.resetOutbox()).catch(() => {});
   import('@/widgets/sync').then((m) => m.clearWidgets()).catch(() => {});
 }
 
@@ -100,12 +101,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setCacheUser(userId);
     await switchDeviceUser(userId);
     try {
-      const { data } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
+      const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
+      // خطأ (انقطاع بلا نسخة محفوظة، أو رمز منتهٍ): نُبقي الملف الظاهر كما هو بدل أن تختفي الشاشات
+      if (error) return;
       // الهدف والمظهر وإعدادات المؤقت من حسابه، قبل أن تظهر الشاشات
       if (data) await hydratePrefs(userId, (data as Profile).prefs).catch(() => {});
       setProfile((data as Profile | null) ?? null);
     } catch {
-      setProfile(null);
+      // نُبقي الملف الحالي
     }
   }, []);
 
@@ -114,13 +117,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const timeout = setTimeout(() => setReady(true), 8000);
     (async () => {
       try {
-        const { data } = await supabase.auth.getSession();
-        let current = data.session;
-        if (!current) {
-          // بلا إنترنت تعذّر تجديد الجلسة المنتهية: لا نرمي الطالب لشاشة الدخول، نفتح بما هو محفوظ
-          current = await storedSession();
-          if (current) { setStale(true); setCacheUser(current.user.id); }
+        // نفتح فوراً بالجلسة المخزنة على الهاتف (بلا انتظار الخادم): getSession يجدد الرمز المنتهي أولاً،
+        // وبلا إنترنت يعيد المحاولة ~٢٥ ثانية — فكان التطبيق يفتح على شاشة الدخول أو يتجمد
+        const saved = await storedSession();
+        if (saved) {
+          setCacheUser(saved.user.id);
+          setSession(saved);
+          await loadProfile(saved.user.id);
+          clearTimeout(timeout);
+          setReady(true);
+          // التجديد بالخلفية: إن نجح نأخذ الجلسة الجديدة، وإن لم يكن إنترنت نعيد المحاولة كل ١٥ ثانية
+          supabase.auth.getSession().then(({ data }) => {
+            if (data.session) setSession((cur) => (cur?.access_token === data.session?.access_token ? cur : data.session));
+            else setStale(true);
+          }).catch(() => setStale(true));
+          return;
         }
+        const { data } = await supabase.auth.getSession();
+        const current = data.session;
+        if (current) setCacheUser(current.user.id);
         setSession(current);
         await loadProfile(current?.user.id);
       } catch {

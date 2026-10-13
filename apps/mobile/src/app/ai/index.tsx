@@ -22,7 +22,7 @@ export default function AiHome() {
   const settings = useSettings();
   // حصة الطالب الخاصة (يضعها الأدمن) وإلا الحد العام
   const limit = me.ai_daily_limit ?? (settings.ai as { daily_limit?: number } | undefined)?.daily_limit ?? 20;
-  const subjects = useLoad(() => loadSubjects(), []);
+  const subjects = useLoad(() => loadSubjects(), [], { key: 'subjects' });
   const openSubject = (subjectId?: string) => router.push({ pathname: '/ai/[id]', params: { id: 'new', ...(subjectId ? { subjectId } : {}) } });
 
   // قادم من صفحة مادة أو أسئلة: افتح محادثة جديدة مباشرة
@@ -39,7 +39,7 @@ export default function AiHome() {
       supabase.from('ai_usage').select('count').eq('user_id', me.id).eq('day', today).maybeSingle(),
     ]);
     return { chats: chats as { id: string; title: string; updated_at: string }[], used: usage.data?.count ?? 0 };
-  }, [me.id]);
+  }, [me.id], { key: `ai-chats:${me.id}` });
   useFocusEffect(useCallback(() => {
     q.reload();
     // eslint-disable-next-line react-hooks/exhaustive-deps

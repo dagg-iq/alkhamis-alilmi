@@ -57,6 +57,8 @@ export interface DocumentRow {
   sort: number;
   is_published: boolean;
   ingested_pages: number;
+  /** كل الصفحات المقروءة (ingested_pages = المتتالية من ١ فقط) */
+  read_pages?: number | null;
   ingest_status: 'none' | 'running' | 'done' | 'error';
   ingest_error: string | null;
   outline_status?: 'none' | 'running' | 'done' | 'error';
@@ -141,6 +143,8 @@ export interface Message {
   created_at: string;
   edited_at: string | null;
   deleted_at: string | null;
+  /** أُعيد توجيهها من محادثة أخرى */
+  forwarded?: boolean;
 }
 export interface AiSource { title: string; subject?: string; chapter?: string; page?: number; printed?: string; document_id?: string; lecture_id?: string; start?: number }
 export interface AiMessage { id: string; chat_id: string; role: 'user' | 'assistant'; content: string; sources: AiSource[] | null; created_at: string }

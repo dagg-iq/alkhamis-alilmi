@@ -9,7 +9,7 @@ import { callFunction, must, supabase } from '../lib/supabase';
  * حصة Google المجانية: ٢٠ طلباً يومياً و٥ في الدقيقة لكل نموذج في كل مشروع.
  * الحصة اليومية تتجدد عند Google منتصف الليل بتوقيت كاليفورنيا (١٠:٠٠ صباحاً بغداد صيفاً، ١١:٠٠ شتاءً) — لا ٣:٠٠ فجراً.
  */
-interface Slots { slots: string[]; per_model: number; models: string[]; fallback: string[] }
+interface Slots { slots: string[]; per_model: number; per_lite?: number; models: string[]; fallback: string[] }
 interface UsageRow { day: string; slot: string; model: string; requests: number; errors: number; last_status: number | null; last_error: string | null; last_at: string | null }
 interface Block { slot: string; model: string; blocked_until: string; reason: string | null; updated_at: string | null }
 interface StudentUse { user_id: string; day: string; count: number; profiles: { full_name: string; sections: { name: string } | null } | null }
@@ -114,6 +114,11 @@ export default function Usage() {
     if (!d) return null;
     const models = [...d.slots.models, ...d.slots.fallback];
     const per = d.slots.per_model;
+    const perLite = d.slots.per_lite ?? 500;
+    // حصة كل نموذج: Flash-Lite أكبر بكثير من البقية
+    const perOf = (model: string) => (model.includes('lite') ? perLite : per);
+    const keyCap = models.reduce((a, m) => a + perOf(m), 0);
+    const liteCount = models.filter((m) => m.includes('lite')).length;
     // قفل يومي وُضع قبل آخر تجدد لا قيمة له (Google جددت الحصة بعده) — نفس قاعدة الخادم (staleDailyBlock)
     const lastReset = quotaWindow(now).start;
     const live = d.blocks.filter((b) => !(/اليومية|التضمين/.test(b.reason ?? '') && b.updated_at && Date.parse(b.updated_at) < lastReset));
@@ -128,10 +133,10 @@ export default function Usage() {
         // «انتهت حصته» فقط إن كان السبب الحصة اليومية فعلاً؛ غيره (نموذج غير متاح…) يظهر بسببه
         const daily = !!b && /اليومية/.test(b.reason ?? '');
         const long = !!b && Date.parse(b.blocked_until) - now > 10 * 60_000;
-        const left = dead || daily || long ? 0 : Math.max(0, per - used);
+        const left = dead || daily || long ? 0 : Math.max(0, perOf(model) - used);
         // الحصة اليومية تعود عند منتصف ليل كاليفورنيا (أقفال قديمة قد تقول ٣:٠٠ فجراً — نعرض الموعد الصحيح)
         const back = b ? (daily ? quotaWindow(now).end : Date.parse(b.blocked_until)) : 0;
-        return { model, used, errors: u?.errors ?? 0, left, block: b, daily, back, lastError: u?.last_error };
+        return { model, used, limit: perOf(model), errors: u?.errors ?? 0, left, block: b, daily, back, lastError: u?.last_error };
       });
       const used = rows.reduce((a, r) => a + r.used, 0);
       const left = rows.reduce((a, r) => a + r.left, 0);
@@ -139,7 +144,7 @@ export default function Usage() {
       return { slot, dead, rows, used, left, embed };
     });
     const working = keys.filter((k) => !k.dead);
-    const capacity = working.length * models.length * per;
+    const capacity = working.length * keyCap;
     const used = keys.reduce((a, k) => a + k.used, 0);
     const left = keys.reduce((a, k) => a + k.left, 0);
     // الطلاب: اليوم وآخر ٧ أيام
@@ -157,7 +162,7 @@ export default function Usage() {
       const rs = working.map((k) => k.rows.find((r) => r.model === model)!);
       return { model, left: rs.reduce((a, r) => a + r.left, 0), used: rs.reduce((a, r) => a + r.used, 0), keysOpen: rs.filter((r) => r.left > 0).length };
     });
-    return { keys, capacity, used, left, students, studentsToday, models, per, working: working.length, total: keys.length, byModel };
+    return { keys, capacity, used, left, students, studentsToday, models, per, perLite, keyCap, liteCount, working: working.length, total: keys.length, byModel };
   }, [d, now]);
 
   if (q.error) return <><div className="head"><h1>الاستخدام</h1></div><Empty>{q.error}</Empty></>;
@@ -170,14 +175,14 @@ export default function Usage() {
         <button className="btn" onClick={() => q.reload()}>تحديث</button>
       </div>
       <p className="small dim" style={{ marginTop: 0 }}>
-        حصة Google المجانية: {ar(calc.per)} طلباً يومياً و٥ في الدقيقة <b>لكل نموذج في كل مفتاح</b>. الترتيب: كل نماذج المفتاح الأول (3.8 ← 3.7 ← … ← 3.1) ثم المفتاح التالي، ثم 2.5 احتياطاً.
+        حصة Google المجانية: {ar(calc.per)} طلباً يومياً ({ar(calc.perLite)} لنماذج Flash-Lite) و٥ في الدقيقة <b>لكل نموذج في كل مفتاح</b>. الترتيب: كل نماذج المفتاح الأول (3.8 ← 3.7 ← … ← 3.1) ثم المفتاح التالي، ثم 2.5 احتياطاً.
         تتجدد الحصة اليومية عند Google <b>منتصف الليل بتوقيت كاليفورنيا = {time(new Date(quotaWindow(now).end).toISOString())} بتوقيت بغداد</b> (لا ٣:٠٠ فجراً).
         {' '}<b>آخر تجدد:</b> {dayTime(quotaWindow(now).start)} — <b>التجدد القادم:</b> {dayTime(quotaWindow(now).end)} (بعد {untilReset(now)}).
         {' '}النموذج الذي تنتهي حصته يُقفل حتى التجدد القادم.
       </p>
 
       <div className="card" style={{ marginBottom: 14 }}>
-        <b>النماذج المتاحة الآن</b> <span className="small dim">(على كل المفاتيح التي تعمل — الفهرسة تقرأ بـ 3.8 ثم 3.7 ثم 3.6 ثم 3.5 Flash)</span>
+        <b>النماذج المتاحة الآن</b> <span className="small dim">(على كل المفاتيح التي تعمل — الفهرسة تقرأ بـ 3.8 ثم 3.7 ثم 3.6 ثم 3.5 Flash ثم 2.5 Flash ثم Flash-Lite)</span>
         <div className="usage-models">
           {calc.byModel.map((m) => (
             <div key={m.model} className="usage-model">
@@ -204,12 +209,12 @@ export default function Usage() {
       <div className="grid">
         <div className="card stat hero"><b className="num">{ar(calc.left)}</b><span>طلباً متبقياً اليوم (تقريباً)</span></div>
         <div className="card stat"><b className="num">{ar(calc.used)}</b><span className="dim">طلباً استُخدم اليوم</span></div>
-        <div className="card stat"><b className="num">{ar(calc.capacity)}</b><span className="dim">السعة اليومية ({ar(calc.working)} مفتاح يعمل × {ar(calc.models.length)} نماذج × {ar(calc.per)})</span></div>
+        <div className="card stat"><b className="num">{ar(calc.capacity)}</b><span className="dim">السعة اليومية ({ar(calc.working)} مفتاح يعمل × {ar(calc.keyCap)} طلباً لكل مفتاح)</span></div>
         <div className="card stat"><b className="num">{ar(calc.studentsToday)}</b><span className="dim">سؤالاً من الطلاب للمساعد اليوم</span></div>
       </div>
       <div className="card soft" style={{ marginTop: 14 }}>
-        <b>حساب السعة:</b> كل مفتاح = {ar(calc.models.length)} نماذج × {ar(calc.per)} = {ar(calc.models.length * calc.per)} طلباً يومياً.
-        {' '}بـ٥ مفاتيح ≈ {ar(5 * calc.models.length * calc.per)}، وبـ٧ مفاتيح ≈ {ar(7 * calc.models.length * calc.per)} طلباً يومياً (منها {ar(2 * calc.per)} لكل مفتاح من 2.5 الاحتياطي).
+        <b>حساب السعة:</b> كل مفتاح = {ar(calc.models.length - calc.liteCount)} نماذج × {ar(calc.per)} + {ar(calc.liteCount)} نماذج Flash-Lite × {ar(calc.perLite)} = {ar(calc.keyCap)} طلباً يومياً.
+        {' '}بـ٥ مفاتيح ≈ {ar(5 * calc.keyCap)}، وبـ٧ مفاتيح ≈ {ar(7 * calc.keyCap)} طلباً يومياً.
         {' '}فهرسة كتاب ≈ عدد صفحاته ÷ ٦ طلباً (كتاب ٢٣٢ صفحة ≈ ٤٠ طلباً). كل مفتاح يجب أن يكون من <b>حساب Google مختلف</b> (مفاتيح الحساب الواحد تتشارك نفس الحصة).
       </div>
 
@@ -239,10 +244,10 @@ export default function Usage() {
             <span className="usage-chev" style={{ transform: open[k.slot] ? 'rotate(180deg)' : undefined }}>▾</span>
             <div style={{ flex: 1, textAlign: 'start' }}>
               <b style={{ fontSize: 17 }}>{slotLabel(k.slot)}</b> <span className="small dim">({k.slot})</span>
-              {!k.dead ? <div className="progress" style={{ marginTop: 8, maxWidth: 360 }}><div style={{ width: `${Math.min(100, (k.used / (calc.models.length * calc.per)) * 100)}%` }} /></div> : null}
+              {!k.dead ? <div className="progress" style={{ marginTop: 8, maxWidth: 360 }}><div style={{ width: `${Math.min(100, (k.used / calc.keyCap) * 100)}%` }} /></div> : null}
             </div>
             {k.dead ? <span className="pill bad">متوقف</span>
-              : <span className={`pill ${k.left > 0 ? 'ok' : 'warn'}`}>بقي {ar(k.left)} من {ar(calc.models.length * calc.per)}</span>}
+              : <span className={`pill ${k.left > 0 ? 'ok' : 'warn'}`}>بقي {ar(k.left)} من {ar(calc.keyCap)}</span>}
           </button>
           {k.dead ? <p className="small" style={{ color: 'var(--bad)' }}>Google رفضت هذا المفتاح، فيُتخطى تلقائياً حتى {time(k.dead.blocked_until)} ثم يُجرَّب من جديد. السبب من Google: «{k.dead.reason}».</p> : null}
           {k.dead || !open[k.slot] ? null : <div className="table-wrap" style={{ marginTop: 10 }}>
@@ -252,8 +257,8 @@ export default function Usage() {
                 {k.rows.map((r) => (
                   <tr key={r.model}>
                     <td><b>{short(r.model)}</b>{calc.models.indexOf(r.model) >= calc.models.length - 2 ? <span className="pill" style={{ marginInlineStart: 6 }}>احتياط</span> : null}</td>
-                    <td className="num">{ar(r.used)} / {ar(calc.per)}</td>
-                    <td><div className="progress"><div style={{ width: `${Math.min(100, (r.used / calc.per) * 100)}%`, background: r.left === 0 ? 'var(--bad)' : undefined }} /></div></td>
+                    <td className="num">{ar(r.used)} / {ar(r.limit)}</td>
+                    <td><div className="progress"><div style={{ width: `${Math.min(100, (r.used / r.limit) * 100)}%`, background: r.left === 0 ? 'var(--bad)' : undefined }} /></div></td>
                     <td>
                       {k.dead ? <span className="pill bad">المفتاح متوقف</span>
                         : r.block ? <span className={`pill ${r.daily ? 'bad' : 'warn'}`} title={r.block.reason ?? ''}>{r.daily ? 'انتهت حصته' : r.block.reason ?? 'مقفل'} — يعود {time(new Date(r.back).toISOString())}</span>

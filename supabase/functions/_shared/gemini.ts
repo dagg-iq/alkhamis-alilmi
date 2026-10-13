@@ -7,7 +7,7 @@ const API = 'https://generativelanguage.googleapis.com';
  * - الطلاب: GEMINI_API_KEY ثم GEMINI_API_KEY_2 … GEMINI_API_KEY_8 (كل مفتاح من مشروع/حساب مختلف بحصته الخاصة)
  * - لوحة التحكم: GEMINI_ADMIN_API_KEY أولاً ثم مفاتيح الطلاب احتياطاً
  *
- * حصة Google المجانية لكل مشروع: ٢٠ طلباً يومياً و٥ في الدقيقة **لكل نموذج**.
+ * حصة Google المجانية لكل مشروع: ٢٠ طلباً يومياً (٥٠٠ لـ Flash-Lite) و٥ في الدقيقة **لكل نموذج**.
  * لذلك الترتيب: كل نماذج المفتاح الأول (3.8 ← 3.7 ← … ← 3.1) ثم المفتاح الثاني… ثم 2.5 احتياطاً على كل المفاتيح.
  * النموذج الذي تنتهي حصته يُقفل في قاعدة البيانات حتى الوقت الذي تحدده Google (retryDelay)،
  * فلا تضيع طلبات عليه من أي دالة أو طالب آخر.
@@ -16,6 +16,9 @@ export type Pool = 'student' | 'admin';
 export const STUDENT_VARS = ['GEMINI_API_KEY', 'GEMINI_API_KEY_2', 'GEMINI_API_KEY_3', 'GEMINI_API_KEY_4', 'GEMINI_API_KEY_5', 'GEMINI_API_KEY_6', 'GEMINI_API_KEY_7', 'GEMINI_API_KEY_8'];
 export const ADMIN_VAR = 'GEMINI_ADMIN_API_KEY';
 export const DAILY_PER_MODEL = 20;
+/** نماذج Flash-Lite حصتها اليومية أكبر بكثير (~٥٠٠ طلب لكل مفتاح) */
+export const DAILY_PER_LITE = 500;
+export const dailyLimit = (model: string) => (model.includes('lite') ? DAILY_PER_LITE : DAILY_PER_MODEL);
 
 export interface KeySlot { slot: string; key: string }
 
@@ -67,6 +70,11 @@ export interface GenerateOptions {
   /** آخر وقت مسموح (Date.now()): بعده يُقطع الطلب ويُرمى GeminiTimeoutError (دوال الخادم محدودة ~١٥٠ ث) */
   deadline?: number;
   /**
+   * أقل وقت يجب أن يبقى قبل deadline لإرسال طلب (الافتراضي ٣ ث). طلب يُقطع قبل جوابه يُحسب من حصة Google،
+   * فقراءة الكتب (جواب ٢٠–٩٠ ث) لا تبدأ طلباً إلا ومعها وقت كافٍ.
+   */
+  minTimeMs?: number;
+  /**
    * مسار القارئ (للعمل المتوازي): القارئ رقم n يبدأ بالمفتاح n ثم يدور على البقية،
    * فلا يتزاحم القرّاء على مفتاح واحد ونموذجه (حد ٥ طلبات في الدقيقة لكل نموذج).
    */
@@ -84,11 +92,14 @@ export const LITE_MODELS = ['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'g
 /** الاحتياط الأخير بعد انتهاء كل النماذج على كل المفاتيح */
 export const FALLBACK_MODELS = ['gemini-2.5-flash', 'gemini-2.5-flash-lite'];
 /**
- * قراءة صفحات الكتب (الفهرسة): النماذج القوية فقط — Flash-Lite أضعف في المعادلات والصفحات المصوّرة،
- * فإن انتهت حصة القوية ينتظر طابور الفهرسة تجددها بدل القراءة بدقة أقل.
+ * قراءة صفحات الكتب والملازم (الفهرسة): Flash-Lite أولاً ثم النماذج القوية احتياطاً.
+ * السبب (من سجل الاستخدام الفعلي): 3.8 Flash يأخذ أكثر من ٩٥ ث لقراءة ٨ صفحات مصوّرة — ٢٨ من ٣٣ طلباً انتهت مهلتها،
+ * وكل طلب مقطوع يُحسب من الحصة ويعود بلا صفحات فيعلق الكتاب؛ Flash-Lite يقرؤها في ~٢٠ ث وحصته ~٥٠٠ يومياً.
+ * والقوية تبقى لبناء الفهرس والمحاضرات ومساعد الطلاب (حصتها ٢٠ يومياً فقط). لا 2.5: أوقفتها Google (404).
  */
-export const READ_MODELS = MAIN_MODELS.filter((m) => !m.includes('lite'));
-export const READ_FALLBACK = ['gemini-2.5-flash'];
+const STRONG = MAIN_MODELS.filter((m) => !m.includes('lite'));
+export const READ_MODELS = [...MAIN_MODELS.filter((m) => m.includes('lite')), ...STRONG];
+export const READ_FALLBACK: string[] = [];
 
 /**
  * سلسلة النماذج: ثابتة بالترتيب أعلاه. إعداد النموذج القديم في لوحة التحكم حُذف ويُتجاهل
@@ -292,7 +303,7 @@ export async function generate(model: string | string[], contents: Content[], op
       else delete config.thinkingConfig;
       let res: Response;
       const left = opts.deadline ? opts.deadline - Date.now() : Infinity;
-      if (left < 3000) throw new GeminiTimeoutError('انتهت المهلة');
+      if (left < (opts.minTimeMs ?? 3000)) throw new GeminiTimeoutError('انتهت المهلة');
       const ctl = Number.isFinite(left) ? new AbortController() : null;
       const timer = ctl ? setTimeout(() => ctl.abort(), left) : undefined;
       try {
@@ -307,7 +318,13 @@ export async function generate(model: string | string[], contents: Content[], op
       } catch (e) {
         if (timer) clearTimeout(timer);
         // جواب بطيء (تفكير طويل) ≠ انتهاء حصة: لا نقفل النموذج، نسجّله فقط
-        if (ctl?.signal.aborted) { await logCall(a.slot, a.m, false, undefined, 'انتهت المهلة (جواب بطيء) — ليس حداً'); throw new GeminiTimeoutError('انتهت المهلة'); }
+        if (ctl?.signal.aborted) {
+          // Google تحسب الطلب المقطوع من الحصة اليومية (عالجته ثم لم ننتظر جوابه): نعدّه طلباً مستهلكاً + خطأ،
+          // وإلا قالت صفحة الاستخدام «بقي ٢٠» والنموذج منتهٍ فعلاً
+          await logCall(a.slot, a.m, true, undefined);
+          await logCall(a.slot, a.m, false, undefined, 'انتهت المهلة (جواب بطيء) — ليس حداً');
+          throw new GeminiTimeoutError('انتهت المهلة');
+        }
         busy = true;
         failures.push(`${a.slot}/${a.m}: network ${String((e as Error).message ?? e).slice(0, 60)}`);
         break;
@@ -325,7 +342,11 @@ export async function generate(model: string | string[], contents: Content[], op
       const msg = (detail.match(/"message":\s*"([^"]{0,200})/)?.[1] ?? '').trim();
       failures.push(`${a.slot}/${a.m}: ${status} ${msg.slice(0, 120)}`);
       await logCall(a.slot, a.m, false, status, msg || detail.slice(0, 200));
-      if (status === 404) { await block(a.slot, a.m, 6 * 3600_000, 'النموذج غير متاح لهذا المفتاح'); break; }
+      if (status === 404) {
+        // «no longer available» نهائي (أُوقف النموذج): أسبوع؛ غيره (مؤقت أو خاص بالمفتاح) ٦ ساعات
+        await block(a.slot, a.m, (/no longer available|deprecated|shut ?down/i.test(detail) ? 7 * 24 : 6) * 3600_000, 'النموذج غير متاح لهذا المفتاح');
+        break;
+      }
       if (status === 400 && thinking && attempt === 0 && /thinking/i.test(detail)) {
         thinking = undefined; // نموذج لا يدعم مستوى التفكير: نعيد بدونه
         continue;

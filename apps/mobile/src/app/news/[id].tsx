@@ -17,7 +17,7 @@ export default function PostScreen() {
     const post = await must(supabase.from('posts').select('*, profiles(full_name)').eq('id', id).single()) as Post & { profiles: { full_name: string } | null };
     const cover = post.cover_key ? await signedUrl(post.cover_key).catch(() => null) : null;
     return { post, cover };
-  }, [id]);
+  }, [id], { key: `news:${id}` });
 
   if (q.loading) return <Screen><Header /><Loading /></Screen>;
   if (q.error || !q.data) return <Screen><Header /><ErrorBox message={q.error ?? ''} onRetry={q.reload} /></Screen>;

@@ -14,7 +14,7 @@ export default function Subjects() {
   const q = useLoad(async () => {
     const [subjects, progress] = await Promise.all([loadSubjects(), loadSubjectProgress(me.id)]);
     return { subjects, progress };
-  }, [me.id]);
+  }, [me.id], { key: `subjects-tab:${me.id}` });
   useFocusEffect(useCallback(() => {
     q.reload();
     // eslint-disable-next-line react-hooks/exhaustive-deps

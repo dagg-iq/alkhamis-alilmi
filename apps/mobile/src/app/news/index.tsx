@@ -21,7 +21,7 @@ export default function News() {
     const keys = posts.map((p) => p.cover_key).filter((k): k is string => !!k);
     const covers = keys.length ? await signedUrls(keys).catch(() => ({} as Record<string, string>)) : {};
     return posts.map((p) => ({ ...p, cover: p.cover_key ? covers[p.cover_key] ?? null : null }));
-  });
+  }, [], { key: 'news' });
   useFocusEffect(useCallback(() => {
     q.reload();
     // eslint-disable-next-line react-hooks/exhaustive-deps

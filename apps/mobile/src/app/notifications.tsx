@@ -14,7 +14,7 @@ const ICON: Record<string, IconName> = { post: 'news', mention: 'at', task: 'cal
 
 export default function Notifications() {
   const { c } = useTheme();
-  const q = useLoad(async () => must(supabase.from('notifications').select('*').order('created_at', { ascending: false }).limit(60)) as Promise<Notif[]>);
+  const q = useLoad(async () => must(supabase.from('notifications').select('*').order('created_at', { ascending: false }).limit(60)) as Promise<Notif[]>, [], { key: 'notifications' });
   useFocusEffect(useCallback(() => {
     // تعليم الكل كمقروء عند الخروج
     return () => {

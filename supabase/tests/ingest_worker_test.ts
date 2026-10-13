@@ -28,6 +28,7 @@ function q(t: string) {
   const b: any = {
     select: () => b, order: () => b, limit: () => b, single: () => { b._single = true; return b; }, maybeSingle: () => { b._single = true; return b; },
     eq: (c: string, v: any) => { filters.push((r) => r[c] === v); return b; }, gt: () => b, gte: () => b, lte: () => b,
+    lt: (c: string, v: any) => { filters.push((r) => String(r[c]) < String(v)); return b; },
     is: (c: string, v: any) => { filters.push((r) => (r[c] ?? null) === v); return b; },
     not: (c: string, _o: string, v: any) => { filters.push((r) => (r[c] ?? null) !== v); return b; },
     in: (c: string, v: any[]) => { filters.push((r) => v.includes(r[c])); return b; },
@@ -72,6 +73,7 @@ const { admin } = await import('../functions/_shared/supabase.ts');
 // التخزين: أجزاء PDF حقيقية
 const parts: Record<string, Uint8Array> = {};
 const mk = async (n: number) => { const p = await PDFDocument.create(); for (let i = 0; i < n; i++) p.addPage([200, 200]); return await p.save(); };
+parts['k/d6'] = await mk(2); parts['k/d7'] = await mk(3);
 parts['k/d1-1'] = await mk(3); parts['k/d1-4'] = await mk(2); parts['k/d2-1'] = await mk(2);
 const removed: string[] = [];
 (admin as any).storage = {
@@ -82,6 +84,9 @@ const removed: string[] = [];
 };
 
 let quota = false;
+let embedQuota = false; // حد التضمين في الدقيقة
+let skipPage = 0; // صفحة لا يعيدها النموذج أبداً (بيضاء)
+let readCalls = 0;
 let strongQuota = false; // النماذج القوية فقط منتهية، و Flash-Lite متاح
 const thinking: string[] = [];
 const readModels = new Set<string>();
@@ -90,18 +95,22 @@ globalThis.fetch = (async (url: string, init: any) => {
   if ((quota || (strongQuota && !/lite/.test(u))) && u.includes('generativelanguage') && !u.includes('Embed')) {
     return new Response(JSON.stringify({ error: { code: 429, message: 'Quota exceeded for metric: generate_content_free_tier_requests, limit: 20 GenerateRequestsPerDayPerProjectPerModel' } }), { status: 429 });
   }
+  if (embedQuota && u.includes('batchEmbedContents')) {
+    return new Response(JSON.stringify({ error: { code: 429, message: 'Quota exceeded for metric: embed_content_free_tier_requests, limit: 100. Please retry in 30s' } }), { status: 429 });
+  }
   if (u.includes('batchEmbedContents')) {
     const n = JSON.parse(init.body).requests.length;
     return new Response(JSON.stringify({ embeddings: Array.from({ length: n }, () => ({ values: new Array(768).fill(0.1) })) }), { status: 200 });
   }
   const body = JSON.parse(init.body);
   if (body.contents[0].parts.length === 1) return new Response(JSON.stringify({ error: { code: 400, message: 'bad' } }), { status: 400 });
+  readCalls++;
   thinking.push(JSON.stringify(body.generationConfig?.thinkingConfig ?? {}));
   readModels.add(u.match(/models\/([^:]+):/)?.[1] ?? '?');
   const prompt: string = body.contents[0].parts[1].text;
   const [, from, to] = prompt.match(/من (\d+) إلى (\d+)/)!.map(Number);
   const pages = [];
-  for (let p = from; p <= to; p++) pages.push({ page: p, printed: String(p), headings: p === 1 ? [{ level: 1, title: 'الفصل الأول' }] : [], text: `نص صفحة ${p}` });
+  for (let p = from; p <= to; p++) if (p !== skipPage) pages.push({ page: p, printed: String(p), headings: p === 1 ? [{ level: 1, title: 'الفصل الأول' }] : [], text: `نص صفحة ${p}` });
   return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify(pages) }] } }] }), { status: 200 });
 }) as typeof fetch;
 
@@ -127,9 +136,53 @@ check('بُني الفهرس لكليهما وخرجا من الطابور', d1.
 check('حُذفت الأجزاء من الجدول والتخزين', db.ingest_chunks.length === 0 && removed.length === 3, removed.join());
 check('المصوّر يُقرأ بتفكير أعلى من النصي', thinking.some((t) => /low/i.test(t)) && thinking.some((t) => /minimal/i.test(t)), thinking.join(' '));
 check('القفل فُتح بعد الانتهاء', lock === false);
-check('قراءة الصفحات بالنماذج القوية فقط (لا Flash-Lite)', readModels.size > 0 && [...readModels].every((m) => !m.includes('lite')), [...readModels].join());
+check('قراءة الصفحات بـ Flash-Lite أولاً (أسرع؛ القوية تنقطع مهلتها)', readModels.size > 0 && [...readModels].every((m) => m.includes('lite')), [...readModels].join());
 
-// كل النماذج القوية مقفلة (حصة يومية) و Flash-Lite متاح: لا يقرأ به، بل ينتظر
+// حد التضمين: الصفحات تُحفظ ولا تُقرأ ثانية، والجزء يُعاد للتضمين فقط (بلا إيقاف العمال)
+{
+  db.documents.push({ id: 'd6', title: 'سادس', kind: 'book', subject_id: 's', chapter_id: null, pages: 2, ingested_pages: 0, ingest_status: 'running', queued_at: new Date().toISOString() });
+  db.ingest_chunks.push({ id: 'c6', document_id: 'd6', from_page: 1, to_page: 2, total_pages: 2, file_key: 'k/d6', scanned: false, status: 'pending', attempts: 0, next_at: old });
+  embedQuota = true;
+  const r6 = await call();
+  const c6 = db.ingest_chunks.find((c) => c.id === 'c6')!;
+  check('حد التضمين: الصفحات محفوظة والجزء ينتظر التضمين فقط', r6.json.quota !== true && c6.status === 'pending' && /التضمين/.test(c6.last_error) && db.document_pages.filter((p) => p.document_id === 'd6').length === 2, JSON.stringify({ r6: r6.json, c6 }));
+  embedQuota = false;
+  c6.next_at = old;
+  const before = readCalls;
+  await call();
+  check('بعد التضمين: لا قراءة جديدة والكتاب مكتمل', readCalls === before && db.content_chunks.some((x) => x.source_id === 'd6') && db.documents.find((d) => d.id === 'd6')!.ingest_status === 'done', `reads=${readCalls - before}`);
+  // تُصفّر أقفال التضمين التي وُضعت في الذاكرة والجدول
+  db.ai_key_blocks = [];
+}
+
+// صفحة بيضاء لا يعيدها النموذج: بعد المحاولة الثالثة تُكتب فارغة ويكتمل الجزء (لا «فشل»)
+{
+  db.documents.push({ id: 'd7', title: 'سابع', kind: 'book', subject_id: 's', chapter_id: null, pages: 103, ingested_pages: 0, ingest_status: 'running', queued_at: new Date().toISOString() });
+  db.ingest_chunks.push({ id: 'c7', document_id: 'd7', from_page: 101, to_page: 103, total_pages: 103, file_key: 'k/d7', scanned: false, status: 'pending', attempts: 0, next_at: old });
+  skipPage = 102;
+  await call();
+  const c7 = db.ingest_chunks.find((c) => c.id === 'c7')!;
+  check('الصفحة البيضاء: المحاولة الأولى تُعاد', c7.status === 'pending' && /2 من 3/.test(c7.last_error), JSON.stringify(c7));
+  c7.attempts = 2; c7.next_at = old;
+  await call();
+  const blank = db.document_pages.find((p) => p.document_id === 'd7' && p.page === 102);
+  check('الصفحة البيضاء: بعد المحاولة الثالثة تُكتب فارغة ويكتمل الجزء', !!blank && blank.text === null && !db.ingest_chunks.some((c) => c.id === 'c7' && c.status !== 'done'), JSON.stringify({ blank, c7: db.ingest_chunks.find((c) => c.id === 'c7') }));
+  skipPage = 0;
+}
+
+// جزء من صفحة واحدة بيضاء (لا يعود منه شيء): بعد المحاولة الثالثة تُكتب فارغة
+{
+  db.documents.push({ id: 'd8', title: 'ثامن', kind: 'book', subject_id: 's', chapter_id: null, pages: 41, ingested_pages: 0, ingest_status: 'running', queued_at: new Date().toISOString() });
+  db.ingest_chunks.push({ id: 'c8', document_id: 'd8', from_page: 41, to_page: 41, total_pages: 41, file_key: 'k/d8', scanned: false, status: 'pending', attempts: 2, next_at: old });
+  parts['k/d8'] = await mk(1);
+  skipPage = 41;
+  await call();
+  const blank8 = db.document_pages.find((p) => p.document_id === 'd8' && p.page === 41);
+  check('صفحة منفردة بيضاء: تُكتب فارغة ويكتمل الجزء', !!blank8 && blank8.text === null && !db.ingest_chunks.some((c) => c.id === 'c8' && c.status !== 'done'), JSON.stringify(db.ingest_chunks.find((c) => c.id === 'c8')));
+  skipPage = 0;
+}
+
+// كل النماذج القوية مقفلة (حصة يومية) و Flash-Lite متاح: يكمل القراءة به بدل الانتظار
 {
   strongQuota = true;
   quota = false;
@@ -138,7 +191,8 @@ check('قراءة الصفحات بالنماذج القوية فقط (لا Flas
   readModels.clear();
   const r5 = await call();
   const c5 = db.ingest_chunks.find((c) => c.id === 'c5')!;
-  check('القوية منتهية: ينتظر ولا يقرأ بـ Flash-Lite', r5.json.quota === true && readModels.size === 0 && c5.status === 'pending' && c5.attempts === 0, JSON.stringify({ r: r5.json, models: [...readModels], c5 }));
+  const d5 = db.documents.find((d) => d.id === 'd5')!;
+  check('القوية منتهية: يقرأ بـ Flash-Lite ويكمل', r5.json.quota !== true && readModels.size > 0 && [...readModels].every((m) => m.includes('lite')) && !c5 && d5.ingested_pages === 2, JSON.stringify({ r: r5.json, models: [...readModels], c5, d5 }));
   strongQuota = false;
   db.documents = db.documents.filter((d) => d.id !== 'd5');
   db.ingest_chunks = db.ingest_chunks.filter((c) => c.id !== 'c5');
@@ -151,6 +205,7 @@ quota = true;
 r = await call();
 const c4 = db.ingest_chunks.find((c) => c.id === 'c4')!;
 check('الحصة: الجزء ينتظر (لا فشل ولا محاولة محسوبة)', r.json.quota === true && c4.status === 'pending' && c4.attempts === 0 && new Date(c4.next_at).getTime() > Date.now() + 5 * 60_000 && /حصة/.test(c4.last_error), JSON.stringify(c4));
+check('الحصة: كل الأجزاء المنتظرة تُؤجَّل معاً', db.ingest_chunks.filter((x) => x.status === 'pending').every((x) => new Date(x.next_at).getTime() > Date.now() + 5 * 60_000));
 check('الحصة: الكتاب ما زال في الطابور', !!db.documents.find((d) => d.id === 'd3')!.queued_at);
 check('الحصة: لا خطأ ظاهر على الكتاب', db.documents.find((d) => d.id === 'd3')!.ingest_status !== 'error');
 

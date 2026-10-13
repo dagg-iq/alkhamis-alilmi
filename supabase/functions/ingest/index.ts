@@ -9,7 +9,7 @@ import {
 import { handler, HttpError, json } from '../_shared/cors.ts';
 import { buildOutline, embedOutline, READ_PROMPT, readInline, storePages, type ReadPage } from '../_shared/ingest-core.ts';
 import { admin, getCaller, getSetting } from '../_shared/supabase.ts';
-import { deleteObject } from '../_shared/storage.ts';
+import { deleteObjectsQuietly } from '../_shared/storage.ts';
 import { chunkText, embed, GeminiTimeoutError, toBase64, fileRef, firstAvailableSlot, generate, poolSlots, slotRank, strongestSlot, GeminiQuotaError, parseJson, uploadFile, MAIN_MODELS, modelChain } from '../_shared/gemini.ts';
 import { getObject } from '../_shared/storage.ts';
 
@@ -170,9 +170,10 @@ async function ingestBatch(doc: Record<string, any>, restart: boolean) {
 /** يُخرج الكتاب من طابور الفهرسة ويحذف أجزاءه المقطوعة (وملفاتها) */
 async function clearQueue(docId: string) {
   const { data } = await admin.from('ingest_chunks').select('id, file_key').eq('document_id', docId);
-  for (const c of (data ?? []) as { id: string; file_key: string }[]) await deleteObject(c.file_key).catch(() => {});
+  // قاعدة البيانات أولاً (فوري)، ثم الملفات بأفضل جهد: خادم تخزين متوقف كان يُفشل الزر كله («Edge Function returned a non-2xx»)
   await admin.from('ingest_chunks').delete().eq('document_id', docId);
   await admin.from('documents').update({ queued_at: null }).eq('id', docId);
+  await deleteObjectsQuietly(((data ?? []) as { file_key: string }[]).map((c) => c.file_key));
 }
 
 Deno.serve(handler(async (req) => {

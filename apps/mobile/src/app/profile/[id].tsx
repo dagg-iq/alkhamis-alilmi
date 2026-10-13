@@ -28,7 +28,7 @@ export default function ProfileScreen() {
   const q = useLoad(async () => {
     const p = await must(supabase.from('profiles').select('*, sections(name)').eq('id', id).single()) as Profile & { sections: { name: string } | null };
     return p;
-  }, [id]);
+  }, [id], { key: `profile:${id}` });
 
   if (q.loading) return <Screen><Header /><Loading /></Screen>;
   if (q.error || !q.data) return <Screen><Header /><ErrorBox message={q.error ?? ''} onRetry={q.reload} /></Screen>;

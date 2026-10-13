@@ -28,7 +28,7 @@ export default function SubjectGrades() {
   const q = useLoad(async () => {
     const [subjects, grades] = await Promise.all([loadSubjects(), loadMyGrades(me.id)]);
     return { subjects, grades };
-  }, [me.id]);
+  }, [me.id], { key: `grades:${me.id}` });
   useFocusEffect(useCallback(() => {
     q.reload();
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -64,7 +64,8 @@ export async function presign(method: 'GET' | 'PUT', key: string, expiresSec = 3
 
 export async function getObject(key: string): Promise<Uint8Array> {
   if (s3) {
-    const res = await s3.fetch(objectUrl(key));
+    // مهلة: خادم التخزين المتوقف كان يعلّق الطلب دقيقتين (مهلة اتصال TCP) فتنتهي الدالة كلها بخطأ
+    const res = await s3.fetch(objectUrl(key), { signal: AbortSignal.timeout(30_000) });
     if (!res.ok) throw new Error(`S3 GET ${key} → ${res.status}`);
     return new Uint8Array(await res.arrayBuffer());
   }
@@ -75,7 +76,7 @@ export async function getObject(key: string): Promise<Uint8Array> {
 
 export async function putObject(key: string, body: Uint8Array, contentType: string): Promise<void> {
   if (s3) {
-    const res = await s3.fetch(objectUrl(key), { method: 'PUT', body: body as Uint8Array<ArrayBuffer>, headers: { 'Content-Type': contentType } });
+    const res = await s3.fetch(objectUrl(key), { method: 'PUT', body: body as Uint8Array<ArrayBuffer>, headers: { 'Content-Type': contentType }, signal: AbortSignal.timeout(60_000) });
     if (!res.ok) throw new Error(`S3 PUT ${key} → ${res.status}`);
     return;
   }
@@ -86,8 +87,20 @@ export async function putObject(key: string, body: Uint8Array, contentType: stri
 
 export async function deleteObject(key: string): Promise<void> {
   if (s3) {
-    await s3.fetch(objectUrl(key), { method: 'DELETE' });
+    await s3.fetch(objectUrl(key), { method: 'DELETE', signal: AbortSignal.timeout(8_000) });
     return;
   }
   await admin.storage.from(BUCKET).remove([key]);
+}
+
+/**
+ * حذف عدة ملفات «بأفضل جهد» بلا تعطيل: بالتوازي وبحد أقصى للوقت. ملف لم يُحذف (التخزين متوقف) يبقى يتيماً
+ * ولا يضر — أفضل من أن يفشل زر «إيقاف»/«فهرسة» كله بخطأ.
+ */
+export async function deleteObjectsQuietly(keys: string[], maxMs = 10_000): Promise<void> {
+  if (!keys.length) return;
+  await Promise.race([
+    Promise.allSettled(keys.map((k) => deleteObject(k))),
+    new Promise((r) => setTimeout(r, maxMs)),
+  ]);
 }
