@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>سعي — معرض التطبيق</title>
+<link rel="icon" href="icon.png">
+<style>
+@font-face{font-family:Sans;src:url(fonts/thmanyahsans-Regular.woff2) format("woff2");font-weight:400}
+@font-face{font-family:Sans;src:url(fonts/thmanyahsans-Bold.woff2) format("woff2");font-weight:700}
+@font-face{font-family:Display;src:url(fonts/thmanyahserifdisplay-Black.woff2) format("woff2");font-weight:900}
+:root{--bg:#F5F5F2;--card:#fff;--ink:#111;--muted:#5C5C5C;--line:#E2E2DC;--accent:#2346F5;--soft:#EEF1FF}
+@media (prefers-color-scheme:dark){:root{--bg:#0E0E0F;--card:#18181A;--ink:#F2F2F0;--muted:#9E9E9E;--line:#2A2A2D;--accent:#7B92FF;--soft:#1F2340}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:Sans,system-ui,sans-serif;line-height:1.7}
+.wrap{max-width:1180px;margin:0 auto;padding:0 16px}
+header{padding:56px 0 24px;text-align:center}
+header img.icon{width:84px;border-radius:22px}
+h1{font-family:Display,serif;font-size:clamp(40px,7vw,72px);margin:12px 0 0;line-height:1.2}
+h1 span{color:var(--accent)}
+h2{font-family:Display,serif;font-size:32px;margin:56px 0 16px}
+.lead{color:var(--muted);font-size:19px;max-width:720px;margin:12px auto}
+.cover{width:100%;border-radius:28px;display:block;margin-top:24px}
+.tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
+.tabs button{font:inherit;font-weight:700;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:8px 18px;border-radius:999px;cursor:pointer}
+.tabs button[aria-pressed=true]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.videos{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:20px}
+.videos figure,.grid figure{margin:0;background:var(--card);border:1px solid var(--line);border-radius:24px;padding:12px;text-align:center}
+video{width:100%;border-radius:16px;background:#000;display:block}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:16px}
+.grid img{width:100%;border-radius:14px;display:block}
+.dash{grid-template-columns:repeat(auto-fill,minmax(340px,1fr))}
+figcaption{font-weight:700;margin-top:8px;font-size:15px}
+.features{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px}
+.features div{background:var(--card);border:1px solid var(--line);border-radius:24px;padding:20px}
+.features b{display:block;font-size:18px;margin-bottom:4px}
+.features p{margin:0;color:var(--muted)}
+footer{color:var(--muted);text-align:center;padding:48px 0 64px;font-size:15px}
+a{color:var(--accent)}
+[hidden]{display:none!important}
+@media (max-width:480px){.grid{grid-template-columns:repeat(2,1fr)}.dash{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <img class="icon" src="icon.png" alt="أيقونة سعي">
+  <h1>اسعَ <span>تُعفَ.</span></h1>
+  <p class="lead">«سعي» — تطبيق أندرويد لطلاب الخامس الإعدادي العلمي في العراق: المحاضرات، الملازم، الأسئلة المتوقعة، ودرجاتك محسوبة بدقة نحو الإعفاء، مع مساعد ذكي ودردشة ولوحة تحكم للإدارة.<br>تصميم وبرمجة <b>محمد حازم احمد</b> · إعدادية الشهاب للبنين.</p>
+  <img class="cover" src="cover.png" alt="شاشات سعي">
+</header>
+
+<h2>فيديوهات</h2>
+<div class="videos">
+<figure><video src="videos/01-app-tour.mp4" poster="videos/posters/01-app-tour.jpg" controls muted playsinline preload="metadata"></video><figcaption>جولة كاملة في التطبيق</figcaption></figure><figure><video src="videos/02-grades-exemption.mp4" poster="videos/posters/02-grades-exemption.jpg" controls muted playsinline preload="metadata"></video><figcaption>الدرجات وحساب الإعفاء</figcaption></figure><figure><video src="videos/03-ai-assistant.mp4" poster="videos/posters/03-ai-assistant.jpg" controls muted playsinline preload="metadata"></video><figcaption>مساعد سعي الذكي</figcaption></figure><figure><video src="videos/04-dark-mode.mp4" poster="videos/posters/04-dark-mode.jpg" controls muted playsinline preload="metadata"></video><figcaption>الوضع الداكن</figcaption></figure>
+</div>
+
+<h2>أهم المميزات</h2>
+<div class="features">
+<div><b>الدرجات والإعفاء</b><p>يحسب السعي السنوي والإعفاء الفردي والعام، وكم تحتاج في كل امتحان قادم.</p></div>
+<div><b>المواد كاملة</b><p>محاضرات مرتبة بالفصول، ملازم PDF بفهرس، أسئلة متوقعة وأسئلة امتحانات المدرسة.</p></div>
+<div><b>مساعد سعي</b><p>ذكاء اصطناعي يجيب من ملازم المدرسة ويذكر الصفحة، ويحوّل الإجابة إلى PDF.</p></div>
+<div><b>الدردشة</b><p>محادثة لكل شعبة وللمدرسة، ردود وإشارات ومشاركة محاضرة أو ملزمة.</p></div>
+<div><b>الجداول والمنظِّم</b><p>جدول الحصص والامتحانات، الواجبات مع تذكيرات، ومؤقت دراسة بإحصائيات.</p></div>
+<div><b>لوحة تحكم</b><p>قبول الطلاب، رفع المحتوى، فهرسة الملازم بالذكاء الاصطناعي، الأخبار والإحصائيات.</p></div>
+</div>
+
+<h2>شاشات التطبيق</h2>
+<div class="tabs" role="group" aria-label="المظهر">
+  <button type="button" data-t="light" aria-pressed="true">فاتح</button>
+  <button type="button" data-t="dark" aria-pressed="false">داكن</button>
+</div>
+<div class="grid" id="light"><figure><a href="screenshots/light/01-home.png" target="_blank"><img loading="lazy" src="screenshots/light/01-home.png" alt="الرئيسية"></a><figcaption>الرئيسية</figcaption></figure>
+<figure><a href="screenshots/light/02-subjects.png" target="_blank"><img loading="lazy" src="screenshots/light/02-subjects.png" alt="المواد"></a><figcaption>المواد</figcaption></figure>
+<figure><a href="screenshots/light/03-subject-physics.png" target="_blank"><img loading="lazy" src="screenshots/light/03-subject-physics.png" alt="مادة الفيزياء"></a><figcaption>مادة الفيزياء</figcaption></figure>
+<figure><a href="screenshots/light/04-lecture.png" target="_blank"><img loading="lazy" src="screenshots/light/04-lecture.png" alt="محاضرة ومواضيعها"></a><figcaption>محاضرة ومواضيعها</figcaption></figure>
+<figure><a href="screenshots/light/05-malzama.png" target="_blank"><img loading="lazy" src="screenshots/light/05-malzama.png" alt="ملزمة وفهرسها"></a><figcaption>ملزمة وفهرسها</figcaption></figure>
+<figure><a href="screenshots/light/06-expected-questions.png" target="_blank"><img loading="lazy" src="screenshots/light/06-expected-questions.png" alt="الأسئلة المتوقعة"></a><figcaption>الأسئلة المتوقعة</figcaption></figure>
+<figure><a href="screenshots/light/07-grades.png" target="_blank"><img loading="lazy" src="screenshots/light/07-grades.png" alt="الدرجات"></a><figcaption>الدرجات</figcaption></figure>
+<figure><a href="screenshots/light/08-subject-grades.png" target="_blank"><img loading="lazy" src="screenshots/light/08-subject-grades.png" alt="درجات مادة"></a><figcaption>درجات مادة</figcaption></figure>
+<figure><a href="screenshots/light/09-enter-grades.png" target="_blank"><img loading="lazy" src="screenshots/light/09-enter-grades.png" alt="إدخال الدرجات"></a><figcaption>إدخال الدرجات</figcaption></figure>
+<figure><a href="screenshots/light/10-chats.png" target="_blank"><img loading="lazy" src="screenshots/light/10-chats.png" alt="المحادثات"></a><figcaption>المحادثات</figcaption></figure>
+<figure><a href="screenshots/light/11-section-chat.png" target="_blank"><img loading="lazy" src="screenshots/light/11-section-chat.png" alt="دردشة الشعبة"></a><figcaption>دردشة الشعبة</figcaption></figure>
+<figure><a href="screenshots/light/12-assistant.png" target="_blank"><img loading="lazy" src="screenshots/light/12-assistant.png" alt="مساعد سعي"></a><figcaption>مساعد سعي</figcaption></figure>
+<figure><a href="screenshots/light/13-assistant-chat.png" target="_blank"><img loading="lazy" src="screenshots/light/13-assistant-chat.png" alt="محادثة مع المساعد"></a><figcaption>محادثة مع المساعد</figcaption></figure>
+<figure><a href="screenshots/light/14-planner.png" target="_blank"><img loading="lazy" src="screenshots/light/14-planner.png" alt="المنظِّم"></a><figcaption>المنظِّم</figcaption></figure>
+<figure><a href="screenshots/light/15-new-task.png" target="_blank"><img loading="lazy" src="screenshots/light/15-new-task.png" alt="مهمة جديدة"></a><figcaption>مهمة جديدة</figcaption></figure>
+<figure><a href="screenshots/light/16-study-timer.png" target="_blank"><img loading="lazy" src="screenshots/light/16-study-timer.png" alt="مؤقت الدراسة"></a><figcaption>مؤقت الدراسة</figcaption></figure>
+<figure><a href="screenshots/light/17-schedules.png" target="_blank"><img loading="lazy" src="screenshots/light/17-schedules.png" alt="الجداول"></a><figcaption>الجداول</figcaption></figure>
+<figure><a href="screenshots/light/18-class-timetable.png" target="_blank"><img loading="lazy" src="screenshots/light/18-class-timetable.png" alt="جدول الحصص"></a><figcaption>جدول الحصص</figcaption></figure>
+<figure><a href="screenshots/light/19-exam-timetable.png" target="_blank"><img loading="lazy" src="screenshots/light/19-exam-timetable.png" alt="جدول الامتحانات"></a><figcaption>جدول الامتحانات</figcaption></figure>
+<figure><a href="screenshots/light/20-news.png" target="_blank"><img loading="lazy" src="screenshots/light/20-news.png" alt="الأخبار"></a><figcaption>الأخبار</figcaption></figure>
+<figure><a href="screenshots/light/21-news-post.png" target="_blank"><img loading="lazy" src="screenshots/light/21-news-post.png" alt="خبر"></a><figcaption>خبر</figcaption></figure>
+<figure><a href="screenshots/light/22-notifications.png" target="_blank"><img loading="lazy" src="screenshots/light/22-notifications.png" alt="الإشعارات"></a><figcaption>الإشعارات</figcaption></figure>
+<figure><a href="screenshots/light/23-scan-to-pdf.png" target="_blank"><img loading="lazy" src="screenshots/light/23-scan-to-pdf.png" alt="تحويل ورقة إلى PDF"></a><figcaption>تحويل ورقة إلى PDF</figcaption></figure>
+<figure><a href="screenshots/light/24-more.png" target="_blank"><img loading="lazy" src="screenshots/light/24-more.png" alt="المزيد"></a><figcaption>المزيد</figcaption></figure>
+<figure><a href="screenshots/light/25-settings.png" target="_blank"><img loading="lazy" src="screenshots/light/25-settings.png" alt="الإعدادات"></a><figcaption>الإعدادات</figcaption></figure>
+<figure><a href="screenshots/light/26-about.png" target="_blank"><img loading="lazy" src="screenshots/light/26-about.png" alt="عن التطبيق"></a><figcaption>عن التطبيق</figcaption></figure></div>
+<div class="grid" id="dark" hidden><figure><a href="screenshots/dark/01-home.png" target="_blank"><img loading="lazy" src="screenshots/dark/01-home.png" alt="الرئيسية"></a><figcaption>الرئيسية</figcaption></figure>
+<figure><a href="screenshots/dark/02-subjects.png" target="_blank"><img loading="lazy" src="screenshots/dark/02-subjects.png" alt="المواد"></a><figcaption>المواد</figcaption></figure>
+<figure><a href="screenshots/dark/03-subject-physics.png" target="_blank"><img loading="lazy" src="screenshots/dark/03-subject-physics.png" alt="مادة الفيزياء"></a><figcaption>مادة الفيزياء</figcaption></figure>
+<figure><a href="screenshots/dark/04-lecture.png" target="_blank"><img loading="lazy" src="screenshots/dark/04-lecture.png" alt="محاضرة ومواضيعها"></a><figcaption>محاضرة ومواضيعها</figcaption></figure>
+<figure><a href="screenshots/dark/05-malzama.png" target="_blank"><img loading="lazy" src="screenshots/dark/05-malzama.png" alt="ملزمة وفهرسها"></a><figcaption>ملزمة وفهرسها</figcaption></figure>
+<figure><a href="screenshots/dark/06-expected-questions.png" target="_blank"><img loading="lazy" src="screenshots/dark/06-expected-questions.png" alt="الأسئلة المتوقعة"></a><figcaption>الأسئلة المتوقعة</figcaption></figure>
+<figure><a href="screenshots/dark/07-grades.png" target="_blank"><img loading="lazy" src="screenshots/dark/07-grades.png" alt="الدرجات"></a><figcaption>الدرجات</figcaption></figure>
+<figure><a href="screenshots/dark/08-subject-grades.png" target="_blank"><img loading="lazy" src="screenshots/dark/08-subject-grades.png" alt="درجات مادة"></a><figcaption>درجات مادة</figcaption></figure>
+<figure><a href="screenshots/dark/09-enter-grades.png" target="_blank"><img loading="lazy" src="screenshots/dark/09-enter-grades.png" alt="إدخال الدرجات"></a><figcaption>إدخال الدرجات</figcaption></figure>
+<figure><a href="screenshots/dark/10-chats.png" target="_blank"><img loading="lazy" src="screenshots/dark/10-chats.png" alt="المحادثات"></a><figcaption>المحادثات</figcaption></figure>
+<figure><a href="screenshots/dark/11-section-chat.png" target="_blank"><img loading="lazy" src="screenshots/dark/11-section-chat.png" alt="دردشة الشعبة"></a><figcaption>دردشة الشعبة</figcaption></figure>
+<figure><a href="screenshots/dark/12-assistant.png" target="_blank"><img loading="lazy" src="screenshots/dark/12-assistant.png" alt="مساعد سعي"></a><figcaption>مساعد سعي</figcaption></figure>
+<figure><a href="screenshots/dark/13-assistant-chat.png" target="_blank"><img loading="lazy" src="screenshots/dark/13-assistant-chat.png" alt="محادثة مع المساعد"></a><figcaption>محادثة مع المساعد</figcaption></figure>
+<figure><a href="screenshots/dark/14-planner.png" target="_blank"><img loading="lazy" src="screenshots/dark/14-planner.png" alt="المنظِّم"></a><figcaption>المنظِّم</figcaption></figure>
+<figure><a href="screenshots/dark/15-new-task.png" target="_blank"><img loading="lazy" src="screenshots/dark/15-new-task.png" alt="مهمة جديدة"></a><figcaption>مهمة جديدة</figcaption></figure>
+<figure><a href="screenshots/dark/16-study-timer.png" target="_blank"><img loading="lazy" src="screenshots/dark/16-study-timer.png" alt="مؤقت الدراسة"></a><figcaption>مؤقت الدراسة</figcaption></figure>
+<figure><a href="screenshots/dark/17-schedules.png" target="_blank"><img loading="lazy" src="screenshots/dark/17-schedules.png" alt="الجداول"></a><figcaption>الجداول</figcaption></figure>
+<figure><a href="screenshots/dark/18-class-timetable.png" target="_blank"><img loading="lazy" src="screenshots/dark/18-class-timetable.png" alt="جدول الحصص"></a><figcaption>جدول الحصص</figcaption></figure>
+<figure><a href="screenshots/dark/19-exam-timetable.png" target="_blank"><img loading="lazy" src="screenshots/dark/19-exam-timetable.png" alt="جدول الامتحانات"></a><figcaption>جدول الامتحانات</figcaption></figure>
+<figure><a href="screenshots/dark/20-news.png" target="_blank"><img loading="lazy" src="screenshots/dark/20-news.png" alt="الأخبار"></a><figcaption>الأخبار</figcaption></figure>
+<figure><a href="screenshots/dark/21-news-post.png" target="_blank"><img loading="lazy" src="screenshots/dark/21-news-post.png" alt="خبر"></a><figcaption>خبر</figcaption></figure>
+<figure><a href="screenshots/dark/22-notifications.png" target="_blank"><img loading="lazy" src="screenshots/dark/22-notifications.png" alt="الإشعارات"></a><figcaption>الإشعارات</figcaption></figure>
+<figure><a href="screenshots/dark/23-scan-to-pdf.png" target="_blank"><img loading="lazy" src="screenshots/dark/23-scan-to-pdf.png" alt="تحويل ورقة إلى PDF"></a><figcaption>تحويل ورقة إلى PDF</figcaption></figure>
+<figure><a href="screenshots/dark/24-more.png" target="_blank"><img loading="lazy" src="screenshots/dark/24-more.png" alt="المزيد"></a><figcaption>المزيد</figcaption></figure>
+<figure><a href="screenshots/dark/25-settings.png" target="_blank"><img loading="lazy" src="screenshots/dark/25-settings.png" alt="الإعدادات"></a><figcaption>الإعدادات</figcaption></figure>
+<figure><a href="screenshots/dark/26-about.png" target="_blank"><img loading="lazy" src="screenshots/dark/26-about.png" alt="عن التطبيق"></a><figcaption>عن التطبيق</figcaption></figure></div>
+
+<h2>لوحة التحكم</h2>
+<div class="grid dash"><figure><a href="screenshots/dashboard/01-overview.png" target="_blank"><img loading="lazy" src="screenshots/dashboard/01-overview.png" alt="نظرة عامة"></a><figcaption>نظرة عامة</figcaption></figure><figure><a href="screenshots/dashboard/02-students.png" target="_blank"><img loading="lazy" src="screenshots/dashboard/02-students.png" alt="الطلاب"></a><figcaption>الطلاب</figcaption></figure><figure><a href="screenshots/dashboard/03-books-malazim.png" target="_blank"><img loading="lazy" src="screenshots/dashboard/03-books-malazim.png" alt="الكتب والملازم"></a><figcaption>الكتب والملازم</figcaption></figure><figure><a href="screenshots/dashboard/04-questions.png" target="_blank"><img loading="lazy" src="screenshots/dashboard/04-questions.png" alt="الأسئلة"></a><figcaption>الأسئلة</figcaption></figure><figure><a href="screenshots/dashboard/05-lectures.png" target="_blank"><img loading="lazy" src="screenshots/dashboard/05-lectures.png" alt="المحاضرات"></a><figcaption>المحاضرات</figcaption></figure><figure><a href="screenshots/dashboard/06-schedules.png" target="_blank"><img loading="lazy" src="screenshots/dashboard/06-schedules.png" alt="الجداول"></a><figcaption>الجداول</figcaption></figure><figure><a href="screenshots/dashboard/07-settings.png" target="_blank"><img loading="lazy" src="screenshots/dashboard/07-settings.png" alt="الإعدادات"></a><figcaption>الإعدادات</figcaption></figure></div>
+
+<footer>React Native + Expo · React + Vite · Supabase · Gemini · Firebase<br>الصور والفيديوهات من التطبيق الحقيقي ببيانات تجريبية للعرض. · <a href="https://saeyiq.web.app/">saeyiq.web.app</a></footer>
+</div>
+<script>
+document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('.tabs button').forEach(x=>x.setAttribute('aria-pressed',x===b));
+  document.getElementById('light').hidden=b.dataset.t!=='light';
+  document.getElementById('dark').hidden=b.dataset.t!=='dark';
+});
+</script>
+</body>
+</html>

@@ -15,6 +15,7 @@
 | 🗄️ `supabase/` | قاعدة البيانات والصلاحيات ودوال الخادم |
 | 🧭 `system/` | **التخطيط والقرارات ودليل الإعداد** — ابدأ من هنا |
 
+**لعرض التطبيق:** صور وفيديوهات وشرح في [`showcase/`](showcase/README.md).
 **للبدء:** اتبع [`system/08-setup-guide.md`](system/08-setup-guide.md).
 **لمحادثة جديدة مع الذكاء الاصطناعي:** انسخ [`system/PROMPT-JOKER.md`](system/PROMPT-JOKER.md).
 
