@@ -42,3 +42,9 @@ jobs:
           q "select status, left(return_message,120) msg, start_time from cron.job_run_details where jobid in (select jobid from cron.job where jobname='saey-ingest') order by start_time desc limit 8"
           echo "===== pg_net responses to worker"
           q "select id, status_code, left(content::text,200) content, left(error_msg,160) err, created from net._http_response order by created desc limit 12"
+      - name: Check external file storage reachability
+        run: |
+          for i in 1 2 3; do
+            curl -sS -m 20 -o /dev/null -w "storage.130-61-171-185.sslip.io → HTTP %{http_code} in %{time_total}s\n" https://storage.130-61-171-185.sslip.io/ || echo "storage unreachable (attempt $i)"
+            sleep 5
+          done
