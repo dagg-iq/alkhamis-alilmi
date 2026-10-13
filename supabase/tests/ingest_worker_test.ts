@@ -136,7 +136,7 @@ check('بُني الفهرس لكليهما وخرجا من الطابور', d1.
 check('حُذفت الأجزاء من الجدول والتخزين', db.ingest_chunks.length === 0 && removed.length === 3, removed.join());
 check('المصوّر يُقرأ بتفكير أعلى من النصي', thinking.some((t) => /low/i.test(t)) && thinking.some((t) => /minimal/i.test(t)), thinking.join(' '));
 check('القفل فُتح بعد الانتهاء', lock === false);
-check('قراءة الصفحات بالنماذج القوية أولاً (لا Flash-Lite ما دامت متاحة)', readModels.size > 0 && [...readModels].every((m) => !m.includes('lite')), [...readModels].join());
+check('قراءة الصفحات بـ Flash-Lite أولاً (أسرع؛ القوية تنقطع مهلتها)', readModels.size > 0 && [...readModels].every((m) => m.includes('lite')), [...readModels].join());
 
 // حد التضمين: الصفحات تُحفظ ولا تُقرأ ثانية، والجزء يُعاد للتضمين فقط (بلا إيقاف العمال)
 {

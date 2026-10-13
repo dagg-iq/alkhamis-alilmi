@@ -92,12 +92,13 @@ export const LITE_MODELS = ['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'g
 /** الاحتياط الأخير بعد انتهاء كل النماذج على كل المفاتيح */
 export const FALLBACK_MODELS = ['gemini-2.5-flash', 'gemini-2.5-flash-lite'];
 /**
- * قراءة صفحات الكتب والملازم (الفهرسة): النماذج القوية أولاً على كل المفاتيح،
- * وبعد انتهائها كلها Flash-Lite (أضعف قليلاً في المعادلات والمصوّر لكن الفهرسة تكمل بدل الانتظار)،
- * وإن انتهى كل شيء ينتظر طابور الفهرسة تجدد الحصة. لا 2.5: أوقفتها Google للمستخدمين الجدد (404).
+ * قراءة صفحات الكتب والملازم (الفهرسة): Flash-Lite أولاً ثم النماذج القوية احتياطاً.
+ * السبب (من سجل الاستخدام الفعلي): 3.8 Flash يأخذ أكثر من ٩٥ ث لقراءة ٨ صفحات مصوّرة — ٢٨ من ٣٣ طلباً انتهت مهلتها،
+ * وكل طلب مقطوع يُحسب من الحصة ويعود بلا صفحات فيعلق الكتاب؛ Flash-Lite يقرؤها في ~٢٠ ث وحصته ~٥٠٠ يومياً.
+ * والقوية تبقى لبناء الفهرس والمحاضرات ومساعد الطلاب (حصتها ٢٠ يومياً فقط). لا 2.5: أوقفتها Google (404).
  */
 const STRONG = MAIN_MODELS.filter((m) => !m.includes('lite'));
-export const READ_MODELS = [...STRONG, ...MAIN_MODELS.filter((m) => m.includes('lite'))];
+export const READ_MODELS = [...MAIN_MODELS.filter((m) => m.includes('lite')), ...STRONG];
 export const READ_FALLBACK: string[] = [];
 
 /**
