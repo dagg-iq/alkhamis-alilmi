@@ -84,27 +84,41 @@ export async function readInline(pdf: Uint8Array | string, from: number, to: num
   return [...byPage.values()].sort((a, b) => a.page - b.page);
 }
 
-/** يحفظ صفحات مقروءة (مقاطع البحث + document_pages) ويحدّث عدد الصفحات المتتالية المكتملة */
+/** خطأ حصة التضمين بعد حفظ الصفحات: الصفحات محفوظة (لا تُقرأ ثانية)، والتضمين يُعاد لاحقاً */
+export class EmbedPendingError extends Error {}
+
+/**
+ * يحفظ صفحات مقروءة (document_pages أولاً ثم مقاطع البحث) ويحدّث عدد الصفحات المتتالية المكتملة.
+ * الصفحات تُحفظ قبل التضمين: إن بلغ التضمين حدّه في الدقيقة لا تضيع القراءة (كانت تُرمى ويُقرأ الجزء من جديد).
+ */
 export async function storePages(doc: Record<string, any>, read: ReadPage[], total: number) {
   if (read.length) {
-    const nums = read.map((p) => p.page);
-    await admin.from('content_chunks').delete().eq('source_type', 'document').eq('source_id', doc.id).in('page', nums);
-    const rows: { page: number; content: string }[] = [];
-    for (const p of read) for (const c of chunkText(p.text)) rows.push({ page: p.page, content: c });
-    if (rows.length) {
-      const vectors = await embed(rows.map((r) => r.content), 'RETRIEVAL_DOCUMENT', 'admin');
-      const { error } = await admin.from('content_chunks').insert(rows.map((r, i) => ({
-        source_type: 'document', source_id: doc.id, subject_id: doc.subject_id, chapter_id: doc.chapter_id,
-        page: r.page, content: r.content, embedding: vectors[i],
-      })));
-      if (error) throw error;
-    }
     const { error: pe } = await admin.from('document_pages').upsert(read.map((p) => ({
       document_id: doc.id, page: p.page, printed: p.printed, headings: p.headings.slice(0, 8),
       digest: p.text.replace(/\s+/g, ' ').trim().slice(0, 90) || null,
       text: p.text.trim() || null,
     })));
     if (pe) throw pe;
+    const nums = read.map((p) => p.page);
+    const rows: { page: number; content: string }[] = [];
+    for (const p of read) for (const c of chunkText(p.text)) rows.push({ page: p.page, content: c });
+    let vectors: number[][] = [];
+    if (rows.length) {
+      try {
+        vectors = await embed(rows.map((r) => r.content), 'RETRIEVAL_DOCUMENT', 'admin');
+      } catch (e) {
+        if (e instanceof GeminiQuotaError) throw new EmbedPendingError('انتظار حصة التضمين');
+        throw e;
+      }
+    }
+    await admin.from('content_chunks').delete().eq('source_type', 'document').eq('source_id', doc.id).in('page', nums);
+    if (rows.length) {
+      const { error } = await admin.from('content_chunks').insert(rows.map((r, i) => ({
+        source_type: 'document', source_id: doc.id, subject_id: doc.subject_id, chapter_id: doc.chapter_id,
+        page: r.page, content: r.content, embedding: vectors[i],
+      })));
+      if (error) throw error;
+    }
   }
   // الصفحات المتتالية من ١ (القراءة تجري بالتوازي فقد تكتمل دفعة متأخرة قبل سابقتها)
   const { data } = await admin.from('document_pages').select('page').eq('document_id', doc.id).order('page');
