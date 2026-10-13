@@ -90,6 +90,7 @@ async function work() {
           // قُرئت كلها سابقاً وتعذّر التضمين فقط: نكمل التضمين بلا قراءة جديدة
           const saved = c.attempts > 1 ? await savedPages(c) : [];
           let pages: ReadPage[];
+          let newPages = 0;
           if (saved.length >= want) {
             pages = saved;
           } else {
@@ -102,20 +103,26 @@ async function work() {
               continue;
             }
             const b64 = toBase64(bytes);
-            pages = await readInline(b64, c.from_page, c.to_page, hard - 5_000, lane, c.scanned);
-            read += pages.length;
-            // صفحات لا يعيدها النموذج بعد عدة محاولات (بيضاء/صورة): نكمّلها من المحفوظ أو فارغة
-            // (جزء من صفحة أو صفحتين لا يعود منه شيء = صفحة بيضاء أيضاً؛ الجزء الكبير الفارغ غالباً مهلة فيُعاد)
-            if (pages.length < want && c.attempts >= FILL_AFTER && (pages.length > 0 || want <= 2)) {
-              const have = new Map([...saved, ...pages].map((p) => [p.page, p]));
-              for (let n = c.from_page; n <= c.to_page; n++) if (!have.has(n)) have.set(n, { page: n, printed: null, headings: [], text: '' });
-              pages = [...have.values()].sort((a, b) => a.page - b.page);
+            // جزء عنيد (فشل مرتين): مجموعات من صفحتين، كل قراءة قصيرة تنتهي قبل المهلة، والمقروء سابقاً لا يُعاد
+            const stubborn = c.attempts >= FILL_AFTER && want > 2;
+            const attempted = new Set<number>();
+            const fresh = await readInline(b64, c.from_page, c.to_page, hard - 5_000, lane, c.scanned,
+              stubborn ? { split: 2, have: new Set(saved.map((p) => p.page)), attempted } : { attempted });
+            newPages = fresh.length;
+            read += fresh.length;
+            const have = new Map([...saved, ...fresh].map((p) => [p.page, p]));
+            // صفحة جُرِّبت بعد عدة محاولات ولم يعد منها شيء = بيضاء/صورة فقط: تُكتب فارغة
+            // (التي لم تُجرَّب لضيق الوقت تبقى للمرة القادمة؛ والجزء الكبير الفارغ غالباً مهلة فيُعاد)
+            if (c.attempts >= FILL_AFTER && (fresh.length > 0 || want <= 2 || stubborn)) {
+              for (let n = c.from_page; n <= c.to_page; n++) if (!have.has(n) && attempted.has(n) && (stubborn || want <= 2 || fresh.length > 0)) have.set(n, { page: n, printed: null, headings: [], text: '' });
             }
+            pages = [...have.values()].sort((a, b) => a.page - b.page);
           }
           if (pages.length) await storePages(doc, pages, c.total_pages);
           if (pages.length >= want) {
             await admin.from('ingest_chunks').update({ status: 'done', lease_until: null, last_error: null }).eq('id', c.id);
-          } else if (c.attempts >= MAX_ATTEMPTS) {
+          } else if (c.attempts >= MAX_ATTEMPTS && newPages === 0) {
+            // يفشل فقط إن لم يتقدم في هذه المحاولة (التقسيم يقرأ جزءاً كل مرة فيستمر ما دام يتقدم)
             await release(c, 0, `قُرئت ${pages.length} من ${want} صفحات بعد ${c.attempts} محاولات`, true);
           } else {
             await release(c, 2 * 60_000, `قُرئت ${pages.length} من ${want} صفحات — يُعاد`);

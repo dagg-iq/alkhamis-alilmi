@@ -36,11 +36,21 @@ ${READ_PROMPT(from, to).split('\n').slice(1).join('\n')}`;
 // لا نبدأ قراءة إلا ومعها هذا الوقت على الأقل (القطع قبل الجواب يضيّع الطلب من الحصة)
 const MIN_READ_MS = 40_000;
 
-export async function readInline(pdf: Uint8Array | string, from: number, to: number, deadline: number, lane?: number, scanned = false): Promise<ReadPage[]> {
+export interface ReadOptions {
+  /** جزء عنيد: لا نرسل الجزء كاملاً، بل مجموعات صغيرة بهذا الحجم (كل قراءة قصيرة تنتهي قبل المهلة) */
+  split?: number;
+  /** صفحات مقروءة سابقاً لا تُعاد */
+  have?: Set<number>;
+  /** تُملأ بالصفحات التي أُرسل لها طلب قراءة فعلاً (لتمييز «لم يُجرَّب لضيق الوقت» عن «جُرِّب ولم يعد بشيء») */
+  attempted?: Set<number>;
+}
+
+export async function readInline(pdf: Uint8Array | string, from: number, to: number, deadline: number, lane?: number, scanned = false, opts: ReadOptions = {}): Promise<ReadPage[]> {
   if (deadline - Date.now() < MIN_READ_MS) return [];
   const b64 = typeof pdf === 'string' ? pdf : toBase64(pdf);
   let pages: ReadPage[] = [];
-  try {
+  if (!opts.split) try {
+    for (let n = from; n <= to; n++) opts.attempted?.add(n);
     const raw = await generate(READ_MODELS, [{
       role: 'user',
       parts: [{ inline_data: { mime_type: 'application/pdf', data: b64 } }, { text: INLINE_PROMPT(from, to) }],
@@ -58,8 +68,8 @@ export async function readInline(pdf: Uint8Array | string, from: number, to: num
     if (e instanceof GeminiQuotaError) throw e;
     console.error('read inline failed', from, to, String((e as Error).message ?? e).slice(0, 200));
   }
-  const got = new Set(pages.map((p) => p.page));
-  if (from === to || deadline - Date.now() < MIN_READ_MS) {
+  const got = new Set([...pages.map((p) => p.page), ...(opts.have ?? [])]);
+  if ((from === to && !opts.split) || deadline - Date.now() < MIN_READ_MS) {
     // الصفحة المنفردة التي فشلت لا تُكتب فارغة: تبقى ناقصة وتُعاد في المرة القادمة
     return pages;
   }
@@ -71,13 +81,15 @@ export async function readInline(pdf: Uint8Array | string, from: number, to: num
   const groups: number[][] = [];
   for (const n of missing) {
     const g = groups[groups.length - 1];
-    if (g && g[g.length - 1] === n - 1 && g.length < Math.ceil((to - from + 1) / 2)) g.push(n); else groups.push([n]);
+    const max = opts.split ?? Math.ceil((to - from + 1) / 2);
+    if (g && g[g.length - 1] === n - 1 && g.length < max) g.push(n); else groups.push([n]);
   }
   for (const g of groups) {
+    if (deadline - Date.now() < MIN_READ_MS) break;
     const sub = await PDFDocument.create();
     const copied = await sub.copyPages(src, g.map((n) => n - from));
     copied.forEach((pg) => sub.addPage(pg));
-    pages.push(...await readInline(await sub.save(), g[0], g[g.length - 1], deadline, lane, scanned));
+    pages.push(...await readInline(await sub.save(), g[0], g[g.length - 1], deadline, lane, scanned, { attempted: opts.attempted }));
   }
   const byPage = new Map<number, ReadPage>();
   for (const p of pages) byPage.set(p.page, p);
