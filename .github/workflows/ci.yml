@@ -18,3 +18,49 @@ jobs:
         env:
           VITE_SUPABASE_URL: ''
           VITE_SUPABASE_ANON_KEY: ''
+
+  # دوال الخادم (Deno): خطأ نوع أو كسر في منطق المفاتيح/الفهرسة يُكتشف هنا لا عند النشر
+  functions:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: supabase/functions
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Type-check every function
+        run: |
+          for f in */index.ts; do
+            echo "== $f"
+            deno check --node-modules-dir=none "$f"
+          done
+      - name: Logic tests (fake Google and database)
+        run: |
+          for t in ../tests/*_test.ts; do
+            echo "== $t"
+            deno run -A --node-modules-dir=none --config deno.json "$t"
+          done
+
+  # الصلاحيات (RLS) والـ migrations مرتين (آمنة لإعادة التشغيل) على Postgres + pgvector
+  rls:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      PGHOST: localhost
+      PGPASSWORD: postgres
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash supabase/tests/run.sh

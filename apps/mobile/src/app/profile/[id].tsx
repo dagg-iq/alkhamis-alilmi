@@ -46,6 +46,9 @@ export default function ProfileScreen() {
       const url = supabase.storage.from('avatars').getPublicUrl(path).data.publicUrl;
       const { error: pe } = await supabase.from('profiles').update({ avatar_url: url }).eq('id', me.id);
       if (pe) throw new Error(pe.message);
+      // الصورة السابقة (إن كانت في مجلد الطالب في التخزين) لم تعد لازمة
+      const old = p.avatar_url?.split('/storage/v1/object/public/avatars/')[1]?.split('?')[0];
+      if (old && old.startsWith(`${me.id}/`) && old !== path) supabase.storage.from('avatars').remove([decodeURIComponent(old)]).catch(() => {});
       await Promise.all([q.reload(), refreshProfile()]);
     } catch (e) {
       Alert.alert('تعذّر تغيير الصورة', e instanceof Error ? e.message : '');
