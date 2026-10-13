@@ -71,13 +71,6 @@
           }
         ]
       }
-    ],
-    "redirects": [
-      {
-        "source": "/showcase",
-        "destination": "/showcase/",
-        "type": 301
-      }
     ]
   }
 }

@@ -21,6 +21,8 @@ curl -fsSL --max-time 30 -o hosting/developer.jpg "$DEV_PHOTO_URL" && echo "✓ 
 ADMIN_BASE=/saey-dashboard/ npm run build -w apps/admin >/dev/null
 cp -r apps/admin/dist hosting/saey-dashboard
 mkdir -p hosting/showcase && cp -r showcase/. hosting/showcase/ && rm -f hosting/showcase/README.md
+# Firebase يحذف الشرطة الأخيرة (/showcase) فنثبّت أساس الروابط النسبية على المجلد
+sed -i 's#<meta charset="utf-8">#<meta charset="utf-8">\n<base href="/showcase/">#' hosting/showcase/index.html
 node -e '
 // رابط التنزيل: متغير DOWNLOAD_URL إن وُجد، وإلا رابط Dropbox (أو Drive) من apps/site/download-config.json
 const fs = require("fs");
