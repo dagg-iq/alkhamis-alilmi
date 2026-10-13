@@ -4,7 +4,7 @@
 import { handler, HttpError, json } from '../_shared/cors.ts';
 import { buildOutline, EmbedPendingError, embedOutline, readInline, storePages, type ReadPage } from '../_shared/ingest-core.ts';
 import { GeminiQuotaError, GeminiTimeoutError, poolSlots, toBase64 } from '../_shared/gemini.ts';
-import { deleteObject, getObject } from '../_shared/storage.ts';
+import { deleteObjectsQuietly, getObject } from '../_shared/storage.ts';
 import { admin, getCaller } from '../_shared/supabase.ts';
 
 // حد الدالة ~١٥٠ ث. قراءة جزء (٤–٨ صفحات) تأخذ ٢٠–٩٠ ث؛ قطعها قبل الجواب يضيّع الطلب من حصة Google
@@ -56,11 +56,9 @@ async function finishDocuments(hard: number) {
     }).eq('id', doc.id);
     // الأجزاء المقروءة لم تعد لازمة في التخزين
     const { data: all } = await admin.from('ingest_chunks').select('id, file_key, status').eq('document_id', doc.id);
-    for (const c of (all ?? []) as { id: string; file_key: string; status: string }[]) {
-      if (c.status !== 'done') continue;
-      await deleteObject(c.file_key).catch(() => {});
-      await admin.from('ingest_chunks').delete().eq('id', c.id);
-    }
+    const doneChunks = ((all ?? []) as { id: string; file_key: string; status: string }[]).filter((c) => c.status === 'done');
+    if (doneChunks.length) await admin.from('ingest_chunks').delete().in('id', doneChunks.map((c) => c.id));
+    await deleteObjectsQuietly(doneChunks.map((c) => c.file_key));
   }
 }
 
