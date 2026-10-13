@@ -170,6 +170,18 @@ check('قراءة الصفحات بـ Flash-Lite أولاً (أسرع؛ القو
   skipPage = 0;
 }
 
+// جزء من صفحة واحدة بيضاء (لا يعود منه شيء): بعد المحاولة الثالثة تُكتب فارغة
+{
+  db.documents.push({ id: 'd8', title: 'ثامن', kind: 'book', subject_id: 's', chapter_id: null, pages: 41, ingested_pages: 0, ingest_status: 'running', queued_at: new Date().toISOString() });
+  db.ingest_chunks.push({ id: 'c8', document_id: 'd8', from_page: 41, to_page: 41, total_pages: 41, file_key: 'k/d8', scanned: false, status: 'pending', attempts: 2, next_at: old });
+  parts['k/d8'] = await mk(1);
+  skipPage = 41;
+  await call();
+  const blank8 = db.document_pages.find((p) => p.document_id === 'd8' && p.page === 41);
+  check('صفحة منفردة بيضاء: تُكتب فارغة ويكتمل الجزء', !!blank8 && blank8.text === null && !db.ingest_chunks.some((c) => c.id === 'c8' && c.status !== 'done'), JSON.stringify(db.ingest_chunks.find((c) => c.id === 'c8')));
+  skipPage = 0;
+}
+
 // كل النماذج القوية مقفلة (حصة يومية) و Flash-Lite متاح: يكمل القراءة به بدل الانتظار
 {
   strongQuota = true;

@@ -105,7 +105,8 @@ async function work() {
             pages = await readInline(b64, c.from_page, c.to_page, hard - 5_000, lane, c.scanned);
             read += pages.length;
             // صفحات لا يعيدها النموذج بعد عدة محاولات (بيضاء/صورة): نكمّلها من المحفوظ أو فارغة
-            if (pages.length > 0 && pages.length < want && c.attempts >= FILL_AFTER) {
+            // (جزء من صفحة أو صفحتين لا يعود منه شيء = صفحة بيضاء أيضاً؛ الجزء الكبير الفارغ غالباً مهلة فيُعاد)
+            if (pages.length < want && c.attempts >= FILL_AFTER && (pages.length > 0 || want <= 2)) {
               const have = new Map([...saved, ...pages].map((p) => [p.page, p]));
               for (let n = c.from_page; n <= c.to_page; n++) if (!have.has(n)) have.set(n, { page: n, printed: null, headings: [], text: '' });
               pages = [...have.values()].sort((a, b) => a.page - b.page);
