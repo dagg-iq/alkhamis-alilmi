@@ -1,4 +1,4 @@
--- 25: إعادة توجيه الرسائل (مثل تطبيقات المراسلة): علامة «مُعاد توجيهها» على الرسالة. آمن لإعادة التشغيل.
+-- 29: إعادة توجيه الرسائل (مثل تطبيقات المراسلة): علامة «مُعاد توجيهها» على الرسالة. آمن لإعادة التشغيل.
 alter table public.messages add column if not exists forwarded boolean not null default false;
 
 -- العلامة لا تُغيَّر بعد الإرسال، ولا تُعدَّل الرسالة المعاد توجيهها (كي لا تُنسب للمرسل الأصلي نص لم يكتبه)
@@ -12,6 +12,8 @@ begin
   new.sender_id := old.sender_id;
   new.created_at := old.created_at;
   new.attachment := old.attachment;
+  new.mentions := old.mentions;       -- من مراجعة التدقيق (٢٥)
+  new.reply_to_id := old.reply_to_id;
   new.forwarded := old.forwarded;
   if old.forwarded and new.deleted_at is null then
     new.body := old.body;

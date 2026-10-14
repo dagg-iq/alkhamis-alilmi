@@ -6,6 +6,7 @@ import { Alert } from '@/lib/dialog';
 import { Button, Chip, Field, Header, IconButton, Row, Screen, Segmented, T } from '@/components/ui';
 import { useAuth, useMe } from '@/lib/auth';
 import { scheduleReminder } from '@/lib/push';
+import { saveTaskReminder } from '@/lib/reminders';
 import { loadSubjects, shortSubject } from '@/lib/queries';
 import { must, supabase } from '@/lib/supabase';
 import { useTheme } from '@/lib/theme';
@@ -36,20 +37,35 @@ export default function NewTask() {
 
   const save = async () => {
     if (!title.trim()) return Alert.alert('اكتب عنوان المهمة');
+    if (scope === 'section' && !sectionId) return Alert.alert('اختر الشعبة');
+    // موعد مضى (مثلاً «اليوم» بساعة سابقة): نسأل أولاً لأنه لن يصل تذكير
+    if (due.getTime() <= Date.now()) {
+      return Alert.alert('الموعد مضى', 'هذا الوقت مضى، فلن يصل تذكير. حفظ المهمة على أي حال؟', [
+        { text: 'تغيير الموعد', style: 'cancel' },
+        { text: 'حفظ', onPress: () => { doSave(); } },
+      ]);
+    }
+    await doSave();
+  };
+
+  const doSave = async () => {
     setBusy(true);
-    const { error } = await supabase.from('tasks').insert({
+    const { data, error } = await supabase.from('tasks').insert({
       owner_id: me.id, type, title: title.trim(), notes: notes.trim() || null, subject_id: subjectId,
       due_at: due.toISOString(), scope, section_id: scope === 'section' ? sectionId : null,
-    });
-    if (error) {
+    }).select('id').single();
+    if (error || !data) {
       setBusy(false);
-      return Alert.alert('تعذّر الحفظ', error.message);
+      return Alert.alert('تعذّر الحفظ', error?.message ?? 'حاول مرة أخرى');
     }
-    if (remind) {
-      // تذكير قبل الموعد: الامتحان مساء اليوم السابق، وغيره قبل ساعتين
+    if (remind && due.getTime() > Date.now()) {
+      // تذكير قبل الموعد: الامتحان مساء اليوم السابق، وغيره قبل ساعتين — وإن كان ذلك قد مضى فبعد دقيقة (قبل الموعد)
       const at = new Date(due);
       if (type === 'exam') { at.setDate(at.getDate() - 1); at.setHours(20, 0, 0, 0); } else at.setHours(at.getHours() - 2);
-      await scheduleReminder(type === 'exam' ? `غداً امتحان: ${title}` : `تذكير: ${title}`, type === 'exam' ? 'راجع جيداً — اسعَ تُعفَ.' : 'لا تنسَ إنجازها اليوم.', at);
+      const soon = Date.now() + 60_000;
+      if (at.getTime() < soon && due.getTime() > soon + 60_000) at.setTime(soon);
+      const id = await scheduleReminder(type === 'exam' ? `امتحان قريب: ${title}` : `تذكير: ${title}`, type === 'exam' ? 'راجع جيداً — اسعَ تُعفَ.' : 'لا تنسَ إنجازها.', at);
+      if (id) await saveTaskReminder((data as { id: string }).id, id);
     }
     setBusy(false);
     router.back();

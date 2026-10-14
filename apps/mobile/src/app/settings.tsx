@@ -54,9 +54,10 @@ export default function Settings() {
           'not-configured': 'الإشعارات الفورية لم تُفعّل في هذه النسخة بعد (تحتاج ربط Firebase من الأدمن). ستعمل تلقائياً في النسخة القادمة بعد ربطها.',
           unsupported: 'الإشعارات تعمل في ملف APK على الهاتف فقط (ليس في Expo Go).',
           error: 'تعذّر تسجيل الجهاز. تحقق من الإنترنت وحاول مرة أخرى.',
+          disabled: 'الإشعارات متوقفة على هذا الجهاز.',
         }[r]);
       }
-    } else await unregisterPush(me.id);
+    } else await unregisterPush(me.id, { disable: true });
   };
 
   return (
@@ -119,7 +120,7 @@ export default function Settings() {
         <Divider />
         <ListItem icon="logout" title="تسجيل الخروج" danger onPress={() => Alert.alert('تسجيل الخروج', 'هل تريد الخروج من حسابك؟', [
           { text: 'إلغاء', style: 'cancel' },
-          { text: 'خروج', style: 'destructive', onPress: () => { unregisterPush(me.id).finally(signOut); } },
+          { text: 'خروج', style: 'destructive', onPress: () => { signOut().catch(() => {}); } },
         ])} />
       </Card>
       <UpdatePrompt info={update} onClose={() => setUpdate(null)} />

@@ -41,3 +41,9 @@ export async function getSetting<T = Record<string, unknown>>(key: string): Prom
   const { data } = await admin.from('app_settings').select('value').eq('key', key).maybeSingle();
   return (data?.value ?? {}) as T;
 }
+
+/** يعيد سؤالاً واحداً لرصيد الطالب اليومي (عند فشل المساعد بعد الخصم) — ذرّي في قاعدة البيانات */
+export async function refundQuota(userId: string): Promise<void> {
+  const { error } = await admin.rpc('refund_ai_quota', { p_user: userId });
+  if (error) console.error('refund', error.message);
+}

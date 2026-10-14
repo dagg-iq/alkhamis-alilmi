@@ -525,10 +525,33 @@ export function toBase64(bytes: Uint8Array): string {
   return btoa(bin);
 }
 
-/** يستخرج JSON حتى لو أحاطه النموذج بعلامات ``` */
+/** يستخرج JSON حتى لو أحاطه النموذج بعلامات ``` أو كتب جملة قبله أو بعده */
 export function parseJson<T>(text: string): T {
   const cleaned = text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
-  return JSON.parse(cleaned) as T;
+  try {
+    return JSON.parse(cleaned) as T;
+  } catch (first) {
+    // أول كائن أو مصفوفة متوازنة الأقواس (مع تجاهل ما داخل النصوص)
+    const start = cleaned.search(/[[{]/);
+    if (start >= 0) {
+      const open = cleaned[start];
+      const close = open === '{' ? '}' : ']';
+      let depth = 0;
+      let inStr = false;
+      for (let i = start; i < cleaned.length; i++) {
+        const ch = cleaned[i];
+        if (inStr) {
+          if (ch === '\\') i++;
+          else if (ch === '"') inStr = false;
+        } else if (ch === '"') inStr = true;
+        else if (ch === open) depth++;
+        else if (ch === close && --depth === 0) {
+          try { return JSON.parse(cleaned.slice(start, i + 1)) as T; } catch { break; }
+        }
+      }
+    }
+    throw first;
+  }
 }
 
 /** يقطع النص إلى أجزاء ~١٢٠٠ حرف مع تداخل بسيط، على حدود الفقرات قدر الإمكان */

@@ -47,8 +47,10 @@ export default function Quiz() {
     setPicked(null);
   };
 
+  // إعادة الاختبار: نفس الأسئلة بترتيب جديد (لا توليد جديد حتى لو ضغط المشرف «توليد جديد» من قبل)
   const restart = () => {
-    setI(0); setPicked(null); setScore(0); setFinished(false); q.reload();
+    setI(0); setPicked(null); setScore(0); setFinished(false);
+    q.setData((list) => (list ? [...list].sort(() => Math.random() - 0.5) : list));
   };
 
   if (q.loading) {

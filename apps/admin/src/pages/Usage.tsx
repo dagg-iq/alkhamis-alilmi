@@ -1,3 +1,4 @@
+import { arDigits } from '@saey/shared';
 import { useEffect, useMemo, useState } from 'react';
 import { Empty, Field, Tabs, check, useAction } from '../components/ui';
 import { useLoad } from '../lib/hooks';
@@ -15,7 +16,7 @@ interface StudentUse { user_id: string; day: string; count: number; profiles: { 
 
 const EMBED = 'gemini-embedding-001';
 const short = (m: string) => m.replace('gemini-', '').replace('-flash-lite', ' Flash-Lite').replace('-flash', ' Flash');
-export const slotLabel = (s: string) => s === 'GEMINI_ADMIN_API_KEY' ? 'مفتاح لوحة التحكم' : s === 'GEMINI_API_KEY' ? 'مفتاح الطلاب ١' : `مفتاح الطلاب ${s.replace('GEMINI_API_KEY_', '')}`;
+export const slotLabel = (s: string) => s === 'GEMINI_ADMIN_API_KEY' ? 'مفتاح لوحة التحكم' : s === 'GEMINI_API_KEY' ? 'مفتاح الطلاب ١' : `مفتاح الطلاب ${arDigits(s.replace('GEMINI_API_KEY_', ''))}`;
 const ar = (n: number) => n.toLocaleString('ar-IQ');
 const time = (iso: string) => new Date(iso).toLocaleTimeString('ar-IQ', { hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Baghdad' });
 const dayTime = (ts: number) => new Date(ts).toLocaleString('ar-IQ', { weekday: 'long', hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Baghdad' });
@@ -29,6 +30,8 @@ function ptOffset(ts: number) {
 }
 /** يوم الحصة عند Google = تاريخ كاليفورنيا (كما يسجله الخادم) */
 const quotaDay = (now = Date.now()) => new Date(now + ptOffset(now)).toISOString().slice(0, 10);
+/** يوم رصيد الطلاب: ai_usage.day هو تاريخ قاعدة البيانات (UTC) كما تكتبه consume_ai_quota — ليس يوم Google */
+const utcDay = (now = Date.now()) => new Date(now).toISOString().slice(0, 10);
 /** بداية يوم الحصة الحالي ونهايته (منتصف ليل كاليفورنيا) */
 function quotaWindow(now: number) {
   const d = new Date(now + ptOffset(now));
@@ -82,20 +85,26 @@ export default function Usage() {
   const saveAi = () => run(async () => {
     if (!aiCfg) return;
     if (!Number.isFinite(aiCfg.daily_limit) || aiCfg.daily_limit < 0 || aiCfg.daily_limit > 500) throw new Error('عدد الأسئلة اليومية غير صحيح.');
-    await check(supabase.from('app_settings').upsert({ key: 'ai', value: { enabled: aiCfg.enabled, daily_limit: Math.round(aiCfg.daily_limit) }, updated_at: new Date().toISOString() }));
+    // نقرأ الإعداد كاملاً ونغيّر حقلين فقط (فيه أيضاً thinking_hard و thinking_explain وغيرها — كانت تُمسح)
+    const { data, error } = await supabase.from('app_settings').select('value').eq('key', 'ai').maybeSingle();
+    if (error) throw new Error(error.message);
+    const current = (data?.value ?? {}) as Record<string, unknown>;
+    await check(supabase.from('app_settings').upsert({ key: 'ai', value: { ...current, enabled: aiCfg.enabled, daily_limit: Math.round(aiCfg.daily_limit) }, updated_at: new Date().toISOString() }));
   }, 'حُفظ');
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 30_000); return () => clearInterval(t); }, []);
 
   const q = useLoad(async () => {
     const today = quotaDay();
-    const week = quotaDay(Date.now() - 6 * 86400000);
+    // رصيد الطلاب بتاريخ UTC (لا بتاريخ كاليفورنيا): وإلا يعرض أرقام الأمس من ٣ إلى ١٠ صباحاً بغداد
+    const studentDay = utcDay();
+    const week = utcDay(Date.now() - 6 * 86400000);
     const [slots, usage, blocks, students] = await Promise.all([
       callFunction<Slots>('content-ai', { action: 'key_slots' }),
       must(supabase.from('ai_key_usage').select('*').eq('day', today)) as Promise<UsageRow[]>,
       must(supabase.from('ai_key_blocks').select('*').gt('blocked_until', new Date().toISOString())) as Promise<Block[]>,
       must(supabase.from('ai_usage').select('user_id, day, count, profiles(full_name, sections(name))').gte('day', week).order('count', { ascending: false }).limit(1000)) as unknown as Promise<StudentUse[]>,
     ]);
-    return { slots, usage, blocks, students, today };
+    return { slots, usage, blocks, students, today, studentDay };
   });
   // تحديث تلقائي كل دقيقة
   useEffect(() => { const t = setInterval(() => q.reload(), 60_000); return () => clearInterval(t); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
@@ -143,7 +152,7 @@ export default function Usage() {
     for (const r of d.students) {
       const cur = byStudent.get(r.user_id) ?? { name: r.profiles?.full_name ?? '—', section: r.profiles?.sections?.name ?? '', today: 0, week: 0 };
       cur.week += r.count;
-      if (r.day === d.today) cur.today += r.count;
+      if (r.day === d.studentDay) cur.today += r.count;
       byStudent.set(r.user_id, cur);
     }
     const students = [...byStudent.values()].sort((a, b) => b.today - a.today || b.week - a.week);

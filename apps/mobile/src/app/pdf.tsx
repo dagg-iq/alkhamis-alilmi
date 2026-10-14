@@ -19,6 +19,9 @@ import { loadOutline } from '@/lib/outline';
 import { pdfName, sendAttachment } from '@/lib/pdf';
 import { useTheme } from '@/lib/theme';
 
+/** أكبر ملف يُمرَّر للعارض كنص base64 إن تعذّرت القراءة المباشرة (أكبر منه قد يُغلق التطبيق على هاتف ضعيف) */
+const MAX_INLINE = 25 * 1048576;
+
 /**
  * عرض ملف PDF داخل التطبيق مع: حفظ في الهاتف، مشاركة، وإرسال إلى دردشة.
  * يقبل ملفاً محلياً (uri) أو مفتاح ملف مرفوع (key).
@@ -65,10 +68,19 @@ export default function PdfScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
 
+  // الأصل: العارض يقرأ الملف مباشرة من الهاتف (خفيف على الذاكرة مهما كبر الكتاب).
+  // إن تعذّر ذلك: ملف صغير يُمرَّر كنص base64 كالسابق، والكبير يُفتح بتطبيق PDF آخر بدل أن يُغلق التطبيق
+  const [direct, setDirect] = useState(true);
+  const [tooBig, setTooBig] = useState(false);
+  const fallback = () => {
+    if (!direct || !file) return;
+    setDirect(false);
+    if ((file.size ?? 0) > MAX_INLINE) setTooBig(true);
+  };
   useEffect(() => {
-    if (!file) return;
+    if (!file || direct || tooBig) return;
     file.base64().then(setB64).catch(() => setError('تعذّر قراءة الملف'));
-  }, [file]);
+  }, [file, direct, tooBig]);
 
   const share = async () => {
     if (!file) return;
@@ -112,8 +124,13 @@ export default function PdfScreen() {
         )}
       </Row>
       <View style={{ flex: 1 }}>
-        {error ? (
-          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 }}><T dim center>{error}</T></View>
+        {error || tooBig ? (
+          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 14 }}>
+            <T dim center>{tooBig ? 'هذا الملف كبير على عارض التطبيق في هاتفك. افتحه بتطبيق PDF آخر — يبقى محفوظاً في سعي.' : error}</T>
+            {file ? <Button title="افتح بتطبيق آخر" icon="share" variant="secondary" onPress={share} /> : null}
+          </View>
+        ) : file && direct ? (
+          <PdfView key={`f-${view.from ?? 0}-${view.to ?? 0}`} ref={viewRef} fileUri={file.uri} onFallback={fallback} from={view.from} to={view.to} goto={view.goto} onPage={setCur} />
         ) : b64 ? <PdfView key={`${view.from ?? 0}-${view.to ?? 0}`} ref={viewRef} base64={b64} from={view.from} to={view.to} goto={view.goto} onPage={setCur} /> : <PdfView />}
       </View>
       <Sheet visible={showOutline} onClose={() => setShowOutline(false)}>

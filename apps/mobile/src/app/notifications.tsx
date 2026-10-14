@@ -4,12 +4,13 @@ import { useCallback } from 'react';
 import { View } from 'react-native';
 import { Icon, type IconName } from '@/components/icon';
 import { Card, Empty, ErrorBox, Header, Loading, Row, Screen, T } from '@/components/ui';
+import { notificationRoute } from '@/lib/push';
 import { must, supabase } from '@/lib/supabase';
 import { useTheme } from '@/lib/theme';
 import { useLoad } from '@/lib/use-load';
 
 interface Notif { id: string; type: string; title: string; body: string | null; payload: Record<string, string>; read_at: string | null; created_at: string }
-const ICON: Record<string, IconName> = { post: 'news', mention: 'at', task: 'calendar', approved: 'check', message: 'chat' };
+const ICON: Record<string, IconName> = { post: 'news', mention: 'at', task: 'calendar', approved: 'check', message: 'chat', questions: 'quiz', reminder: 'calendar' };
 
 export default function Notifications() {
   const { c } = useTheme();
@@ -22,10 +23,8 @@ export default function Notifications() {
   }, []));
 
   const open = (n: Notif) => {
-    const p = n.payload ?? {};
-    if (p.conversation_id) router.push(`/chat/${p.conversation_id}`);
-    else if (p.post_id) router.push(`/news/${p.post_id}`);
-    else if (p.task_id) router.push('/planner');
+    const route = notificationRoute(n.payload ?? {});
+    if (route !== '/notifications') router.push(route as never);
   };
 
   return (

@@ -23,7 +23,8 @@ canvas{display:block;width:100%;height:100%}
 <script>
 function post(m){window.ReactNativeWebView&&window.ReactNativeWebView.postMessage(m);}
 function bytes(s){var b=atob(s),a=new Uint8Array(b.length);for(var i=0;i<b.length;i++)a[i]=b.charCodeAt(i);return a;}
-function load(src){return pdfjsLib.getDocument(src.data?{data:bytes(src.data)}:{url:src.url}).promise;}
+// ملف محلي (file://): قراءة كاملة مرة واحدة بلا طلبات أجزاء (الملفات المحلية لا تدعمها)
+function load(src){var local=src.url&&/^file:/i.test(src.url);return pdfjsLib.getDocument(src.data?{data:bytes(src.data)}:local?{url:src.url,disableRange:true,disableStream:true}:{url:src.url}).promise;}
 var DOC=null;
 window.openPdf=function(src,opts){
   opts=opts||{};

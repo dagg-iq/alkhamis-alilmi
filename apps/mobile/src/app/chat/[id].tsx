@@ -229,16 +229,27 @@ export default function ChatScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
+  // onEndReached قد يُستدعى مرتين قبل وصول الرد: طلب واحد في الوقت نفسه، وبلا تكرار للرسائل
+  const loadingOlder = useRef(false);
   const loadOlder = async () => {
-    if (!hasMore || loading || !messages.length) return;
-    const oldest = messages[messages.length - 1].created_at;
-    const { data } = await supabase.from('messages').select('*').eq('conversation_id', id)
-      .lt('created_at', oldest).order('created_at', { ascending: false }).limit(PAGE);
-    const list = (data ?? []) as Message[];
-    setMessages((prev) => [...prev, ...list]);
-    setHasMore(list.length === PAGE);
-    loadImages(list);
-    loadReactions(list.map((m) => m.id));
+    if (!hasMore || loading || !messages.length || loadingOlder.current) return;
+    loadingOlder.current = true;
+    try {
+      const oldest = messages[messages.length - 1].created_at;
+      const { data, error } = await supabase.from('messages').select('*').eq('conversation_id', id)
+        .lt('created_at', oldest).order('created_at', { ascending: false }).limit(PAGE);
+      if (error) return;
+      const list = (data ?? []) as Message[];
+      setMessages((prev) => {
+        const have = new Set(prev.map((x) => x.id));
+        return [...prev, ...list.filter((x) => !have.has(x.id))];
+      });
+      setHasMore(list.length === PAGE);
+      loadImages(list);
+      loadReactions(list.map((m) => m.id));
+    } finally {
+      loadingOlder.current = false;
+    }
   };
 
   // الضغط على اقتباس الرد: ننتقل للرسالة الأصلية (نجلب الأقدم إن لم تكن محمّلة) ونومّضها

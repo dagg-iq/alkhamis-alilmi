@@ -23,7 +23,13 @@ function labelTables(root: ParentNode) {
     });
   });
 }
-new MutationObserver(() => labelTables(document)).observe(document.documentElement, { childList: true, subtree: true });
+// التغييرات المتتابعة (كتابة، تحديث تلقائي) تُجمع في إطار رسم واحد بدل فحص كل الجداول مع كل تغيير
+let scheduled = false;
+new MutationObserver(() => {
+  if (scheduled) return;
+  scheduled = true;
+  requestAnimationFrame(() => { scheduled = false; labelTables(document); });
+}).observe(document.documentElement, { childList: true, subtree: true });
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

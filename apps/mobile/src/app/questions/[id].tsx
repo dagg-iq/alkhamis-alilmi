@@ -30,7 +30,7 @@ export default function QuestionsScreen() {
   const pdfKey = q.data?.pdf_key;
   const preview = useLoad(async () => {
     if (!pdfKey) return null;
-    if (isDownloaded(pdfKey)) return { base64: await downloadMaterial(pdfKey).then((f) => f.base64()) };
+    if (isDownloaded(pdfKey)) return { fileUri: (await downloadMaterial(pdfKey)).uri };
     return { url: await signedUrl(pdfKey) };
   }, [pdfKey]);
 

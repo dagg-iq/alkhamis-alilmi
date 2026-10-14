@@ -1,7 +1,7 @@
 // تحويل صور ورقة (أسئلة امتحان مثلاً) إلى صفحات HTML بنفس تنسيق الأصل (مواضع النصوص، الجداول، الصناديق، الترقيم)،
 // ثم يحوّلها التطبيق إلى PDF/صور. متاح لكل طالب مقبول، ويُحسب من رصيد المساعد اليومي (الأدمن بلا حد).
 import { handler, HttpError, json } from '../_shared/cors.ts';
-import { admin, getCaller, getSetting } from '../_shared/supabase.ts';
+import { admin, getCaller, getSetting, refundQuota } from '../_shared/supabase.ts';
 import { generate, GeminiQuotaError, MAIN_MODELS, modelChain } from '../_shared/gemini.ts';
 
 const PROMPT = `هذه صور (بالترتيب) لصفحات ورقة مطبوعة أو مكتوبة (غالباً أسئلة امتحان لطلاب الخامس العلمي في العراق).
@@ -24,7 +24,7 @@ const clean = (html: string) => html
   .replace(/<\s*(script|iframe|object|embed|link|meta|style|base|form)\b[\s\S]*?(<\s*\/\s*\1\s*>|$)/gi, '')
   .replace(/<\s*(script|iframe|object|embed|link|meta|style|base|form)\b[^>]*>/gi, '')
   .replace(/\son[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '')
-  .replace(/(href|src)\s*=\s*("\s*(?:https?:|javascript:|data:)[^"]*"|'\s*(?:https?:|javascript:|data:)[^']*')/gi, '')
+  .replace(/(href|src)\s*=\s*("\s*(?:https?:|javascript:|data:)[^"]*"|'\s*(?:https?:|javascript:|data:)[^']*'|(?:https?:|javascript:|data:)[^\s>]*)/gi, '')
   .trim();
 
 Deno.serve(handler(async (req) => {
@@ -41,10 +41,14 @@ Deno.serve(handler(async (req) => {
 
   const settings = await getSetting<{ model?: string; daily_limit?: number; enabled?: boolean }>('ai');
   if (settings.enabled === false) throw new HttpError(503, 'الذكاء الاصطناعي متوقف مؤقتاً من قبل الأدمن.');
+  let charged = false;
   if (!isStaff) {
-    const limit = settings.daily_limit ?? 20;
+    // حصة الطالب الخاصة (من لوحة التحكم) وإلا الحد العام — نفس قاعدة المساعد
+    const { data: mine } = await admin.from('profiles').select('ai_daily_limit').eq('id', caller.id).maybeSingle();
+    const limit = (mine?.ai_daily_limit as number | null | undefined) ?? settings.daily_limit ?? 20;
     const { data: n } = await admin.rpc('consume_ai_quota', { p_user: caller.id, p_limit: limit });
     if (n === -1) throw new HttpError(429, 'انتهى رصيدك اليوم من الذكاء الاصطناعي. يتجدد غداً إن شاء الله.');
+    charged = true;
   }
 
   let raw: string;
@@ -60,10 +64,15 @@ Deno.serve(handler(async (req) => {
       ],
     }], { temperature: 0.1, maxOutputTokens: 32768, thinking: 'low', pool: isStaff ? 'admin' : 'student', extraConfig: { mediaResolution: 'MEDIA_RESOLUTION_HIGH' } });
   } catch (e) {
+    // لم يُحوَّل شيء: لا يُحسب من رصيد الطالب
+    if (charged) await refundQuota(caller.id);
     if (e instanceof GeminiQuotaError) throw new HttpError(503, 'الذكاء الاصطناعي مشغول الآن، جرّب بعد دقيقة.');
     throw e;
   }
   const html = clean(raw);
-  if (!/<section/i.test(html) || html.length < 40) throw new HttpError(502, 'لم أستطع قراءة الورقة. صوّرها بإضاءة أوضح وحاول مرة أخرى.');
+  if (!/<section/i.test(html) || html.length < 40) {
+    if (charged) await refundQuota(caller.id);
+    throw new HttpError(502, 'لم أستطع قراءة الورقة. صوّرها بإضاءة أوضح وحاول مرة أخرى.');
+  }
   return json({ html });
 }));

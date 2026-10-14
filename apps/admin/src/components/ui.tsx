@@ -1,7 +1,8 @@
+import { isSafeUrl, sanitizeHtml } from '@saey/shared';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
-import { marked } from 'marked';
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
+import { Marked } from 'marked';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 export function Logo({ size = 32, ink = 'var(--ink)', dot = 'var(--accent)' }: { size?: number; ink?: string; dot?: string }) {
   return (
@@ -31,6 +32,14 @@ export function Avatar({ name, url, size = 36 }: { name: string; url?: string | 
 }
 
 export function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+  // Esc يغلق النافذة (إلا إن كانت نافذة تأكيد مفتوحة فوقها — تلك تعالج Esc بنفسها)
+  const close = useRef(onClose);
+  close.current = onClose;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !document.querySelector('.dlg-back')) close.current(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
   return (
     <div className="modal-bg" onClick={onClose} role="presentation">
       <div className="modal" role="dialog" aria-modal="true" aria-label={title} onClick={(e) => e.stopPropagation()}>
@@ -64,6 +73,17 @@ export function Tabs<K extends string>({ options, value, onChange }: { options: 
   );
 }
 
+/** Markdown آمن: لا HTML خام إلا وسوم التنسيق، والروابط والصور بمخطط ويب فقط */
+const md = new Marked({
+  breaks: true,
+  async: false,
+  renderer: {
+    html: (html) => sanitizeHtml(html),
+    link: (href, _title, text) => (isSafeUrl(href) ? false : text),
+    image: (href, _title, text) => (isSafeUrl(href) ? false : text.replace(/</g, '&lt;')),
+  },
+});
+
 /** Markdown + LaTeX */
 export function Markdown({ text }: { text: string }) {
   const html = useMemo(() => {
@@ -72,7 +92,7 @@ export function Markdown({ text }: { text: string }) {
       maths.push(m);
       return `@@M${maths.length - 1}@@`;
     });
-    let out = marked.parse(src, { breaks: true, async: false }) as string;
+    let out = md.parse(src) as string;
     out = out.replace(/@@M(\d+)@@/g, (_, i) => {
       const m = maths[Number(i)];
       const display = m.startsWith('$$');
@@ -91,9 +111,12 @@ export function Markdown({ text }: { text: string }) {
 const ToastCtx = createContext<(msg: string, err?: boolean) => void>(() => {});
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toast, setToast] = useState<{ msg: string; err?: boolean } | null>(null);
+  // مؤقت واحد: تنبيه جديد يلغي مؤقت السابق (وإلا يُخفي مؤقتُ الأول الثاني مبكراً)
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const show = useCallback((msg: string, err?: boolean) => {
     setToast({ msg, err });
-    setTimeout(() => setToast(null), err ? 5000 : 2500);
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => setToast(null), err ? 5000 : 2500);
   }, []);
   return (
     <ToastCtx.Provider value={show}>

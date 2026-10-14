@@ -300,4 +300,97 @@ do $$ begin
 end $$;
 reset role;
 
+-- ٢٥) إصلاحات الفحص الشامل
+-- A1: الطالب لا ينقل عضويته إلى محادثة لم يُضف إليها
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000a');
+select public.create_group('مجموعة المشرفين', array[]::uuid[], false) as gid \gset
+reset role;
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000b');
+update public.conversation_members set conversation_id = :'gid'
+  where user_id = auth.uid() and conversation_id = (select id from public.conversations where type = 'school');
+update public.conversation_members set muted = true
+  where user_id = auth.uid() and conversation_id = (select id from public.conversations where type = 'school');
+do $$ begin
+  assert (select count(*) from public.conversation_members where user_id = auth.uid() and conversation_id = (select id from public.conversations where type = 'group' and title = 'مجموعة المشرفين')) = 0,
+    'طالب نقل عضويته إلى مجموعة لم يُضف إليها!';
+  assert (select muted from public.conversation_members where user_id = auth.uid() and conversation_id = (select id from public.conversations where type = 'school')), 'الطالب لا يستطيع كتم المحادثة';
+  -- A6: الإشارات لا تتغير بعد الإرسال
+  insert into public.messages (conversation_id, body) values ((select id from public.conversations where type = 'school'), 'رسالة');
+  update public.messages set mentions = array['00000000-0000-0000-0000-00000000000a']::uuid[], body = 'رسالة معدلة' where body = 'رسالة';
+  assert (select cardinality(mentions) from public.messages where body = 'رسالة معدلة') = 0, 'الطالب غيّر إشارات رسالة قديمة';
+  assert (select edited_at is not null from public.messages where body = 'رسالة معدلة'), 'لم يُسجَّل التعديل';
+end $$;
+reset role;
+
+-- B3: حذف محاضرة يحذف مقاطعها من بحث المساعد
+insert into public.chapters (id, book_id, number, title)
+select '00000000-0000-0000-0000-0000000000c1', b.id, 1, 'الفصل الأول' from public.books b join public.subjects s on s.id = b.subject_id where s.slug = 'physics' limit 1;
+insert into public.lectures (id, chapter_id, title, youtube_id) values ('00000000-0000-0000-0000-0000000000f1', '00000000-0000-0000-0000-0000000000c1', 'محاضرة', 'abcdefghijk');
+insert into public.content_chunks (source_type, source_id, content) values
+  ('lecture', '00000000-0000-0000-0000-0000000000f1', 'شرح'),
+  ('document', '00000000-0000-0000-0000-0000000000d3', 'صفحة');
+delete from public.lectures where id = '00000000-0000-0000-0000-0000000000f1';
+delete from public.documents where id = '00000000-0000-0000-0000-0000000000d3';
+do $$ begin
+  assert (select count(*) from public.content_chunks where source_id in ('00000000-0000-0000-0000-0000000000f1', '00000000-0000-0000-0000-0000000000d3')) = 0,
+    'بقيت مقاطع لمصدر محذوف';
+end $$;
+
+-- B9: نشر أسئلة ← إشعار واحد للطالب (لا للأدمن)، والنشر المتتابع لا يكرره
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000a');
+insert into public.question_sets (subject_id, kind, period, title, status)
+select id, 'expected', 'month1', 'أسئلة الفصل الأول', 'published' from public.subjects where slug = 'physics';
+insert into public.question_sets (subject_id, kind, period, title, status)
+select id, 'expected', 'month1', 'أسئلة الفصل الثاني', 'draft' from public.subjects where slug = 'physics';
+update public.question_sets set status = 'published' where title = 'أسئلة الفصل الثاني';
+do $$ begin
+  assert (select count(*) from public.notifications where type = 'questions') = 0, 'الأدمن وصله إشعار أسئلة';
+end $$;
+reset role;
+do $$ begin
+  assert (select count(*) from public.notifications where type = 'questions' and user_id = '00000000-0000-0000-0000-00000000000b') = 1,
+    'إشعار الأسئلة الجديدة لم يصل أو تكرر';
+  assert (select payload ->> 'question_set_id' from public.notifications where type = 'questions' limit 1) is not null, 'الإشعار بلا رابط للأسئلة';
+end $$;
+
+-- A7 + B5: المحادثة الخاصة لا تتكرر، والإحصاءات تعمل
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000b');
+do $$ declare a uuid; begin
+  a := public.start_direct('00000000-0000-0000-0000-00000000000a');
+  assert public.start_direct('00000000-0000-0000-0000-00000000000a') = a, 'تكرار المحادثة الخاصة';
+end $$;
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000a');
+do $$ begin
+  assert (public.admin_stats() ->> 'messages_today')::int >= 1, 'رسائل اليوم';
+end $$;
+reset role;
+select private.daily_cleanup();
+
+-- ٢٦) تذكير الخادم بمهام الإدارة: إشعار واحد للطالب بما عليه غداً، لا يتكرر، ولا يشمل ما أنجزه ولا الأدمن
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000a');
+insert into public.tasks (scope, type, title, due_at) values
+  ('school', 'exam', 'الفيزياء', ((now() at time zone 'Asia/Baghdad')::date + 1 + time '09:00') at time zone 'Asia/Baghdad'),
+  ('school', 'homework', 'حل تمارين الكيمياء', ((now() at time zone 'Asia/Baghdad')::date + 1 + time '12:00') at time zone 'Asia/Baghdad'),
+  ('school', 'homework', 'بعد غد', ((now() at time zone 'Asia/Baghdad')::date + 2 + time '09:00') at time zone 'Asia/Baghdad');
+insert into public.tasks (scope, section_id, type, title, due_at)
+select 'section', id, 'preparation', 'تحضير شعبة ب', ((now() at time zone 'Asia/Baghdad')::date + 1 + time '09:00') at time zone 'Asia/Baghdad'
+from public.sections where name = 'ب';
+reset role;
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000b');
+insert into public.task_status (task_id) select id from public.tasks where title = 'حل تمارين الكيمياء';
+reset role;
+do $$ begin
+  assert private.task_reminders() = 1, 'عدد التذكيرات (الطالب ب فقط)';
+  assert private.task_reminders() = 0, 'التذكير تكرر في نفس اليوم';
+  assert (select title from public.notifications where type = 'reminder' and user_id = '00000000-0000-0000-0000-00000000000b') = 'غداً: امتحان الفيزياء',
+    'التذكير يشمل مهمة منجزة أو مهمة شعبة أخرى أو مهمة بعد غد';
+  assert (select count(*) from public.notifications where type = 'reminder' and user_id = '00000000-0000-0000-0000-00000000000a') = 0, 'الأدمن وصله تذكير';
+end $$;
+
 select 'ALL RLS TESTS PASSED' as result;

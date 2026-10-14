@@ -7,7 +7,7 @@ import { Empty, Field, Modal, check, useAction, useToast } from '../components/u
 import { useLoad } from '../lib/hooks';
 import { OutlineEditor } from '../components/OutlineEditor';
 import { dequeueDocument, enqueueDocument, kickIngestWorker } from '../lib/content-ai';
-import { must, signedUrl, supabase, uploadFile } from '../lib/supabase';
+import { deleteFiles, must, signedUrl, supabase, uploadFile } from '../lib/supabase';
 
 interface ChunkRow { document_id: string; status: 'pending' | 'running' | 'done' | 'failed'; from_page: number; to_page: number; next_at: string; last_error: string | null }
 
@@ -142,8 +142,11 @@ export default function Documents() {
   }, 'أُوقفت');
 
   const remove = async (doc: DocumentRow) => (await askConfirm(`حذف «${doc.title}»؟`)) && run(async () => {
+    // أجزاء الفهرسة المقطوعة (وملفاتها) أولاً، ثم الصف، ثم الملف نفسه من التخزين
+    await dequeueDocument(doc.id).catch(() => {});
     await check(supabase.from('content_chunks').delete().eq('source_type', 'document').eq('source_id', doc.id));
     await check(supabase.from('documents').delete().eq('id', doc.id));
+    await deleteFiles([doc.file_key]);
     await q.reload();
   }, 'تم الحذف');
 

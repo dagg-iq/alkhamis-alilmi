@@ -28,7 +28,11 @@ import { useGradingRules } from '@/lib/settings';
 import { callFunction, supabase } from '@/lib/supabase';
 import { fonts, useTheme } from '@/lib/theme';
 
-interface Msg { id: string; role: 'user' | 'assistant'; content: string; sources?: AiSource[] | null; error?: boolean; files?: Pending[] }
+interface Msg {
+  id: string; role: 'user' | 'assistant'; content: string; sources?: AiSource[] | null; error?: boolean; files?: Pending[];
+  /** خطأ قابل لإعادة المحاولة: السؤال ومرفقاته ومعرّف رسالته */
+  retry?: { question: string; files: Pending[]; userId: string };
+}
 /** مرفق ينتظر الإرسال مع السؤال (صورة مضغوطة أو PDF) */
 interface Pending { uri: string; mime: string; name: string; size?: number }
 /** خطة شرح فصل طويل على أقسام (من الخادم) */
@@ -135,13 +139,13 @@ export default function AiChat() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const ask = async (preset?: string) => {
+  const ask = async (preset?: string, presetFiles?: Pending[]) => {
     const question = (preset ?? text).trim();
-    const sending = preset ? [] : files;
+    const sending = presetFiles ?? (preset ? [] : files);
     if ((!question && !sending.length) || thinking) return;
-    setText('');
-    setFiles([]);
-    setMessages((m) => [...m, { id: `u${Date.now()}`, role: 'user', content: question || 'اشرح لي ما في المرفق', files: sending }]);
+    if (preset === undefined) { setText(''); setFiles([]); }
+    const userId = `u${Date.now()}`;
+    setMessages((m) => [...m, { id: userId, role: 'user', content: question || 'اشرح لي ما في المرفق', files: sending }]);
     setThinking(true);
     try {
       const attachments = await Promise.all(sending.map(async (f) => ({ mime: f.mime, name: f.name, data: await new File(f.uri).base64() })));
@@ -155,11 +159,19 @@ export default function AiChat() {
       if (res.remaining !== undefined) setRemaining(res.remaining);
       setMessages((m) => [...m, { id: res.messageId ?? `a${Date.now()}`, role: 'assistant', content: res.answer, sources: res.sources }]);
     } catch (e) {
-      setMessages((m) => [...m, { id: `e${Date.now()}`, role: 'assistant', content: e instanceof Error ? e.message : 'حدث خطأ', error: true }]);
+      setMessages((m) => [...m, { id: `e${Date.now()}`, role: 'assistant', content: e instanceof Error ? e.message : 'حدث خطأ', error: true, retry: { question, files: sending, userId } }]);
     } finally {
       setThinking(false);
       setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 150);
     }
+  };
+
+  // إعادة السؤال الذي فشل (انقطاع، المساعد مشغول…) بلا إعادة كتابته: نحذف السؤال والخطأ ونرسله من جديد
+  const retry = (m: Msg) => {
+    if (!m.retry || thinking) return;
+    const r = m.retry;
+    setMessages((list) => list.filter((x) => x.id !== m.id && x.id !== r.userId));
+    ask(r.question, r.files);
   };
 
   const subjectName = subjects.find((x) => x.id === subjectId)?.name ?? '';
@@ -305,7 +317,18 @@ export default function AiChat() {
         ) : (
           <View style={{ gap: 8 }}>
             <View style={{ backgroundColor: item.error ? verdict.risk.bg : c.card, borderRadius: 20, borderWidth: item.error ? 0 : 1, borderColor: c.line, padding: 14 }}>
-              {item.error ? <T color={verdict.risk.ink}>{item.content}</T> : (
+              {item.error ? (
+                <View style={{ gap: 10 }}>
+                  <T color={verdict.risk.ink}>{item.content}</T>
+                  {item.retry && !thinking ? (
+                    <Pressable onPress={() => retry(item)} accessibilityRole="button" accessibilityLabel="إعادة إرسال السؤال"
+                      style={({ pressed }) => ({ alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 6, height: 34, paddingHorizontal: 12, borderRadius: 17, backgroundColor: verdict.risk.ink, opacity: pressed ? 0.7 : 1 })}>
+                      <Icon name="refresh" size={15} color={verdict.risk.bg} />
+                      <T size={13} weight="bold" color={verdict.risk.bg}>إعادة المحاولة</T>
+                    </Pressable>
+                  ) : null}
+                </View>
+              ) : (
                 <RichText text={item.content} size={17} renderToken={(t) => (t.kind === 'pdf' ? pdfCard(t.of) : null)} />
               )}
             </View>

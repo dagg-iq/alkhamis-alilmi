@@ -17,7 +17,7 @@ import { loadSubjects, shortSubject } from '@/lib/queries';
 import { must, supabase } from '@/lib/supabase';
 import { useTheme } from '@/lib/theme';
 import {
-  DEFAULT_SETTINGS, dayKey, freshState, loadTimer, nextMode, saveTimer, saveTimerSettings, streakOf,
+  DEFAULT_SETTINGS, claimFinished, dayKey, freshState, loadTimer, nextMode, recordStudy, saveTimer, saveTimerSettings, setTimerScreenActive, streakOf,
   type TimerMode, type TimerSettings, type TimerState,
 } from '@/lib/timer';
 import { useLoad } from '@/lib/use-load';
@@ -83,12 +83,9 @@ export default function Timer() {
     else hideLiveTimer();
   };
 
-  const record = (minutes: number, subjectId: string | null) => {
-    const m = Math.min(600, Math.round(minutes));
-    if (m < 1) return;
-    supabase.from('study_sessions').insert({
-      user_id: me.id, subject_id: subjectId, minutes: m, started_at: new Date(Date.now() - m * 60000).toISOString(),
-    }).then(() => sessions.reload());
+  // الحفظ يعيد المحاولة لاحقاً إن انقطع الإنترنت (طابور محلي)
+  const record = (minutes: number, subjectId: string | null, endedAt = Date.now()) => {
+    recordStudy(me.id, minutes, subjectId, endedAt).then(() => sessions.reload()).catch(() => {});
   };
 
   const startWith = async (base: TimerState) => {
@@ -105,7 +102,9 @@ export default function Timer() {
 
   /** انتهت الجلسة: نسجل وقت التركيز وننتقل للتالية. live = انتهت والشاشة مفتوحة */
   const complete = (cur: TimerState, s: TimerSettings, live: boolean) => {
-    if (cur.mode === 'focus') record(cur.total / 60, cur.subjectId);
+    // مرة واحدة لكل جلسة (التسوية العامة عند فتح التطبيق قد تكون سجّلتها)
+    const endedAt = cur.endsAt ?? Date.now();
+    if (cur.mode === 'focus') claimFinished(endedAt).then((ok) => { if (ok) record(cur.total / 60, cur.subjectId, endedAt); }).catch(() => {});
     const { mode, done } = nextMode(cur, s);
     const next = freshState(s, mode, { subjectId: cur.subjectId, done });
     if (live) tap('success');
@@ -115,6 +114,7 @@ export default function Timer() {
 
   // التحميل: لو انتهى الوقت والتطبيق مغلق نكمل الجلسة الآن
   useEffect(() => {
+    setTimerScreenActive(true);
     let alive = true;
     loadTimer().then(({ settings: s, state }) => {
       if (!alive) return;
@@ -123,7 +123,7 @@ export default function Timer() {
       else commit(state);
     });
     notificationsAllowed().then(setAllowed);
-    return () => { alive = false; };
+    return () => { alive = false; setTimerScreenActive(false); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

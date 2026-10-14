@@ -3,13 +3,14 @@ import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import { NavigationBar } from 'expo-navigation-bar';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { I18nManager, LogBox, Platform, ScrollView, Text, View } from 'react-native';
 import type { ErrorBoundaryProps } from 'expo-router';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from '@/lib/auth';
-import { onNotificationTap, registerPush } from '@/lib/push';
+import { initialNotificationTap, notificationRoute, onNotificationTap, registerPush } from '@/lib/push';
+import { useTimerSettle } from '@/lib/timer';
 import { UpdateSheet } from '@/components/update-sheet';
 import { isConfigured } from '@/lib/supabase';
 import { AppThemeProvider, fontAssets, useTheme } from '@/lib/theme';
@@ -121,10 +122,10 @@ function Navigator() {
     return () => clearTimeout(hide);
   }, [ready, session, profile, segments]);
 
-  // تسجيل الإشعارات بعد الموافقة
+  // تسجيل الإشعارات بعد الموافقة (إلا إن أوقفها الطالب من الإعدادات على هذا الجهاز)
   const approvedId = profile?.status === 'approved' ? profile.id : null;
   useEffect(() => {
-    if (approvedId) registerPush(approvedId);
+    if (approvedId) registerPush(approvedId, { auto: true });
   }, [approvedId]);
 
   // رسائل كُتبت بلا إنترنت: تُرسل عند فتح التطبيق وعند عودة الاتصال
@@ -133,17 +134,22 @@ function Navigator() {
   // ويدجتات الشاشة الرئيسية (أندرويد)
   useWidgetSync(approvedId);
 
-  // فتح الشاشة المناسبة عند الضغط على إشعار
+  // جلسة مؤقت انتهت والتطبيق مغلق أو في شاشة أخرى: تُسجَّل دقائقها الآن (ولا تنتظر فتح شاشة المؤقت)
+  useTimerSettle(approvedId);
+
+  // فتح الشاشة المناسبة عند الضغط على إشعار (التطبيق مفتوح أو في الخلفية)
+  useEffect(() => onNotificationTap((d) => router.push(notificationRoute(d) as never)), []);
+
+  // الإشعار الذي فتح التطبيق وهو مغلق تماماً: بعد أن تأخذ بوابة الدخول قرارها
+  const initialTap = useRef(false);
   useEffect(() => {
-    return onNotificationTap((d) => {
-      if (d.conversation_id) router.push(`/chat/${d.conversation_id}`);
-      else if (d.post_id) router.push(`/news/${d.post_id}`);
-      else if (d.task_id) router.push('/planner');
-      else if (d.url === '/timer') router.push('/timer');
-      else if (d.url === '/about') router.push('/about');
-      else router.push('/notifications');
-    });
-  }, []);
+    if (!ready || !approvedId || initialTap.current) return;
+    const t = setTimeout(() => {
+      initialTap.current = true;
+      initialNotificationTap((d) => router.push(notificationRoute(d) as never));
+    }, 400);
+    return () => clearTimeout(t);
+  }, [ready, approvedId]);
 
 
   const navTheme = {

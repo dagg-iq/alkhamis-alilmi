@@ -108,16 +108,20 @@ export function normalizeOutline(raw: unknown, total: number): OutlineChapter[] 
     if (last && last.start === c.start && normTitle(last.title) === normTitle(c.title)) last.topics.push(...c.topics);
     else merged.push({ title: c.title, start: c.start, topics: c.topics });
   }
-  // فصلان ببداية واحدة ← الثاني يبدأ بعده بصفحة إن أمكن وإلا يُحذف
+  // فصلان ببداية واحدة ← الثاني يبدأ بعده بصفحة إن كانت الصفحة فارغة (قبل الفصل التالي)، وإلا تُضم مواضيعه للسابق.
+  // (المقارنة بآخر فصل أُضيف بعد إزاحته: ثلاثة فصول بنفس الصفحة كانت تخرج بغير ترتيب أو ببدايتين متطابقتين)
   const uniq: C[] = [];
-  for (const c of merged) {
+  merged.forEach((c, i) => {
     const last = uniq[uniq.length - 1];
-    if (last && last.start === c.start) {
-      if (c.start < max) uniq.push({ ...c, start: c.start + 1 }); // يبقى ترتيبهما
-      continue;
+    if (last && c.start <= last.start) {
+      const cand = last.start + 1;
+      const nextStart = merged[i + 1]?.start ?? Infinity;
+      if (cand <= max && cand < nextStart) uniq.push({ ...c, start: cand });
+      else last.topics.push(...c.topics);
+      return;
     }
     uniq.push(c);
-  }
+  });
   const out: OutlineChapter[] = [];
   // مقدمة الملف قبل أول فصل
   if (uniq[0].start > 3) out.push({ title: 'مقدمة الملف', start_page: 1, end_page: uniq[0].start - 1, topics: [] });

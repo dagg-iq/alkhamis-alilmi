@@ -53,6 +53,21 @@ describe('تطبيع الفهرس', () => {
     expect(out[out.length - 1].end_page).toBe(20);
     out.forEach((c) => expect(c.end_page).toBeGreaterThanOrEqual(c.start_page));
   });
+  it('ثلاثة فصول بنفس الصفحة: مرتبة بلا بدايتين متطابقتين، ولا تُزاح فوق فصل حقيقي', () => {
+    const out = normalizeOutline([
+      { title: 'أ', start_page: 5, topics: [{ title: 'م١', page: 5 }] },
+      { title: 'ب', start_page: 5 },
+      { title: 'ج', start_page: 5, topics: [{ title: 'م٢', page: 6 }] },
+      { title: 'د', start_page: 7 },
+    ], 20);
+    const starts = out.map((c) => c.start_page);
+    expect(starts).toEqual([...starts].sort((a, b) => a - b));
+    expect(new Set(starts).size).toBe(starts.length);
+    expect(out.find((c) => c.title === 'د')?.start_page).toBe(7);
+    for (let i = 1; i < out.length; i++) expect(out[i].start_page).toBe(out[i - 1].end_page + 1);
+    // الفصل الذي لم يجد صفحة فارغة تُضم مواضيعه للسابق ولا تضيع
+    expect(out.flatMap((c) => c.topics.map((t) => t.title))).toContain('م١');
+  });
   it('ناتج فارغ أو غير صالح ← فهرس احتياطي يغطي كل الصفحات', () => {
     for (const bad of [null, {}, [], 'x', { chapters: 'x' }]) {
       const out = normalizeOutline(bad, 45);

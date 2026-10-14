@@ -6,7 +6,7 @@ import { useState } from 'react';
 import { askConfirm } from '../components/dialog';
 import { Avatar, Empty, Modal, Tabs, Verified, check, useAction } from '../components/ui';
 import { useAuth } from '../lib/auth';
-import { useLoad } from '../lib/hooks';
+import { normalizeArabic, useLoad } from '../lib/hooks';
 import { must, supabase } from '../lib/supabase';
 
 type Filter = 'pending' | 'approved' | 'rejected' | 'banned';
@@ -46,7 +46,7 @@ export default function Students({ onChange }: { onChange: () => void }) {
   };
 
   const people = (q.data?.people ?? []).filter((p) => (filter === 'pending' ? p.status === 'pending' && p.onboarded : p.status === filter))
-    .filter((p) => p.full_name.includes(search.trim()));
+    .filter((p) => normalizeArabic(p.full_name).includes(normalizeArabic(search)));
   const count = (s: Filter) => (q.data?.people ?? []).filter((p) => (s === 'pending' ? p.status === 'pending' && p.onboarded : p.status === s)).length;
   const sectionName = (id: string | null) => q.data?.sections.find((s) => s.id === id)?.name ?? '—';
 
@@ -106,7 +106,7 @@ export default function Students({ onChange }: { onChange: () => void }) {
                     <div className="row" style={{ flexWrap: 'nowrap', justifyContent: 'flex-end' }}>
                       {p.status !== 'approved' && isAdmin ? <button className="btn primary sm" onClick={() => update(p, { status: 'approved' }, 'تم القبول')}>قبول</button> : null}
                       {p.status === 'pending' && isAdmin ? <button className="btn danger sm" onClick={() => update(p, { status: 'rejected', onboarded: false }, 'تم الرفض')}>رفض</button> : null}
-                      {p.status === 'approved' ? <button className="btn sm" onClick={() => setGradesFor(p)}>الدرجات</button> : null}
+                      {p.status === 'approved' && isAdmin ? <button className="btn sm" onClick={() => setGradesFor(p)}>الدرجات</button> : null}
                       {p.status === 'approved' && isAdmin ? (
                         <button className="btn sm" onClick={() => update(p, { is_verified: !p.is_verified }, p.is_verified ? 'أُزيل التوثيق' : 'تم التوثيق')}>
                           {p.is_verified ? 'إلغاء التوثيق' : 'توثيق'}
@@ -148,7 +148,7 @@ function GradesModal({ student, onClose }: { student: Profile; onClose: () => vo
   const general = d ? generalExemption(Object.fromEntries(d.subjects.map((s) => [s.id, d.map[s.id] ?? {}])), d.rules) : null;
   return (
     <Modal title={`درجات ${student.full_name}`} onClose={onClose}>
-      {!d ? <Empty>جارٍ التحميل…</Empty> : (
+      {q.error ? <Empty>{q.error}</Empty> : !d ? <Empty>جارٍ التحميل…</Empty> : (
         <>
           <div className="row">
             <span className="pill accent">المعدل {formatScore(general?.average)}</span>

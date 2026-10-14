@@ -1,6 +1,6 @@
 // المساعد الذكي: يجيب من المنهج (RAG) ويذكر المصدر، ويعرف فهرس التطبيق (المحاضرات والملازم والأسئلة)، مع حد يومي لكل طالب
 import { handler, HttpError, json } from '../_shared/cors.ts';
-import { admin, getCaller, getSetting } from '../_shared/supabase.ts';
+import { admin, getCaller, getSetting, refundQuota } from '../_shared/supabase.ts';
 import { type Content, generate, GeminiQuotaError, LITE_MODELS, modelChain, type Part } from '../_shared/gemini.ts';
 import { parseChapterRef, parsePageRef } from '../_shared/outline.ts';
 import { type RangeInfo, retrieveItems, type ViewerContext } from './retrieve.ts';
@@ -247,10 +247,16 @@ async function scopeNotes(subjectId: string | null, text: string, sources: Sourc
   return body ? `ملاحظات المقرر من الأدمن (المرجع الأعلى لما هو داخل في الامتحان وما هو للاطلاع أو محذوف):\n${body.slice(0, 8000)}` : '';
 }
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 Deno.serve(handler(async (req) => {
   const caller = await getCaller(req);
   const body = await req.json();
-  const { chatId, message, subjectId, brief } = body;
+  const { message, brief } = body;
+  // معرّفات من التطبيق: صيغة خاطئة ← لا نمررها لقاعدة البيانات (كانت تعطي خطأ ٥٠٠ بعد خصم الرصيد)
+  const chatId = typeof body.chatId === 'string' && body.chatId ? body.chatId : undefined;
+  if (chatId && !UUID.test(chatId)) throw new HttpError(404, 'المحادثة غير موجودة.');
+  const subjectId: string | null = typeof body.subjectId === 'string' && UUID.test(body.subjectId) ? body.subjectId : null;
   // الطالب يسأل من داخل عارض ملزمة: الملف والصفحة أو الفصل الذي يقرأه الآن
   const rc = body.context as { documentId?: unknown; page?: unknown; from?: unknown; to?: unknown } | undefined;
   const viewerCtx: ViewerContext | undefined = rc && typeof rc.documentId === 'string' && /^[0-9a-f-]{36}$/i.test(rc.documentId)
@@ -259,6 +265,7 @@ Deno.serve(handler(async (req) => {
 
   // رسالة تلقائية «تم التحويل إلى PDF» (لا تستهلك من الرصيد)
   if (body.note === 'pdf') {
+    if (!chatId || typeof body.of !== 'string' || !UUID.test(body.of)) throw new HttpError(400, 'طلب غير صحيح.');
     const { data } = await admin.from('ai_chats').select('user_id').eq('id', chatId).single();
     if (!data || data.user_id !== caller.id) throw new HttpError(404, 'المحادثة غير موجودة.');
     const { data: row, error } = await admin.from('ai_messages')
@@ -299,6 +306,15 @@ Deno.serve(handler(async (req) => {
     }
   }
 
+  // المحادثة: نتحقق من ملكيتها قبل خصم أي رصيد
+  let chat = chatId;
+  let plan: Plan | null = null;
+  if (chat) {
+    const { data } = await admin.from('ai_chats').select('id, user_id, plan').eq('id', chat).maybeSingle();
+    if (!data || data.user_id !== caller.id) throw new HttpError(404, 'المحادثة غير موجودة.');
+    plan = (data.plan as Plan | null) ?? null;
+  }
+
   // الأدمن بلا حد يومي، والتحية والأجوبة المحفوظة لا تُحسب من الرصيد
   let used: number | null = null;
   if (caller.role !== 'admin' && !small && !cached) {
@@ -306,15 +322,16 @@ Deno.serve(handler(async (req) => {
     if (n === -1) throw new HttpError(429, `انتهى رصيدك اليوم (${ar(limit)} سؤالاً). يتجدد غداً إن شاء الله.`);
     used = n as number;
   }
+  // أي فشل بعد الخصم (النموذج، الحفظ…) يعيد السؤال لرصيد الطالب — مرة واحدة فقط
+  let refunded = false;
+  const refund = async () => {
+    if (used === null || refunded) return;
+    refunded = true;
+    await refundQuota(caller.id);
+  };
 
-  // المحادثة
-  let chat = chatId as string | undefined;
-  let plan: Plan | null = null;
-  if (chat) {
-    const { data } = await admin.from('ai_chats').select('id, user_id, plan').eq('id', chat).single();
-    if (!data || data.user_id !== caller.id) throw new HttpError(404, 'المحادثة غير موجودة.');
-    plan = (data.plan as Plan | null) ?? null;
-  } else {
+  try {
+  if (!chat) {
     const title = chatTitle(text);
     const { data, error } = await admin
       .from('ai_chats').insert({ user_id: caller.id, title, subject_id: subjectId ?? null }).select('id').single();
@@ -425,11 +442,7 @@ ${nextP ? `- اختم بسطر مستقل بالضبط: «انتهى القسم 
       });
   } catch (e) {
     // لم يُجب المساعد: نعيد للطالب السؤال الذي حُسب من رصيده
-    if (used !== null) {
-      await admin.from('ai_usage').update({ count: Math.max(0, used - 1) })
-        .eq('user_id', caller.id).eq('day', new Date().toISOString().slice(0, 10)).eq('count', used)
-        .then(({ error }) => { if (error) console.error('refund', error.message); });
-    }
+    await refund();
     if (e instanceof GeminiQuotaError) {
       const when = e.message.match(/حتى (.+)$/)?.[1];
       throw new HttpError(503, when ? `انتهت حصة المساعد اليوم على كل المفاتيح. يعود ${when} إن شاء الله.` : 'المساعد مشغول الآن بسبب كثرة الأسئلة، جرّب بعد دقيقة.');
@@ -449,10 +462,11 @@ ${nextP ? `- اختم بسطر مستقل بالضبط: «انتهى القسم 
 
   // وقتان مختلفان حتى يبقى السؤال قبل جوابه عند الترتيب
   const t = Date.now();
-  const { data: saved } = await admin.from('ai_messages').insert([
+  const { data: saved, error: saveError } = await admin.from('ai_messages').insert([
     { chat_id: chat, role: 'user', content: attachments.length ? `${text}\n\n(مرفقات: ${attachments.map((a: { mime: string; name: string }) => a.name || (a.mime === 'application/pdf' ? 'ملف PDF' : 'صورة')).join('، ')})` : text, created_at: new Date(t).toISOString() },
     { chat_id: chat, role: 'assistant', content: answer, sources: cited.length ? cited : null, created_at: new Date(t + 5).toISOString() },
   ]).select('id, role');
+  if (saveError) throw new Error(`save: ${saveError.message}`);
   const answerId = (saved ?? []).find((r) => r.role === 'assistant')?.id ?? null;
   // خطة الشرح المقسّم: نسجل القسم المكتمل (سؤال آخر بين الأقسام لا يغيّرها، و«أكمل» يتابع بعده)
   let planOut: (Plan & { done: boolean }) | null = null;
@@ -473,4 +487,8 @@ ${nextP ? `- اختم بسطر مستقل بالضبط: «انتهى القسم 
     remaining: caller.role === 'admin' ? null : used === null ? undefined : Math.max(0, limit - used),
     cached: !!cached,
   });
+  } catch (e) {
+    await refund();
+    throw e;
+  }
 }));

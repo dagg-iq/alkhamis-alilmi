@@ -92,14 +92,17 @@ export async function callFunction<T>(name: string, body: Record<string, unknown
     let message = 'تعذّر الاتصال بالخادم. تأكد من الإنترنت.';
     const ctx = (error as { context?: Response }).context;
     if (ctx && typeof ctx.json === 'function') {
-      // الدالة غير مرفوعة على الخادم بعد
-      if (ctx.status === 404) message = 'هذه الميزة لم تُفعّل على الخادم بعد. أخبر الأدمن.';
+      let serverMessage: string | null = null;
       try {
         const payload = await ctx.json();
-        if (typeof payload?.error === 'string' && ctx.status !== 404) message = payload.error;
+        if (typeof payload?.error === 'string') serverMessage = payload.error;
       } catch {
         // نُبقي الرسالة العامة
       }
+      // رسالة الدالة نفسها أولاً (مثل «المحادثة غير موجودة» وهي ٤٠٤ أيضاً)؛
+      // ٤٠٤ بلا رسالة منها = الدالة غير مرفوعة على الخادم بعد
+      if (serverMessage) message = serverMessage;
+      else if (ctx.status === 404) message = 'هذه الميزة لم تُفعّل على الخادم بعد. أخبر الأدمن.';
     }
     throw new Error(message);
   }

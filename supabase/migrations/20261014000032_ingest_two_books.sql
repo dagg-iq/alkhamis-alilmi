@@ -1,4 +1,4 @@
--- 28: الفهرسة كتابان معاً كحد أقصى (بطلب المالك): العامل يأخذ أجزاءً من أول كتابين في الطابور فقط،
+-- 32: الفهرسة كتابان معاً كحد أقصى (بطلب المالك): العامل يأخذ أجزاءً من أول كتابين في الطابور فقط،
 -- وحين يكتمل أحدهما يدخل الثالث تلقائياً. آمن لإعادة التشغيل.
 create or replace function public.claim_ingest_chunks(p_limit int, p_lease_seconds int default 240)
 returns setof public.ingest_chunks language plpgsql security definer set search_path = public as $$

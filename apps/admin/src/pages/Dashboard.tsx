@@ -64,7 +64,7 @@ export default function Dashboard() {
             ))}
           </div>
         </>
-      ) : s ? <p className="small dim">لا يوجد ما ينتظرك الآن 👌</p> : null}
+      ) : s ? <p className="small dim">لا يوجد ما ينتظرك الآن.</p> : null}
       <h2>آخر العمليات</h2>
       <div className="table-wrap">
         <table>
