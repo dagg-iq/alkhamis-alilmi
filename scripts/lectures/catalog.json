@@ -1,0 +1,54 @@
+{
+  "apply": false,
+  "teachers": [
+    {
+      "teacher": "عباس الدراجي", "subject": "math", "subject_name": "الرياضيات", "channel_url": "https://www.youtube.com/@Abasali.92",
+      "chapters": [
+        { "number": 1, "title": "اللوغاريتمات" },
+        { "number": 2, "title": "المتتابعات" },
+        { "number": 3, "title": "الدائرة" },
+        { "number": 4, "title": "الدوال الدائرية" },
+        { "number": 5, "title": "الغاية والاستمرارية" },
+        { "number": 6, "title": "المشتقات" }
+      ],
+      "sources": [
+        { "playlist": "PLRP4MEygUEUM", "note": "خامس علمي فصل اول 2027 (الأحدث)", "only_chapters": [1] },
+        { "playlist": "PLFvZG69HOWk-RyOAoI5YNQF_CAwJrskKf", "note": "الفصل الثاني المتتابعات", "exclude_chapters": [1] },
+        { "playlist": "PLFvZG69HOWk_8tJzbVuoSPLQ6hpUSrFuK", "note": "الفصل الثالث الدائرة", "exclude_chapters": [1] },
+        { "playlist": "PLFvZG69HOWk99ZYlqD7qPkhzFVdvjGsQs", "note": "الفصل الرابع الدوال الدائرية", "exclude_chapters": [1] },
+        { "playlist": "PLFvZG69HOWk_BPZGWrD81zc_JnpHWCwNk", "note": "الفصل الخامس الغاية والاستمرارية", "exclude_chapters": [1] },
+        { "playlist": "PLFvZG69HOWk_u2TBeQsscM-qeQxHfcWbd", "note": "الفصل السادس المشتقات", "exclude_chapters": [1] }
+      ]
+    },
+    {
+      "teacher": "أيوب أحمد", "subject": "chemistry", "subject_name": "الكيمياء", "channel_url": "https://www.youtube.com/@ayoubchemical",
+      "sources": [ { "playlist": "PLeghH-xaqx8bZ1xTJ68wOeTifFO2xd2nX", "note": "كيمياء الخامس العلمي 2026 (كامل)" } ]
+    },
+    {
+      "teacher": "علي الذهبي", "subject": "physics", "subject_name": "الفيزياء", "channel_url": "https://www.youtube.com/@al.aq.f",
+      "sources": [ { "playlist": "PLaxNt3mLD24zpSoAbUA0HfIYo8ypbZYEz", "note": "فيزياء الخامس العلمي المنهج الجديد 2026 (كامل)" } ]
+    },
+    {
+      "teacher": "علي الغرابي", "subject": "english", "subject_name": "اللغة الإنكليزية", "book": "كتاب الطالب", "channel_url": "https://www.youtube.com/@tvali",
+      "hint": "الفصول هي الوحدات (Unit 1، Unit 2…) بعنوان مثل «الوحدة ١: …». الأدب (القصة/الرواية) فصل مستقل رقمه بعد آخر وحدة.",
+      "sources": [
+        { "playlist": "PLQrL_9nhuPS3v99SA8DxtZNoUCUPERM-H", "note": "انكليزي الخامس الإعدادي 2027 المنهج الجديد (الكامل)" },
+        { "playlist": "PLQrL_9nhuPS2a-1yBTg54ezY28fgjHmxp", "note": "الأدب الخامس اعدادي" }
+      ]
+    },
+    {
+      "teacher": "مازن الهلالي", "subject": "arabic", "subject_name": "اللغة العربية", "channel_url": "https://www.youtube.com/@mazenalhelaly",
+      "split_by_date": ["الجزء الأول (قبل نصف السنة)", "الجزء الثاني (بعد نصف السنة)"], "renumber": true,
+      "hint": "اجعل كل موضوع قواعد فصلاً مستقلاً بترتيب شرحه (مثل «القواعد: الحال»)، وكل موضوع أدب فصلاً بعنوان يبدأ بـ «الأدب: …». رقّم الفصول بترتيب الشرح.",
+      "sources": [
+        { "playlist": "PLExps0ODD9l_FxqlcTJdBNZBoZ4f3JVqG", "note": "قواعد خامس إعدادي 2026 (كامل)" },
+        { "playlist": "PLExps0ODD9l9E1otIQVnxe5bLW1SqwN0p", "note": "الأدب الجزء الأول", "book": "الجزء الأول (قبل نصف السنة)" },
+        { "playlist": "PLExps0ODD9l8rDzx8qWiumFOYy6WtLcq2", "note": "الأدب الجزء الثاني", "book": "الجزء الثاني (بعد نصف السنة)" }
+      ]
+    },
+    {
+      "teacher": "أحمد الجاف", "subject": "biology", "subject_name": "الأحياء", "channel_url": "https://www.youtube.com/channel/UCXkJbYonEKca5VF0D2KWdsA",
+      "sources": [ { "playlist": "PLuvOOlnWcj1k-cpHP3d4kDaI7wf2iKE06", "note": "احياء الخامس علمي 2027 منهج كامل" } ]
+    }
+  ]
+}

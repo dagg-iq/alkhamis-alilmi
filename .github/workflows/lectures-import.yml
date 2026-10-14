@@ -1,0 +1,40 @@
+# إدخال محاضرات الأساتذة (scripts/lectures/catalog.json): يجلب قوائم يوتيوب، يرتبها في الفصول بـ Gemini،
+# ويكتبها في القاعدة ويضعها في طابور الفهرسة. "apply": false يطبع الخطة فقط.
+name: Import lectures
+on:
+  workflow_dispatch:
+  push:
+    branches: ['claude/**', main, claude/repository-name-arabic-iegosv]
+    paths: ['scripts/lectures/catalog.json', 'scripts/lectures/import.mjs', '.github/workflows/lectures-import.yml']
+
+concurrency:
+  group: lectures-import
+  cancel-in-progress: false
+
+env:
+  PROJECT_REF: yjxhprmtyuqnbgraocar
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Import
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+          GEMINI_ADMIN_API_KEY: ${{ secrets.GEMINI_ADMIN_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_API_KEY_2: ${{ secrets.GEMINI_API_KEY_2 }}
+          GEMINI_API_KEY_3: ${{ secrets.GEMINI_API_KEY_3 }}
+          GEMINI_API_KEY_4: ${{ secrets.GEMINI_API_KEY_4 }}
+          GEMINI_API_KEY_5: ${{ secrets.GEMINI_API_KEY_5 }}
+          GEMINI_API_KEY_6: ${{ secrets.GEMINI_API_KEY_6 }}
+          GEMINI_API_KEY_7: ${{ secrets.GEMINI_API_KEY_7 }}
+          GEMINI_API_KEY_8: ${{ secrets.GEMINI_API_KEY_8 }}
+        run: node scripts/lectures/import.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: lecture-plan, path: lecture-plan.json, if-no-files-found: ignore }

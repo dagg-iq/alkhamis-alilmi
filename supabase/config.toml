@@ -6,3 +6,6 @@ verify_jwt = false
 
 [functions.ingest-worker]
 verify_jwt = false
+
+[functions.lecture-worker]
+verify_jwt = false
