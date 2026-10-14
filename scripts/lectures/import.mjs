@@ -29,7 +29,7 @@ async function yt(path, params) {
     await new Promise((r) => setTimeout(r, 2000));
   }
 }
-const isoDuration = (s) => {
+const isoDuration = (s = '') => {
   const m = s.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
   return m ? Number(m[1] ?? 0) * 3600 + Number(m[2] ?? 0) * 60 + Number(m[3] ?? 0) : 0;
 };
@@ -54,7 +54,7 @@ async function playlist(id) {
     for (const v of batch) {
       const x = info.get(v.youtube_id);
       if (!x || x.status?.privacyStatus === 'private' || x.status?.embeddable === false) continue; // محذوف أو خاص أو يمنع التشغيل داخل التطبيقات
-      const duration = isoDuration(x.contentDetails.duration);
+      const duration = isoDuration(x.contentDetails?.duration ?? '');
       if (x.snippet.liveBroadcastContent !== 'none' || duration < MIN_SECONDS) continue;
       out.push({ ...v, title: x.snippet.title, published: x.snippet.publishedAt, duration_sec: duration, playlist: title });
     }

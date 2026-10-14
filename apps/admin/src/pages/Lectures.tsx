@@ -1,10 +1,17 @@
-import { youtubeId, type Book, type Chapter, type Lecture, type Subject, type Teacher } from '@saey/shared';
+import { arDigits, youtubeId, type Book, type Chapter, type Lecture, type Subject, type Teacher } from '@saey/shared';
 import { useState } from 'react';
 import { askConfirm } from '../components/dialog';
 import { Empty, Field, Modal, check, useAction, useToast } from '../components/ui';
 import { useLoad } from '../lib/hooks';
 import { indexLecture } from '../lib/content-ai';
 import { callFunction, must, supabase } from '../lib/supabase';
+
+// طابور الفهرسة على الخادم (lecture-worker): يكمل وحده جزءاً بعد جزء
+const queue = (l: Lecture) => {
+  const x = l as Lecture & { queued_at?: string | null; index_segment?: number };
+  if (!x.queued_at) return null;
+  return x.index_segment ? `تُفهرس الآن (الجزء ${arDigits(x.index_segment + 1)})` : 'في طابور الفهرسة';
+};
 
 export default function Lectures() {
   const { run, busy } = useAction();
@@ -122,6 +129,7 @@ export default function Lectures() {
                       <td>
                         {l.is_published ? <span className="pill ok">منشورة</span> : <span className="pill warn">مخفية</span>}{' '}
                         {indexing[l.id] ? <span className="pill accent">{indexing[l.id]}</span>
+                          : queue(l) ? <span className="pill warn">{queue(l)}</span>
                           : (l as Lecture & { index_status?: string }).index_status === 'done' ? <span className="pill accent">مفهرسة بالدقيقة</span>
                           : (l as Lecture & { index_status?: string }).index_status === 'error' ? <span className="pill bad">فشلت الفهرسة</span> : null}
                         {(l as Lecture & { index_status?: string }).index_status === 'error' && !indexing[l.id]
