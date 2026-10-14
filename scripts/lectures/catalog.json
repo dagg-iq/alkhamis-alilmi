@@ -34,46 +34,28 @@
       ],
       "sources": [
         {
-          "playlist": "PLRP4MEygUEUM",
-          "note": "خامس علمي فصل اول 2027 (الأحدث)",
-          "only_chapters": [
-            1
-          ]
+          "playlist": "PLFvZG69HOWk-2n3BLeIT6dQ12w1Yyl-MK",
+          "note": "الفصل الاول اللوغاريتمات (2025 — المفهرسة سابقاً في التطبيق)"
         },
         {
           "playlist": "PLFvZG69HOWk-RyOAoI5YNQF_CAwJrskKf",
-          "note": "الفصل الثاني المتتابعات",
-          "exclude_chapters": [
-            1
-          ]
+          "note": "الفصل الثاني المتتابعات"
         },
         {
           "playlist": "PLFvZG69HOWk_8tJzbVuoSPLQ6hpUSrFuK",
-          "note": "الفصل الثالث الدائرة",
-          "exclude_chapters": [
-            1
-          ]
+          "note": "الفصل الثالث الدائرة"
         },
         {
           "playlist": "PLFvZG69HOWk99ZYlqD7qPkhzFVdvjGsQs",
-          "note": "الفصل الرابع الدوال الدائرية",
-          "exclude_chapters": [
-            1
-          ]
+          "note": "الفصل الرابع الدوال الدائرية"
         },
         {
           "playlist": "PLFvZG69HOWk_BPZGWrD81zc_JnpHWCwNk",
-          "note": "الفصل الخامس الغاية والاستمرارية",
-          "exclude_chapters": [
-            1
-          ]
+          "note": "الفصل الخامس الغاية والاستمرارية"
         },
         {
           "playlist": "PLFvZG69HOWk_u2TBeQsscM-qeQxHfcWbd",
-          "note": "الفصل السادس المشتقات",
-          "exclude_chapters": [
-            1
-          ]
+          "note": "الفصل السادس المشتقات"
         }
       ]
     },
