@@ -18,6 +18,9 @@ const MODELS = ['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.5-flash', 'gem
 const MIN_SECONDS = 4 * 60; // أقصر من ٤ دقائق: مقطع قصير أو إعلان، ليس محاضرة
 
 const catalog = JSON.parse(fs.readFileSync(new URL('./catalog.json', import.meta.url), 'utf8'));
+const KIND = { lesson: 0, solutions: 1, review: 2 };
+/** السنة الدراسية من تاريخ النشر: ما بعد آب يُحسب للسنة التالية (أيلول ٢٠٢٥ ← دفعة ٢٠٢٦) */
+const schoolYear = (iso) => { const d = new Date(iso); return d.getUTCFullYear() + (d.getUTCMonth() >= 7 ? 1 : 0); };
 const AR = (n) => String(n).replace(/\d/g, (d) => '٠١٢٣٤٥٦٧٨٩'[d]);
 
 // ---------------------------------------------------------------- يوتيوب
@@ -34,15 +37,25 @@ const isoDuration = (s = '') => {
   return m ? Number(m[1] ?? 0) * 3600 + Number(m[2] ?? 0) * 60 + Number(m[3] ?? 0) : 0;
 };
 
-async function playlist(id) {
+/** قائمة تشغيل، أو «كل فيديوهات القناة» مفلترة بالعنوان والتاريخ (فصول لم يضعها الأستاذ في قائمة) */
+async function source(src) {
+  if (!src.uploads) return await playlist(src.playlist);
+  const re = new RegExp(src.match);
+  const p = await playlist(`UU${src.uploads.slice(2)}`, (v) => re.test(v.title) && (!src.after || v.published >= src.after));
+  return { ...p, title: `رفع القناة (${src.match})` };
+}
+
+async function playlist(id, keep = () => true) {
   const items = [];
   let page = '';
   let title = id;
   const meta = await yt('playlists', { part: 'snippet', id });
   title = meta.items?.[0]?.snippet?.title ?? id;
-  for (let i = 0; i < 20; i++) {
+  for (let i = 0; i < 40; i++) {
     const d = await yt('playlistItems', { part: 'snippet,contentDetails', maxResults: '50', playlistId: id, ...(page ? { pageToken: page } : {}) });
-    for (const it of d.items ?? []) items.push({ youtube_id: it.contentDetails.videoId, position: it.snippet.position });
+    for (const it of d.items ?? []) {
+      if (keep({ title: it.snippet.title, published: it.contentDetails.videoPublishedAt ?? it.snippet.publishedAt ?? '' })) items.push({ youtube_id: it.contentDetails.videoId, position: it.snippet.position });
+    }
     if (!d.nextPageToken) break;
     page = d.nextPageToken;
   }
@@ -103,8 +116,10 @@ ${batch.map((v, k) => `${i + k} | ${v.playlist} | ${v.title}`).join('\n')}
 
 أعد JSON: {"items": [{"i": رقم الفيديو, "chapter": رقم الفصل, "chapter_title": "عنوان الفصل الرسمي",
  "topic": "موضوع المحاضرة بالعربية بكلمات قليلة (مثل: قانون كولوم، أو حل تمارين 1-2)، بلا اسم الأستاذ أو القناة أو الصف أو رقم المحاضرة",
- "skip": true فقط إذا لم يكن الفيديو شرحاً للمنهج (إعلان، تهنئة، بث عام، فيديو لصف آخر)}]}
-كل فيديو مرة واحدة. لا تخترع فصلاً غير موجود في المنهج.`);
+ "kind": "lesson" (شرح درس) أو "solutions" (حل أسئلة/تمارين/مسائل الفصل) أو "review" (مراجعة أو ملخص أو شرح الفصل كاملاً),
+ "skip": true فقط إذا لم يكن الفيديو شرحاً للمنهج (إعلان، تهنئة، نصائح، بث عام، فيديو لصف آخر غير الخامس العلمي/الإعدادي)}]}
+كل فيديو مرة واحدة. لا تخترع فصلاً غير موجود في المنهج. رقم الفصل في العنوان قد يكون من منهج قديم: اعتمد على الموضوع.
+المراجعة التي تشمل عدة فصول: "chapter" = آخر فصل تشمله، و"kind": "review".`);
     for (const x of r.items ?? r) out.set(Number(x.i), x);
   }
   return out;
@@ -134,7 +149,7 @@ for (const t of catalog.teachers) {
   const seen = new Set();
   const all = [];
   for (const [si, src] of t.sources.entries()) {
-    const p = await playlist(src.playlist);
+    const p = await source(src);
     console.log(`  قائمة «${p.title}»: ${p.videos.length} فيديو`);
     for (const v of p.videos) {
       if (seen.has(v.youtube_id)) continue;
@@ -150,7 +165,8 @@ for (const t of catalog.teachers) {
     const ch = Number(c.chapter);
     if (v.src.only_chapters && !v.src.only_chapters.includes(ch)) continue;
     if (v.src.exclude_chapters?.includes(ch)) continue;
-    kept.push({ ...v, chapter: ch, chapter_title: String(c.chapter_title ?? '').trim(), topic: String(c.topic ?? '').trim() || v.title });
+    if (ch < 1) { console.log(`  ✗ بلا فصل: ${v.title}`); continue; }
+    kept.push({ ...v, chapter: ch, kind: KIND[c.kind] ?? 0, chapter_title: String(c.chapter_title ?? '').trim(), topic: String(c.topic ?? '').trim() || v.title });
   }
   // التجميع حسب الفصل (والكتاب إن حددته القائمة نفسها، مثل جزأي الأدب في العربي)
   const groups = new Map();
@@ -158,6 +174,20 @@ for (const t of catalog.teachers) {
     const k = `${v.src.book ?? ''}|${v.chapter}`;
     if (!groups.has(k)) groups.set(k, { chapter: v.chapter, src: v.src, source: v.source, vs: [] });
     groups.get(k).vs.push(v);
+  }
+  // سنة دراسية واحدة لكل فصل: الأستاذ يعيد تصوير المنهج كل سنة، فالقائمة الواحدة قد تجمع ٣ سلاسل للفصل نفسه.
+  // نختار السنة التي فيها أكثر دروس (الأكمل)، وعند التساوي الأحدث.
+  if (!t.all_years) {
+    for (const [k, g] of groups) {
+      const lessons = new Map();
+      for (const v of g.vs) if (v.kind === 0) lessons.set(schoolYear(v.published), (lessons.get(schoolYear(v.published)) ?? 0) + 1);
+      if (!lessons.size) continue;
+      const best = [...lessons.entries()].sort((a, b) => b[1] - a[1] || b[0] - a[0])[0][0];
+      const before = g.vs.length;
+      g.vs = g.vs.filter((v) => schoolYear(v.published) === best);
+      if (g.vs.length < before) console.log(`  ~ الفصل ${g.chapter}: سلسلة ${best} (${g.vs.length}) — حُذف ${before - g.vs.length} من سنوات أخرى`);
+      if (!g.vs.length) groups.delete(k);
+    }
   }
   // الكتاب: من القائمة، أو ثابت للأستاذ، أو حسب تاريخ النشر (العربي: ما شُرح قبل شباط = الجزء الأول)
   for (const g of groups.values()) {
@@ -184,8 +214,8 @@ for (const t of catalog.teachers) {
   plan.teachers.push({ name: t.teacher, subject: t.subject, channel_url: t.channel_url });
   for (const g of list.sort((a, b) => String(a.book).localeCompare(String(b.book)) || a.number - b.number)) {
     plan.chapters.push({ subject: t.subject, book: g.book, number: g.number, title: g.title });
-    // ترتيب الشرح: القائمة الأعلى أولوية ثم تاريخ النشر ثم الموضع في القائمة
-    g.vs.sort((a, b) => a.source - b.source || a.published.localeCompare(b.published) || a.position - b.position);
+    // ترتيب الشرح: الدروس ثم حل الأسئلة ثم المراجعات، وداخل كل نوع بتاريخ النشر ثم الموضع في القائمة
+    g.vs.sort((a, b) => a.kind - b.kind || a.published.localeCompare(b.published) || a.position - b.position);
     console.log(`  ── الفصل ${g.number}: ${g.title}${g.book ? ` (${g.book})` : ''} — ${g.vs.length} محاضرة`);
     g.vs.forEach((v, n) => {
       const lecture = { youtube_id: v.youtube_id, subject: t.subject, book: g.book, chapter: g.number, teacher: t.teacher,
