@@ -550,8 +550,33 @@ export function parseJson<T>(text: string): T {
         }
       }
     }
+    // أخيراً: إصلاح أخطاء النماذج الخفيفة الشائعة (أسطر جديدة داخل النص، \frac بلا تهريب، فاصلة زائدة)
+    try { return JSON.parse(repairJson(start >= 0 ? cleaned.slice(start) : cleaned)) as T; } catch { /* الخطأ الأصلي أوضح */ }
     throw first;
   }
+}
+
+/** يصلح JSON شبه سليم: محارف تحكم خام داخل النصوص، شرطة مائلة لا تكوّن تهريباً صحيحاً، فاصلة قبل } أو ] */
+export function repairJson(text: string): string {
+  let out = '';
+  let inStr = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inStr) {
+      if (ch === '\\') {
+        const next = text[i + 1] ?? '';
+        if (/["\\/bfnrt]/.test(next) || (next === 'u' && /^[0-9a-fA-F]{4}$/.test(text.slice(i + 2, i + 6)))) { out += ch + next; i++; }
+        else out += '\\\\';
+      } else if (ch === '"') { inStr = false; out += ch; }
+      else if (ch === '\n') out += '\\n';
+      else if (ch === '\r') out += '\\r';
+      else if (ch === '\t') out += '\\t';
+      else if (ch < ' ') out += `\\u${ch.charCodeAt(0).toString(16).padStart(4, '0')}`;
+      else out += ch;
+    } else if (ch === '"') { inStr = true; out += ch; }
+    else out += ch;
+  }
+  return out.replace(/,(\s*[}\]])/g, '$1');
 }
 
 /** يقطع النص إلى أجزاء ~١٢٠٠ حرف مع تداخل بسيط، على حدود الفقرات قدر الإمكان */
