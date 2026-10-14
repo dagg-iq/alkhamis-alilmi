@@ -1,0 +1,37 @@
+# استكشاف محاضرات الأساتذة على يوتيوب + حالة المحتوى الحالية (قراءة فقط، لا يكتب شيئاً)
+name: Discover lectures
+on:
+  workflow_dispatch:
+  push:
+    branches: ['claude/**']
+    paths: ['scripts/lectures/discover*', '.github/workflows/lectures-discover.yml']
+
+env:
+  PROJECT_REF: yjxhprmtyuqnbgraocar
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Current content (subjects, chapters, teachers, lectures)
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          q() {
+            jq -n --arg q "$1" '{query: $q, read_only: true}' | curl -sS -X POST \
+              "https://api.supabase.com/v1/projects/$PROJECT_REF/database/query" \
+              -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" -H "Content-Type: application/json" --data @- | jq -c '.[]?' || true
+            echo
+          }
+          echo "===== subjects/books"; q "select s.slug, s.name, b.id book_id, b.name book, b.sort from subjects s join books b on b.subject_id = s.id order by s.sort, b.sort"
+          echo "===== chapters"; q "select s.slug, b.name book, c.number, c.title, (select count(*) from lectures l where l.chapter_id = c.id) lectures from chapters c join books b on b.id = c.book_id join subjects s on s.id = b.subject_id order by s.sort, b.sort, c.number"
+          echo "===== teachers"; q "select t.name, s.slug, t.channel_url, (select count(*) from lectures l where l.teacher_id = t.id) lectures from teachers t left join subjects s on s.id = t.subject_id"
+          echo "===== lectures"; q "select s.slug, c.number ch, l.sort, left(l.title,60) t, l.youtube_id, l.index_status from lectures l join chapters c on c.id = l.chapter_id join books b on b.id = c.book_id join subjects s on s.id = b.subject_id order by s.sort, c.number, l.sort"
+          echo "===== lecture_topics count"; q "select count(*) from lecture_topics"
+      - name: Search YouTube
+        env:
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+        run: node scripts/lectures/discover.mjs
