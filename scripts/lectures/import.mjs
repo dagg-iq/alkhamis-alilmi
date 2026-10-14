@@ -19,8 +19,8 @@ const MIN_SECONDS = 4 * 60; // أقصر من ٤ دقائق: مقطع قصير أ
 
 const catalog = JSON.parse(fs.readFileSync(new URL('./catalog.json', import.meta.url), 'utf8'));
 const KIND = { lesson: 0, solutions: 1, review: 2 };
-/** السنة الدراسية من تاريخ النشر: ما بعد آب يُحسب للسنة التالية (أيلول ٢٠٢٥ ← دفعة ٢٠٢٦) */
-const schoolYear = (iso) => { const d = new Date(iso); return d.getUTCFullYear() + (d.getUTCMonth() >= 7 ? 1 : 0); };
+/** السنة الدراسية من تاريخ النشر: من تموز تُحسب للسنة التالية (بعض الأساتذة يصوّرون المنهج الجديد صيفاً: تموز ٢٠٢٥ ← دفعة ٢٠٢٦) */
+const schoolYear = (iso) => { const d = new Date(iso); return d.getUTCFullYear() + (d.getUTCMonth() >= 6 ? 1 : 0); };
 const AR = (n) => String(n).replace(/\d/g, (d) => '٠١٢٣٤٥٦٧٨٩'[d]);
 
 // ---------------------------------------------------------------- يوتيوب
@@ -205,6 +205,12 @@ for (const t of catalog.teachers) {
     g.title = official ?? [...count.entries()].sort((a, b) => b[1] - a[1])[0][0];
     g.number = g.chapter;
   }
+  // فصلان بالعنوان نفسه في الكتاب نفسه (Gemini قسّم موضوعاً واحداً): نجمعهما
+  for (const g of [...groups.values()]) {
+    const twin = [...groups.values()].find((x) => x !== g && x.book === g.book && x.title === g.title && !x.merged);
+    if (twin && !g.merged) { twin.vs.push(...g.vs); g.merged = true; }
+  }
+  for (const [k, g] of [...groups.entries()]) if (g.merged) groups.delete(k);
   // إعادة ترقيم الفصول داخل كل كتاب (مواضيع العربي): بترتيب القوائم ثم ترتيب Gemini
   const list = [...groups.values()].sort((a, b) => String(a.book).localeCompare(String(b.book)) || a.source - b.source || a.chapter - b.chapter);
   if (t.renumber) {
@@ -214,8 +220,8 @@ for (const t of catalog.teachers) {
   plan.teachers.push({ name: t.teacher, subject: t.subject, channel_url: t.channel_url });
   for (const g of list.sort((a, b) => String(a.book).localeCompare(String(b.book)) || a.number - b.number)) {
     plan.chapters.push({ subject: t.subject, book: g.book, number: g.number, title: g.title });
-    // ترتيب الشرح: الدروس ثم حل الأسئلة ثم المراجعات، وداخل كل نوع بتاريخ النشر ثم الموضع في القائمة
-    g.vs.sort((a, b) => a.kind - b.kind || a.published.localeCompare(b.published) || a.position - b.position);
+    // ترتيب الشرح كما صوّره الأستاذ (تاريخ النشر ثم الموضع في القائمة)، والمراجعات والملخصات في آخر الفصل
+    g.vs.sort((a, b) => (a.kind === 2) - (b.kind === 2) || a.published.localeCompare(b.published) || a.position - b.position);
     console.log(`  ── الفصل ${g.number}: ${g.title}${g.book ? ` (${g.book})` : ''} — ${g.vs.length} محاضرة`);
     g.vs.forEach((v, n) => {
       const lecture = { youtube_id: v.youtube_id, subject: t.subject, book: g.book, chapter: g.number, teacher: t.teacher,
