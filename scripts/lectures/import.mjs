@@ -6,7 +6,7 @@
 //   ١) فيديوهات قوائم التشغيل (مع المدة وتاريخ النشر)، بلا المقاطع القصيرة والمحذوفة
 //   ٢) Gemini يحدد لكل فيديو فصله وعنواناً مرتباً، أو يستبعده (إعلان، بث عام…)
 //   ٣) داخل الفصل: بتاريخ النشر (ترتيب الشرح)، والعنوان «المحاضرة N — الموضوع»
-//   ٤) الكتابة: الأستاذ، الفصول (عنوان رسمي)، المحاضرات (الموجودة تُحدَّث ولا تُعاد فهرستها إن اكتملت)
+//   ٤) الكتابة: الأستاذ، الفصول (عنوان رسمي)، المحاضرات الجديدة (الموجودة لا تُنقل ولا يتغير عنوانها، ولا تُعاد فهرستها إن اكتملت)
 import fs from 'node:fs';
 
 const YT_KEY = process.env.YOUTUBE_API_KEY;
@@ -166,7 +166,7 @@ for (const t of catalog.teachers) {
     if (v.src.only_chapters && !v.src.only_chapters.includes(ch)) continue;
     if (v.src.exclude_chapters?.includes(ch)) continue;
     if (ch < 1) { console.log(`  ✗ بلا فصل: ${v.title}`); continue; }
-    kept.push({ ...v, chapter: ch, kind: KIND[c.kind] ?? 0, chapter_title: String(c.chapter_title ?? '').trim(), topic: String(c.topic ?? '').trim() || v.title });
+    kept.push({ ...v, chapter: ch, kind: KIND[c.kind] ?? 0, chapter_title: String(c.chapter_title ?? '').trim(), topic: String(c.topic ?? '').replace(/\s*(?:المحاضرة|محاضرة)\s*[\d٠-٩]+\s*/g, ' ').trim() || v.title });
   }
   // التجميع حسب الفصل (والكتاب إن حددته القائمة نفسها، مثل جزأي الأدب في العربي)
   const groups = new Map();
@@ -273,10 +273,10 @@ for (let i = 0; i < plan.lectures.length; i += 150) {
     from jsonb_to_recordset(${lit(batch)}) as x(youtube_id text, subject text, book text, chapter int, teacher text, title text, duration_sec int, sort int)`;
   await sql(`
 with l as (${src})
-update lectures e set chapter_id = l.chapter_id, teacher_id = l.teacher_id, title = l.title, sort = l.sort,
-  duration_sec = coalesce(e.duration_sec, l.duration_sec),
+-- الموجودة: لا نغيّر فصلها ولا عنوانها ولا ترتيبها (ربما عدّلها المشرف، ومقاطع بحثها مربوطة بفصلها) — الأستاذ والمدة فقط
+update lectures e set teacher_id = coalesce(e.teacher_id, l.teacher_id), duration_sec = coalesce(e.duration_sec, l.duration_sec),
   queued_at = case when e.index_status = 'done' then e.queued_at else coalesce(e.queued_at, now()) end
-from l where e.youtube_id = l.youtube_id and l.chapter_id is not null;
+from l where e.youtube_id = l.youtube_id;
 with l as (${src})
 insert into lectures (chapter_id, teacher_id, title, youtube_id, duration_sec, sort, is_published, queued_at)
 select l.chapter_id, l.teacher_id, l.title, l.youtube_id, l.duration_sec, l.sort, true, now() from l

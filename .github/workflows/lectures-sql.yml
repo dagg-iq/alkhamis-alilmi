@@ -1,0 +1,22 @@
+# تصحيح لمرة واحدة على المحاضرات: يشغّل scripts/lectures/once.sql عند تغييره (آمن لإعادة التشغيل)
+name: Lectures one-off SQL
+on:
+  push:
+    branches: ['claude/**', main, claude/repository-name-arabic-iegosv]
+    paths: ['scripts/lectures/once.sql']
+
+env:
+  PROJECT_REF: yjxhprmtyuqnbgraocar
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run once.sql
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          jq -n --rawfile q scripts/lectures/once.sql '{query: $q}' | curl -sS --fail-with-body -X POST \
+            "https://api.supabase.com/v1/projects/$PROJECT_REF/database/query" \
+            -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" -H "Content-Type: application/json" --data @-
