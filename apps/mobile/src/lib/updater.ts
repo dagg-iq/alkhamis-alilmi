@@ -80,9 +80,12 @@ export async function startDownload(info: UpdateInfo): Promise<void> {
   cancelled = false;
   setState({ status: 'downloading', version: info.version, received: 0, total: info.sizeMb ? info.sizeMb * 1048576 : 0, error: undefined });
   let lastNotify = 0;
+  // الحجم الحقيقي من الخادم (Content-Length)؛ size_mb في الموقع مقرّب فلا يصلح للتحقق الدقيق
+  let serverTotal = 0;
   try {
     task = new DownloadTask(info.url, part, {
       onProgress: ({ bytesWritten, totalBytes }) => {
+        if (totalBytes > 0) serverTotal = totalBytes;
         setState({ received: bytesWritten, total: totalBytes > 0 ? totalBytes : state.total });
         const now = Date.now();
         if (now - lastNotify > 1200) {
@@ -94,8 +97,9 @@ export async function startDownload(info: UpdateInfo): Promise<void> {
     await task.downloadAsync();
     task = null;
     if (cancelled) return;
-    const expected = state.total;
-    if (!part.exists || (part.size ?? 0) < 1_000_000 || (expected > 0 && (part.size ?? 0) < expected * 0.9)) throw new Error('الملف المحمّل ناقص');
+    const size = part.exists ? (part.size ?? 0) : 0;
+    // ملف ناقص ولو قليلاً يظهر عند التثبيت «الحزمة غير صالحة»، لذلك نتحقق بدقة قبل عرضه للتثبيت
+    if (size < 1_000_000 || (serverTotal > 0 && size !== serverTotal) || !isCompleteZip(part)) throw new Error('الملف المحمّل ناقص، أعد التحميل');
     part.move(dest);
     setState({ status: 'ready', received: dest.size ?? 0, total: dest.size ?? 0 });
     notifyDownload('اكتمل تحميل تحديث سعي', 'اضغط هنا للتثبيت', true);
@@ -105,6 +109,26 @@ export async function startDownload(info: UpdateInfo): Promise<void> {
     if (cancelled) return; // ألغاه الطالب: ليس خطأ
     setState({ status: 'error', error: e instanceof Error ? e.message : 'تعذّر التحميل' });
     notifyDownload('تعذّر تحميل التحديث', 'افتح سعي وأعد المحاولة', true);
+  }
+}
+
+/** ملف APK هو ملف ZIP ينتهي بسجل «نهاية الدليل» (PK\x05\x06)؛ غيابه يعني أن التحميل انقطع قبل آخره */
+function isCompleteZip(file: File): boolean {
+  let h: ReturnType<File['open']> | null = null;
+  try {
+    h = file.open();
+    const size = h.size ?? file.size ?? 0;
+    const n = Math.min(size, 1024);
+    h.offset = size - n;
+    const b = h.readBytes(n);
+    for (let i = b.length - 22; i >= 0; i--) {
+      if (b[i] === 0x50 && b[i + 1] === 0x4b && b[i + 2] === 0x05 && b[i + 3] === 0x06) return true;
+    }
+    return false;
+  } catch {
+    return true; // تعذّرت القراءة: لا نمنع التثبيت بسبب الفحص نفسه، يكفي فحص الحجم
+  } finally {
+    try { h?.close(); } catch { /* تجاهل */ }
   }
 }
 

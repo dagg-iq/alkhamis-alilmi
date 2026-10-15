@@ -17,6 +17,11 @@ const releaseCfg = `    signingConfigs {
             storePassword System.getenv('SAEY_STORE_PASSWORD')
             keyAlias System.getenv('SAEY_KEY_ALIAS')
             keyPassword System.getenv('SAEY_KEY_PASSWORD')
+            // التوقيع القديم (v1) مع الحديث: بعض الهواتف القديمة (ريلمي/أوبو بأندرويد 10 وما قبله)
+            // ترفض الملف بـ«الحزمة غير صالحة» إن لم تجد توقيع v1، لأن Gradle يحذفه تلقائياً عند minSdk ≥ 24
+            enableV1Signing true
+            enableV2Signing true
+            enableV3Signing true
         }
 `;
 if (!g.includes('    signingConfigs {\n')) throw new Error('لم أجد signingConfigs في build.gradle (تغيّر قالب Expo؟)');

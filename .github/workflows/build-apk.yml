@@ -116,7 +116,13 @@ jobs:
           echo "بصمة توقيع النسخة (يجب أن تبقى ثابتة بين النسخ):"
           # النسخ الحديثة موقّعة بصيغة v2/v3 فلا يقرؤها keytool، لذلك نستخدم apksigner من أدوات أندرويد
           APKSIGNER=$(ls -d "${ANDROID_HOME:-/usr/local/lib/android/sdk}"/build-tools/*/apksigner 2>/dev/null | sort -V | tail -1)
-          if [ -n "$APKSIGNER" ]; then "$APKSIGNER" verify --print-certs out/saey.apk | grep -E 'DN|SHA-256' || true; else echo "apksigner غير متاح"; fi
+          if [ -n "$APKSIGNER" ]; then
+            # نتحقق أن الملف يُثبَّت على كل الأجهزة من أندرويد 7 (API 24) فما فوق، وأن توقيع v1 القديم موجود
+            # (بدونه ترفض بعض هواتف ريلمي/أوبو القديمة الملف بـ«الحزمة غير صالحة»). أي خلل هنا يوقف النشر.
+            "$APKSIGNER" verify --verbose --print-certs --min-sdk-version 24 out/saey.apk > verify.txt || { cat verify.txt; echo "::error::ملف APK لا يجتاز التحقق من التوقيع"; exit 1; }
+            grep -E 'Verified using|DN|SHA-256' verify.txt
+            grep -q 'Verified using v1 scheme (JAR signing): true' verify.txt || { echo "::error::توقيع v1 غير موجود — الهواتف القديمة سترفض الملف"; exit 1; }
+          else echo "apksigner غير متاح"; fi
           ls -lh out
 
       - uses: actions/upload-artifact@v4
