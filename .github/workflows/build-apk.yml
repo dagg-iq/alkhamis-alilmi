@@ -110,18 +110,32 @@ jobs:
           [ -f "$f" ] && sed -e 's/<[^>]*>/ /g' "$f" | tr -s ' \n' | grep -i -E "node|exec|fail|error" | head -60 || true
 
       - name: Rename APK
+        env:
+          SAEY_STORE_PASSWORD: ${{ secrets.SIGNING_PASSPHRASE }}
         run: |
           mkdir -p out
           cp apps/mobile/android/app/build/outputs/apk/release/app-release.apk out/saey.apk
           echo "بصمة توقيع النسخة (يجب أن تبقى ثابتة بين النسخ):"
           # النسخ الحديثة موقّعة بصيغة v2/v3 فلا يقرؤها keytool، لذلك نستخدم apksigner من أدوات أندرويد
           APKSIGNER=$(ls -d "${ANDROID_HOME:-/usr/local/lib/android/sdk}"/build-tools/*/apksigner 2>/dev/null | sort -V | tail -1)
+          # Gradle يتجاهل enableV1Signing عند minSdk ≥ 24، فنعيد التوقيع بنفس المفتاح مع فرض v1+v2+v3
+          if [ -n "$APKSIGNER" ] && [ -n "$SAEY_KEYSTORE" ]; then
+            "$APKSIGNER" sign --ks "$SAEY_KEYSTORE" --ks-key-alias "$SAEY_KEY_ALIAS" \
+              --ks-pass env:SAEY_STORE_PASSWORD --key-pass env:SAEY_STORE_PASSWORD \
+              --min-sdk-version 24 --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true \
+              --out out/saey-signed.apk out/saey.apk
+            mv out/saey-signed.apk out/saey.apk
+            rm -f out/saey.apk.idsig
+          fi
           if [ -n "$APKSIGNER" ]; then
             # نتحقق أن الملف يُثبَّت على كل الأجهزة من أندرويد 7 (API 24) فما فوق، وأن توقيع v1 القديم موجود
             # (بدونه ترفض بعض هواتف ريلمي/أوبو القديمة الملف بـ«الحزمة غير صالحة»). أي خلل هنا يوقف النشر.
-            "$APKSIGNER" verify --verbose --print-certs --min-sdk-version 24 out/saey.apk > verify.txt || { cat verify.txt; echo "::error::ملف APK لا يجتاز التحقق من التوقيع"; exit 1; }
+            # التحقق من مستوى 23: apksigner لا يفحص v1 إطلاقاً إن بدأ من 24 (أندرويد 7+ لا يحتاجه)، ونحن نريد التأكد أن v1 سليم
+            "$APKSIGNER" verify --verbose --print-certs --min-sdk-version 23 out/saey.apk > verify.txt || { cat verify.txt; echo "::error::ملف APK لا يجتاز التحقق من التوقيع"; exit 1; }
             grep -E 'Verified using|DN|SHA-256' verify.txt
-            grep -q 'Verified using v1 scheme (JAR signing): true' verify.txt || { echo "::error::توقيع v1 غير موجود — الهواتف القديمة سترفض الملف"; exit 1; }
+            if [ -n "$SAEY_KEYSTORE" ]; then
+              grep -q 'Verified using v1 scheme (JAR signing): true' verify.txt || { echo "::error::توقيع v1 غير موجود — الهواتف القديمة سترفض الملف"; exit 1; }
+            fi
           else echo "apksigner غير متاح"; fi
           ls -lh out
 

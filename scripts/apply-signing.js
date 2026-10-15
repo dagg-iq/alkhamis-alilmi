@@ -17,8 +17,8 @@ const releaseCfg = `    signingConfigs {
             storePassword System.getenv('SAEY_STORE_PASSWORD')
             keyAlias System.getenv('SAEY_KEY_ALIAS')
             keyPassword System.getenv('SAEY_KEY_PASSWORD')
-            // التوقيع القديم (v1) مع الحديث: بعض الهواتف القديمة (ريلمي/أوبو بأندرويد 10 وما قبله)
-            // ترفض الملف بـ«الحزمة غير صالحة» إن لم تجد توقيع v1، لأن Gradle يحذفه تلقائياً عند minSdk ≥ 24
+            // التوقيع القديم (v1) مع الحديث: بعض الهواتف القديمة (ريلمي/أوبو) ترفض الملف بـ«الحزمة غير صالحة» بدونه.
+            // Gradle قد يتجاهل v1 عند minSdk ≥ 24، لذلك يعيد build-apk.yml التوقيع بـ apksigner ويتحقق منه
             enableV1Signing true
             enableV2Signing true
             enableV3Signing true
