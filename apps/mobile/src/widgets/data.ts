@@ -127,7 +127,8 @@ export async function fetchSnapshot(): Promise<WidgetSnapshot> {
     supabase.from('task_status').select('task_id').eq('user_id', uid),
     supabase.from('posts').select('id, title, kind, published_at').order('is_pinned', { ascending: false }).order('published_at', { ascending: false }).limit(1),
     supabase.from('notifications').select('id', { count: 'exact', head: true }).is('read_at', null),
-    supabase.rpc('my_conversations'),
+    // النسخة ٢ لا تعدّ رسائل النظام؛ الأولى إن كان الخادم أقدم
+    supabase.rpc('my_conversations_v2').then((r) => (r.error ? supabase.rpc('my_conversations') : r)),
   ]);
 
   const rules = settings.grading ? parseRules(settings.grading) : DEFAULT_RULES;

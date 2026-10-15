@@ -63,7 +63,8 @@ Deno.serve(async (req) => {
     await sendPush([r.user_id], r.title, body, { type: r.type, ...r.payload }, 'default', image);
   }
 
-  if (payload.table === 'messages') {
+  // رسائل النظام («أضاف فلان…»، «غادر…») بلا إشعار هاتف؛ من أُضيف يصله إشعار «أضافك» من جدول notifications
+  if (payload.table === 'messages' && r.kind !== 'system') {
     const [{ data: conv }, { data: sender }, { data: members }] = await Promise.all([
       admin.from('conversations').select('id, type, title').eq('id', r.conversation_id).single(),
       admin.from('profiles').select('full_name').eq('id', r.sender_id).single(),

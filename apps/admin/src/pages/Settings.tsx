@@ -14,12 +14,14 @@ export default function Settings() {
   const [grading, setGrading] = useState(DEFAULT_RULES);
   const [registrationOpen, setRegistrationOpen] = useState(true);
   const [dms, setDms] = useState(true);
+  const [groups, setGroups] = useState(true);
 
   useEffect(() => {
     if (!q.data) return;
     setGrading(parseRules(q.data.grading));
     setRegistrationOpen((q.data.registration as { open?: boolean } | undefined)?.open !== false);
     setDms((q.data.chat as { direct_messages?: boolean } | undefined)?.direct_messages !== false);
+    setGroups((q.data.chat as { student_groups?: boolean } | undefined)?.student_groups !== false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q.data]);
 
@@ -32,7 +34,8 @@ export default function Settings() {
     const rows = [
       { key: 'grading', value: { individual_exempt: grading.individualExempt, general_avg: grading.generalAvg, general_min: grading.generalMin, pass: grading.pass, round: grading.round } },
       { key: 'registration', value: { open: registrationOpen } },
-      { key: 'chat', value: { direct_messages: dms } },
+      // بقية مفاتيح الدردشة (مثل group_max_members) تبقى كما هي
+      { key: 'chat', value: { ...((q.data?.chat as Record<string, unknown> | undefined) ?? {}), direct_messages: dms, student_groups: groups } },
     ].map((r) => ({ ...r, updated_at: new Date().toISOString() }));
     await check(supabase.from('app_settings').upsert(rows));
     await q.reload();
@@ -63,6 +66,7 @@ export default function Settings() {
         <h2>التسجيل والدردشة</h2>
         <label className="check"><input type="checkbox" checked={registrationOpen} onChange={(e) => setRegistrationOpen(e.target.checked)} /> استقبال طلبات انضمام جديدة</label>
         <label className="check"><input type="checkbox" checked={dms} onChange={(e) => setDms(e.target.checked)} /> السماح بالرسائل الخاصة بين الطلاب</label>
+        <label className="check"><input type="checkbox" checked={groups} onChange={(e) => setGroups(e.target.checked)} /> السماح للطلاب بإنشاء مجموعات خاصة (حتى ٢٥٦ عضواً، ٣٠ مجموعة لكل طالب)</label>
       </div>
 
       <ScopeNotes />

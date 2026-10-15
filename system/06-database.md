@@ -257,11 +257,18 @@ erDiagram
 | section_id | uuid, nullable | |
 | title | text | |
 | only_staff_can_post | bool | لقنوات الإعلانات |
+| description | text | وصف المجموعة (٣٥) |
+| invite_code | text unique | رابط الدعوة (٣٥) |
+| admins_only | bool | المجموعة: النشر لمالكها ومشرفيها (٣٥) |
+| members_can_add | bool | المجموعة: الأعضاء يضيفون ويشاركون الرابط (٣٥) |
+| pinned_message_id | uuid | الرسالة المثبّتة (بلا مفتاح أجنبي) (٣٥) |
 
 ### `conversation_members`
 | conversation_id, user_id | PK |
 |---|---|
-| last_read_at | timestamptz — عدد غير المقروء |
+| last_read_at | timestamptz — عدد غير المقروء + «قُرئت» |
+| last_delivered_at | timestamptz — «وصلت» (٣٥) |
+| role | `owner` `admin` `member` — أدوار المجموعة (٣٥) |
 | muted | bool |
 
 > مجموعة المدرسة ومجموعات الشعب: العضوية تُضاف تلقائياً عند موافقة الأدمن على الطالب.
@@ -276,7 +283,13 @@ erDiagram
 | reply_to_id | uuid, nullable | الرد على رسالة |
 | attachment | jsonb | `{"type":"image","key":…}` أو `{"type":"lecture","id":…}` أو `document` / `question_set` |
 | mentions | uuid[] | التاغ @ ← إشعار للمذكور |
+| kind | `text` / `system` | رسائل النظام «أضاف فلان…» من الخادم فقط (٣٥) |
 | created_at, edited_at, deleted_at | | |
+
+### `user_presence` (٣٥ — خارج Realtime، بلا سياسات)
+| user_id PK, online, last_seen_at, hidden | نبضة التطبيق المفتوح؛ القراءة عبر `presence_of(uuid[])` فقط |
+
+> دوال المجموعات (٣٥): `create_group_v2`، `group_add_members`، `group_remove_member`، `group_set_admin`، `group_update`، `group_leave`، `group_delete`، `group_invite_code`، `group_preview`، `join_group`، `pin_message`، `mark_delivered`، `my_conversations_v2`، `touch_presence`، `set_presence_hidden`، `my_presence_hidden`.
 
 ### `message_reactions`
 | message_id, user_id, emoji | PK |

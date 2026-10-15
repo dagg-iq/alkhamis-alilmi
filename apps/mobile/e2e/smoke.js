@@ -44,7 +44,11 @@ const data = {
   posts: [{ id: 'p1', author_id: UID, kind: 'holiday', title: 'عطلة غداً', body: 'غداً عطلة رسمية', cover_key: null, section_id: null, is_pinned: true, published_at: new Date().toISOString(), profiles: { full_name: 'الأدمن' } }],
   notifications: [{ id: 'n1', user_id: UID, type: 'post', title: 'عطلة غداً', body: 'تفاصيل', payload: { post_id: 'p1' }, read_at: null, created_at: new Date().toISOString() }],
   app_settings: [{ key: 'grading', value: { individual_exempt: 90, general_avg: 85, general_min: 75, pass: 50, round: 'half_up' } }, { key: 'ai', value: { daily_limit: 20 } }, { key: 'chat', value: { direct_messages: true } }, { key: 'schedule', value: { school_days: [0, 1, 2, 3, 4], start: '08:00', end: '12:00', switch_after: '09:00' } }],
-  conversation_members: [{ profiles: profile }, { profiles: { id: 'u2', full_name: 'حيدر كريم جاسم', avatar_url: null, is_verified: false, role: 'student' } }],
+  conversation_members: [
+    { user_id: UID, role: 'owner', last_read_at: new Date().toISOString(), last_delivered_at: null, joined_at: '2026-10-01T00:00:00Z', profiles: profile },
+    { user_id: 'u2', role: 'member', last_read_at: new Date(Date.now() - 90000).toISOString(), last_delivered_at: new Date().toISOString(), joined_at: '2026-10-01T00:00:00Z', profiles: { id: 'u2', full_name: 'حيدر كريم جاسم', avatar_url: null, is_verified: false, role: 'student' } },
+    { user_id: 'u3', role: 'admin', last_read_at: new Date().toISOString(), last_delivered_at: null, joined_at: '2026-10-01T00:00:00Z', profiles: { id: 'u3', full_name: 'زيد علي حسن', avatar_url: null, is_verified: false, role: 'student' } },
+  ],
   messages: [
     { id: 'm6', conversation_id: 'cv1', sender_id: 'u2', body: null, reply_to_id: null, attachment: { type: 'answer', title: 'لخص لي المتسعات', body: '## أهم التعاريف\n- **السعة:** نسبة الشحنة إلى فرق الجهد\n- ==وحدة السعة هي الفاراد==' }, mentions: [], created_at: new Date().toISOString(), edited_at: null, deleted_at: null },
     { id: 'm5', conversation_id: 'cv1', sender_id: UID, body: null, reply_to_id: null, attachment: { type: 'file', key: 'chat/cv1/x.pdf', title: 'أسئلة المتسعات', size: 254000 }, mentions: [], created_at: new Date().toISOString(), edited_at: null, deleted_at: null },
@@ -52,6 +56,7 @@ const data = {
     { id: 'm3', conversation_id: 'cv1', sender_id: 'u2', body: null, reply_to_id: null, attachment: { type: 'lecture', id: 'l1', title: 'المتسعات — المحاضرة الأولى' }, mentions: [], created_at: new Date(Date.now() - 60000).toISOString(), edited_at: null, deleted_at: null },
     { id: 'm2', conversation_id: 'cv1', sender_id: 'u2', body: 'هذه محاضرة المتسعات، شرحها ممتاز', reply_to_id: null, attachment: null, mentions: [], created_at: new Date(Date.now() - 120000).toISOString(), edited_at: null, deleted_at: null },
     { id: 'm1', conversation_id: 'cv1', sender_id: UID, body: 'السلام عليكم، أحد عنده شرح لفصل المتسعات؟', reply_to_id: null, attachment: null, mentions: [], created_at: new Date(Date.now() - 180000).toISOString(), edited_at: null, deleted_at: null },
+    { id: 'm0', conversation_id: 'cv1', sender_id: UID, body: 'علي أنشأ المجموعة «مراجعة الفيزياء»', kind: 'system', reply_to_id: null, attachment: null, mentions: [], created_at: new Date(Date.now() - 240000).toISOString(), edited_at: null, deleted_at: null },
   ],
   message_reactions: [{ message_id: 'm2', user_id: UID, emoji: '❤️' }],
   ai_chats: [{ id: 'a1', title: 'سؤال عن المتسعات', updated_at: new Date().toISOString() }],
@@ -63,6 +68,16 @@ const rpc = {
   my_conversations: [{ id: 'cv1', type: 'section', title: 'شعبة أ', only_staff_can_post: false, last_message_at: new Date().toISOString(), last_body: 'شكراً، سأراجعها الليلة', last_sender: 'علي', unread: 0, muted: false, peer_id: null, peer_name: null, peer_avatar: null, peer_verified: null },
     { id: 'cv2', type: 'direct', title: null, only_staff_can_post: false, last_message_at: new Date(Date.now() - 3600000).toISOString(), last_body: 'متى امتحان الكيمياء؟', last_sender: 'حيدر', unread: 1, muted: false, peer_id: 'u2', peer_name: 'حيدر كريم جاسم', peer_avatar: null, peer_verified: false },
     { id: 'cv3', type: 'school', title: 'المدرسة', only_staff_can_post: false, last_message_at: new Date().toISOString(), last_body: 'غداً عطلة رسمية بمناسبة المولد النبوي', last_sender: 'الإدارة', unread: 2, muted: false, peer_id: null, peer_name: null, peer_avatar: null, peer_verified: null }],
+  my_conversations_v2: [
+    { id: 'cv1', type: 'group', title: 'مراجعة الفيزياء', only_staff_can_post: false, last_message_at: new Date().toISOString(), last_body: 'شكراً، سأراجعها الليلة', last_sender: 'علي حسين', unread: 0, muted: false, peer_id: null, peer_name: null, peer_avatar: null, peer_verified: null,
+      description: 'نحل تمارين الفصل الأول معاً', my_role: 'owner', admins_only: false, members_can_add: false, pinned_message_id: 'm2', member_count: 3, last_sender_id: UID, last_kind: 'text', last_status: 'delivered', created_by: UID },
+    { id: 'cv2', type: 'direct', title: null, only_staff_can_post: false, last_message_at: new Date(Date.now() - 3600000).toISOString(), last_body: 'متى امتحان الكيمياء؟', last_sender: 'علي', unread: 0, muted: true, peer_id: 'u2', peer_name: 'حيدر كريم جاسم', peer_avatar: null, peer_verified: false,
+      my_role: 'member', member_count: 2, last_sender_id: UID, last_kind: 'text', last_status: 'read' },
+    { id: 'cv3', type: 'school', title: 'المدرسة', only_staff_can_post: false, last_message_at: new Date().toISOString(), last_body: 'غداً عطلة رسمية بمناسبة المولد النبوي', last_sender: 'الإدارة', unread: 2, muted: false, peer_id: null, peer_name: null, peer_avatar: null, peer_verified: null, my_role: 'member', member_count: 240, last_kind: 'text' },
+    { id: 'cv4', type: 'group', title: 'شلة الكيمياء', only_staff_can_post: false, last_message_at: new Date(Date.now() - 7200000).toISOString(), last_body: 'زيد أضاف حسن', last_sender: 'زيد', unread: 0, muted: false, peer_id: null, peer_name: null, peer_avatar: null, peer_verified: null, my_role: 'member', admins_only: true, member_count: 6, last_kind: 'system' }],
+  presence_of: [{ user_id: 'u2', online: true, last_seen_at: new Date().toISOString() }, { user_id: 'u3', online: false, last_seen_at: new Date(Date.now() - 3 * 3600000).toISOString() }],
+  my_presence_hidden: false, mark_delivered: null, touch_presence: null,
+  group_preview: [{ id: 'cv4', title: 'شلة الكيمياء', description: 'أسئلة وأجوبة الكيمياء', member_count: 6, is_member: false }],
   my_study_week: Array.from({ length: 7 }, (_, i) => ({ day: new Date(Date.now() - (6 - i) * 86400000).toISOString().slice(0, 10), minutes: i * 10 })),
   mark_read: null,
   related_topics: [{ document_id: 'd2', document_title: 'ملزمة الأستاذ أحمد', document_kind: 'malzama', outline_id: 'o9', title: 'السعة الكهربائية', start_page: 7, end_page: 12, similarity: 0.81 }],
@@ -83,7 +98,7 @@ const rpc = {
     const url = new URL(req.url());
     const single = (req.headers()['accept'] || '').includes('vnd.pgrst.object');
     let body = [];
-    const m = url.pathname.match(/\/rest\/v1\/(rpc\/)?([a-z_]+)/);
+    const m = url.pathname.match(/\/rest\/v1\/(rpc\/)?([a-z0-9_]+)/);
     if (m) body = m[1] ? (rpc[m[2]] ?? null) : (data[m[2]] ?? []);
     if (req.method() !== 'GET' && !m?.[1]) body = single ? (Array.isArray(body) ? body[0] : body) : [];
     // فلترة id و schedule_id البسيطة (eq.) لتجربة صفحات التفاصيل
@@ -95,7 +110,7 @@ const rpc = {
   });
   const routes = process.env.ROUTES ? process.env.ROUTES.split(',') : ['/', '/subjects', '/grades', '/chat', '/more', '/subject/s0', '/subject/s2', '/lecture/l1', '/questions/q1', '/grades/s0', '/grades/edit',
     '/planner', '/planner/new', '/news', '/news/p1', '/news/new', '/notifications', '/ai', '/ai/a1', '/quiz/c1', '/timer', '/scan', '/scan-result', '/schedules', '/schedules/sc1', '/schedules/sc2', '/about', '/document/d1',
-    `/profile/${UID}`, '/settings', '/document/d1', '/chat/cv1', '/chat/new'];
+    `/profile/${UID}`, '/settings', '/document/d1', '/chat/cv1', '/chat/new', '/chat/new-group', '/chat/info/cv1', '/join/abcdef1234'];
   const results = [];
   for (const r of routes) {
     const page = await ctx.newPage();

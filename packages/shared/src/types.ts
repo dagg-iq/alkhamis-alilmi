@@ -114,7 +114,16 @@ export interface Conversation {
   only_staff_can_post: boolean;
   created_at: string;
   last_message_at: string | null;
+  description?: string | null;
+  invite_code?: string | null;
+  /** المجموعة: النشر لمالكها ومشرفيها فقط */
+  admins_only?: boolean;
+  /** المجموعة: كل الأعضاء يضيفون غيرهم ويشاركون رابط الدعوة */
+  members_can_add?: boolean;
+  pinned_message_id?: string | null;
 }
+export type GroupRole = 'owner' | 'admin' | 'member';
+export const GROUP_ROLE_LABELS: Record<GroupRole, string> = { owner: 'المالك', admin: 'مشرف المجموعة', member: 'عضو' };
 export type Attachment =
   | { type: 'image'; key: string; width?: number; height?: number }
   | {
@@ -145,6 +154,8 @@ export interface Message {
   deleted_at: string | null;
   /** أُعيد توجيهها من محادثة أخرى */
   forwarded?: boolean;
+  /** system: رسالة من الخادم («أضاف فلان…») تظهر في وسط المحادثة */
+  kind?: 'text' | 'system';
 }
 export interface AiSource { title: string; subject?: string; chapter?: string; page?: number; printed?: string; document_id?: string; lecture_id?: string; start?: number }
 export interface AiMessage { id: string; chat_id: string; role: 'user' | 'assistant'; content: string; sources: AiSource[] | null; created_at: string }

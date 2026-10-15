@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>دعوة لمجموعة — سعي</title>
+  <meta name="description" content="دعوة للانضمام إلى مجموعة في تطبيق سعي لطلاب الخامس العلمي." />
+  <meta name="robots" content="noindex" />
+  <meta name="theme-color" content="#111111" />
+  <link rel="icon" type="image/png" href="/favicon.png" />
+  <style>
+    @font-face { font-family: 'Sans'; src: url('/fonts/thmanyahsans-Regular.woff2') format('woff2'); font-weight: 400; font-display: swap; }
+    @font-face { font-family: 'Sans'; src: url('/fonts/thmanyahsans-Bold.woff2') format('woff2'); font-weight: 700; font-display: swap; }
+    @font-face { font-family: 'Display'; src: url('/fonts/thmanyahserifdisplay-Black.woff2') format('woff2'); font-weight: 900; font-display: swap; }
+    :root { --bg: #F5F5F2; --card: #FFFFFF; --ink: #111111; --ink2: #5C5C5C; --line: #E2E2DC; --accent: #2346F5; --accent-ink: #FFFFFF; --soft: #EEF1FF; }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #0E0E0F; --card: #18181A; --ink: #F2F2F0; --ink2: #9E9E9E; --line: #2A2A2D; --accent: #7B92FF; --accent-ink: #0E0E0F; --soft: #1F2340; }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 24px 16px; background: var(--bg); color: var(--ink); font-family: 'Sans', system-ui, sans-serif; }
+    .card { width: 100%; max-width: 420px; background: var(--card); border: 1px solid var(--line); border-radius: 28px; padding: 32px 24px; text-align: center; }
+    .mark { width: 72px; height: 72px; border-radius: 50%; background: var(--soft); display: grid; place-items: center; margin: 0 auto 16px; }
+    h1 { font-family: 'Display', serif; font-weight: 900; font-size: 30px; line-height: 1.5; margin: 0 0 6px; }
+    p { color: var(--ink2); line-height: 1.8; margin: 0 0 20px; }
+    .code { display: inline-block; direction: ltr; font-weight: 700; font-size: 20px; letter-spacing: 2px; padding: 8px 16px; border-radius: 14px; background: var(--bg); margin-bottom: 20px; user-select: all; }
+    a.btn { display: block; height: 52px; line-height: 52px; border-radius: 999px; font-weight: 700; text-decoration: none; margin-top: 10px; }
+    .primary { background: var(--accent); color: var(--accent-ink); }
+    .secondary { border: 1px solid var(--line); color: var(--ink); }
+    .small { font-size: 13px; margin-top: 18px; margin-bottom: 0; }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <div class="mark" aria-hidden="true">
+      <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" style="color: var(--accent)">
+        <circle cx="9" cy="8" r="3.5" /><circle cx="16.5" cy="8.5" r="2.8" /><path d="M3 19a6 6 0 0 1 12 0" /><path d="M16 13a5 5 0 0 1 5 5" />
+      </svg>
+    </div>
+    <h1>دعوة لمجموعة في سعي</h1>
+    <p id="msg">افتح الدعوة في تطبيق سعي للانضمام.</p>
+    <div class="code" id="code" hidden></div>
+    <a class="btn primary" id="open" href="#">افتح في تطبيق سعي</a>
+    <a class="btn secondary" href="/">ليس عندي التطبيق — نزّله</a>
+    <p class="small">أو من التطبيق: الدردشة ← رسالة جديدة ← الانضمام برابط أو رمز دعوة.</p>
+  </main>
+  <script>
+    (function () {
+      var c = (new URLSearchParams(location.search).get('c') || '').toLowerCase();
+      if (!/^[0-9a-f]{10}$/.test(c)) {
+        document.getElementById('msg').textContent = 'الرابط ناقص أو غير صالح. اطلب رابطاً جديداً من مشرف المجموعة.';
+        document.getElementById('open').hidden = true;
+        return;
+      }
+      var code = document.getElementById('code');
+      code.textContent = c;
+      code.hidden = false;
+      var android = /android/i.test(navigator.userAgent);
+      // أندرويد: رابط intent يفتح التطبيق مباشرة، وإن لم يكن مثبتاً يرجع لصفحة التنزيل
+      var href = android
+        ? 'intent://join/' + c + '#Intent;scheme=saey;package=com.saey.app;S.browser_fallback_url=' + encodeURIComponent(location.origin + '/') + ';end'
+        : 'saey://join/' + c;
+      var open = document.getElementById('open');
+      open.href = href;
+      setTimeout(function () { location.href = href; }, 300);
+    })();
+  </script>
+</body>
+</html>

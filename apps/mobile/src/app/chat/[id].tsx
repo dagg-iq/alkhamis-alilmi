@@ -1,4 +1,7 @@
-import { PERIOD_LABELS, arDigits, countOf, formatTime, ROLE_LABELS, type Attachment, type Message, type Profile } from '@saey/shared';
+import {
+  PERIOD_LABELS, arDigits, countOf, formatTime, lastSeenLabel, messageReaders, messageStatus, toMs, typingLabel,
+  type Attachment, type Message, type MessageStatus, type Profile, type Receipt,
+} from '@saey/shared';
 import * as Clipboard from 'expo-clipboard';
 import { Image } from 'expo-image';
 import * as DocumentPicker from 'expo-document-picker';
@@ -17,18 +20,38 @@ import { Icon } from '@/components/icon';
 import { ConversationMark } from '@/components/group-mark';
 import { ForwardSheet } from '@/components/forward-sheet';
 import { tap } from '@/components/motion';
+import { Ticks } from '@/components/receipt';
 import { Sheet, SheetItem } from '@/components/sheet';
 import { Avatar, Field, IconButton, NameLine, Row, T, MAX_WIDTH } from '@/components/ui';
 import { useAuth, useMe } from '@/lib/auth';
-import { ATTACHMENT_LABELS, REACTIONS, conversationTitle, type ConversationRow, type CurriculumAttachment } from '@/lib/chat';
+import {
+  ATTACHMENT_LABELS, REACTIONS, canManage, canPostIn, conversationTitle, fetchConversations,
+  type ConversationRow, type CurriculumAttachment,
+} from '@/lib/chat';
 import { compressImage, signedUrls, uploadFile } from '@/lib/files';
 import { readSnapshot, writeSnapshot } from '@/lib/offline';
 import { cancel as cancelQueued, enqueue, flushOutbox, isOfflineError, onOutbox, pendingFor, uuid, type OutboxItem } from '@/lib/outbox';
+import { usePresence } from '@/lib/presence';
 import { must, supabase } from '@/lib/supabase';
 import { fonts, useTheme } from '@/lib/theme';
+import { sendTyping, subscribeTyping, type Typist } from '@/lib/typing';
 
 type Member = Pick<Profile, 'id' | 'full_name' | 'avatar_url' | 'is_verified' | 'role'>;
-interface ChatSnap { conv: ConversationRow | null; members: Record<string, Member>; messages: Message[] }
+interface ChatSnap { conv: ConversationRow | null; members: Record<string, Member>; messages: Message[]; receipts?: Receipt[] }
+type MemberRow = Receipt & { role?: string; profiles: Member | null };
+
+/** الأعضاء مع آخر قراءة ووصول (وإن كان الخادم أقدم: بلا «وصلت») */
+async function fetchMembers(id: string): Promise<MemberRow[]> {
+  const full = await supabase.from('conversation_members')
+    .select('user_id, role, last_read_at, last_delivered_at, joined_at, profiles(id, full_name, avatar_url, is_verified, role)').eq('conversation_id', id);
+  if (!full.error) return full.data as unknown as MemberRow[];
+  const basic = await must(supabase.from('conversation_members')
+    .select('user_id, last_read_at, joined_at, profiles(id, full_name, avatar_url, is_verified, role)').eq('conversation_id', id));
+  return (basic as unknown as MemberRow[]).map((r) => ({ ...r, last_delivered_at: null }));
+}
+const toReceipts = (rows: MemberRow[]): Receipt[] =>
+  rows.map((r) => ({ user_id: r.user_id, last_read_at: r.last_read_at, last_delivered_at: r.last_delivered_at ?? null, joined_at: r.joined_at }));
+const isSystem = (m: Message) => m.kind === 'system';
 
 /** رسالة من صندوق الصادر بشكل رسالة عادية (تظهر في المحادثة بانتظار الإنترنت) */
 const fromOutbox = (x: OutboxItem): Message => ({
@@ -49,7 +72,17 @@ export default function ChatScreen() {
 
   const [conv, setConv] = useState<ConversationRow | null>(null);
   const [members, setMembers] = useState<Record<string, Member>>({});
-  const [membersOpen, setMembersOpen] = useState(false);
+  // آخر قراءة ووصول لكل عضو ← علامات ✓ ✓✓
+  const [receipts, setReceipts] = useState<Receipt[]>([]);
+  // لم يعد عضواً (أُزيل من المجموعة أو غادرها)
+  const [removed, setRemoved] = useState(false);
+  const [typists, setTypists] = useState<Typist[]>([]);
+  // أول رسالة غير مقروءة عند الفتح ← فاصل «رسائل غير مقروءة»
+  const [unreadFrom, setUnreadFrom] = useState<string | null>(null);
+  const [pinned, setPinned] = useState<Message | null>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [infoFor, setInfoFor] = useState<Message | null>(null);
+  const [showDown, setShowDown] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [reactions, setReactions] = useState<Reaction[]>([]);
   const [images, setImages] = useState<Record<string, string>>({});
@@ -88,6 +121,26 @@ export default function ChatScreen() {
     supabase.rpc('mark_read', { p_conversation: id }).then(() => {});
   }, [id]);
 
+  const applyMembers = useCallback((rows: MemberRow[]) => {
+    const map: Record<string, Member> = {};
+    for (const row of rows) if (row.profiles) map[row.profiles.id] = row.profiles;
+    setMembers(map);
+    setReceipts(toReceipts(rows));
+  }, []);
+
+  // بعد رسالة نظام (إضافة، إزالة، تغيير الاسم أو الإعدادات): نعيد الأعضاء وبيانات المحادثة
+  const reloadMeta = useCallback(async () => {
+    try {
+      const [convs, rows] = await Promise.all([fetchConversations(), fetchMembers(id)]);
+      const found = convs.find((x) => x.id === id) ?? null;
+      setConv(found);
+      setRemoved(!found);
+      applyMembers(rows);
+    } catch {
+      // يبقى الحال كما هو
+    }
+  }, [id, applyMembers]);
+
   const loadImages = useCallback(async (list: Message[]) => {
     const keys = list.filter((m) => m.attachment?.type === 'image' && !m.deleted_at)
       .map((m) => (m.attachment as { key: string }).key);
@@ -118,6 +171,7 @@ export default function ChatScreen() {
         fromSnap.current = true;
         setConv(snap.conv);
         setMembers(snap.members);
+        if (snap.receipts) setReceipts(snap.receipts);
         setMessages([...queuedMsgs, ...snap.messages.filter((m) => !waiting.some((x) => x.id === m.id))].sort(byNewest));
         setLoading(false);
       } else if (queuedMsgs.length) {
@@ -125,16 +179,23 @@ export default function ChatScreen() {
       }
       try {
         const [convs, mem, msgs] = await Promise.all([
-          must(supabase.rpc('my_conversations')) as Promise<ConversationRow[]>,
-          must(supabase.from('conversation_members').select('profiles(id, full_name, avatar_url, is_verified, role)').eq('conversation_id', id)),
+          fetchConversations(),
+          fetchMembers(id),
           must(supabase.from('messages').select('*').eq('conversation_id', id).order('created_at', { ascending: false }).limit(PAGE)),
         ]);
-        setConv(convs.find((x) => x.id === id) ?? null);
-        const map: Record<string, Member> = {};
-        for (const row of mem as unknown as { profiles: Member | null }[]) if (row.profiles) map[row.profiles.id] = row.profiles;
-        setMembers(map);
+        const found = convs.find((x) => x.id === id) ?? null;
+        setConv(found);
+        setRemoved(!found);
+        applyMembers(mem);
         const list = msgs as Message[];
         if (!alive) return;
+        // فاصل «غير مقروءة»: من آخر قراءة قبل الفتح (قبل mark_read)
+        const mine = mem.find((r) => r.user_id === me.id);
+        if (mine) {
+          const since = toMs(mine.last_read_at);
+          const firstUnread = [...list].reverse().find((m) => m.sender_id !== me.id && !isSystem(m) && toMs(m.created_at) > since);
+          setUnreadFrom(firstUnread?.id ?? null);
+        }
         // المنتظر في صندوق الصادر يبقى ظاهراً فوق ما جاء من الخادم
         const still = await pendingFor(id);
         setMessages([...still.map(fromOutbox).filter((m) => !list.some((x) => x.id === m.id)), ...list].sort(byNewest));
@@ -150,19 +211,20 @@ export default function ChatScreen() {
       }
     })();
     return () => { alive = false; };
-  }, [id, loadImages, loadReactions, markRead]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, loadImages, loadReactions, markRead, applyMembers]);
 
   // حفظ آخر ما ظهر (بدون المنتظر في الصادر — له مخزنه)
   useEffect(() => {
     if (loading) return;
     const t = setTimeout(() => {
       writeSnapshot(`chat:${id}`, {
-        conv, members,
+        conv, members, receipts,
         messages: messages.filter((m) => !queuedRef.current.has(m.id) && !pendingRef.current.has(m.id)).slice(0, PAGE),
       } satisfies ChatSnap);
     }, 800);
     return () => clearTimeout(t);
-  }, [id, conv, members, messages, loading]);
+  }, [id, conv, members, receipts, messages, loading]);
 
   // صندوق الصادر: رسالة منتظرة وصلت للخادم أو رُفضت
   useEffect(() => onOutbox((e) => {
@@ -187,7 +249,10 @@ export default function ChatScreen() {
         setMessages((prev) => (prev.some((x) => x.id === m.id) ? prev : [m, ...prev]));
         loadImages([m]);
         markRead();
-        if (!members[m.sender_id]) {
+        // رسالته وصلت ← توقف عن «يكتب…» فوراً
+        setTypists((t) => t.filter((x) => x.user_id !== m.sender_id));
+        if (isSystem(m)) reloadMeta();
+        else if (!members[m.sender_id]) {
           supabase.from('profiles').select('id, full_name, avatar_url, is_verified, role').eq('id', m.sender_id).single()
             .then(({ data }) => data && setMembers((prev) => ({ ...prev, [data.id]: data as Member })));
         }
@@ -203,6 +268,22 @@ export default function ChatScreen() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'message_reactions' }, (p) => {
         const r = (p.new && 'message_id' in p.new ? p.new : p.old) as Reaction;
         if (r?.message_id) loadReactions([r.message_id]);
+      })
+      // الاسم والوصف والرسالة المثبّتة و«للمشرفين فقط»
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'conversations', filter: `id=eq.${id}` }, (p) => {
+        const n = p.new as Partial<ConversationRow>;
+        setConv((cur) => (cur ? {
+          ...cur, title: n.title ?? cur.title, description: n.description ?? null, admins_only: n.admins_only ?? cur.admins_only,
+          members_can_add: n.members_can_add ?? cur.members_can_add, pinned_message_id: n.pinned_message_id ?? null,
+          only_staff_can_post: n.only_staff_can_post ?? cur.only_staff_can_post,
+        } : cur));
+      })
+      // الحذف لا يُفلتر في Realtime: نفحص المحادثة بأنفسنا
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'conversation_members' }, (p) => {
+        const old = p.old as { conversation_id?: string; user_id?: string };
+        if (old.conversation_id !== id) return;
+        if (old.user_id === me.id) { setRemoved(true); return; }
+        setReceipts((prev) => prev.filter((r) => r.user_id !== old.user_id));
       })
       .subscribe((status) => {
         // بعد انقطاع (الهاتف نام أو التطبيق في الخلفية) يعود الاتصال لكن الرسائل التي وصلت أثناءه لا تُرسل؛ نجلبها
@@ -221,6 +302,7 @@ export default function ChatScreen() {
             loadImages(fresh);
             markRead();
           });
+        reloadMeta();
       });
     return () => {
       firstSub.current = false;
@@ -228,6 +310,44 @@ export default function ChatScreen() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  // «وصلت» و«قُرئت» لحظياً: الخاصة والمجموعات فقط (في المدرسة والشعب كل قراءة من مئات الطلاب ستصل للجميع)
+  const liveReceipts = conv?.type === 'direct' || conv?.type === 'group';
+  useEffect(() => {
+    if (!liveReceipts) return;
+    const ch = supabase.channel(`receipts:${id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'conversation_members', filter: `conversation_id=eq.${id}` }, (p) => {
+        const r = p.new as Partial<Receipt> | undefined;
+        if (!r?.user_id || !r.last_read_at || !r.joined_at) return;
+        const next: Receipt = { user_id: r.user_id, last_read_at: r.last_read_at, last_delivered_at: r.last_delivered_at ?? null, joined_at: r.joined_at };
+        setReceipts((prev) => (prev.some((x) => x.user_id === next.user_id) ? prev.map((x) => (x.user_id === next.user_id ? next : x)) : [...prev, next]));
+        if (p.eventType === 'INSERT') reloadMeta();
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [id, liveReceipts, reloadMeta]);
+
+  // «يكتب…»
+  useEffect(() => subscribeTyping(id, (list) => setTypists(list.filter((x) => x.user_id !== me.id))), [id, me.id]);
+  const onType = (t: string) => {
+    setText(t);
+    if (!editing) sendTyping(id, { id: me.id, name: me.full_name }, t.trim().length > 0);
+  };
+
+  // الرسالة المثبّتة: من المحمّل أو من الخادم
+  const pinnedId = conv?.pinned_message_id ?? null;
+  useEffect(() => {
+    if (!pinnedId) { setPinned(null); return; }
+    const have = messagesRef.current.find((m) => m.id === pinnedId);
+    if (have) { setPinned(have.deleted_at ? null : have); return; }
+    supabase.from('messages').select('*').eq('id', pinnedId).maybeSingle()
+      .then(({ data }) => setPinned(data && !(data as Message).deleted_at ? (data as Message) : null));
+  }, [pinnedId]);
+
+  // متصل الآن / آخر ظهور (الخاصة: الطرف الآخر · المجموعة: كم متصل)
+  const presenceIds = useMemo(() => (conv?.type === 'direct' ? (conv.peer_id ? [conv.peer_id] : [])
+    : conv?.type === 'group' ? receipts.map((r) => r.user_id).filter((u) => u !== me.id) : []), [conv?.type, conv?.peer_id, receipts, me.id]);
+  const presence = usePresence(presenceIds);
 
   // onEndReached قد يُستدعى مرتين قبل وصول الرد: طلب واحد في الوقت نفسه، وبلا تكرار للرسائل
   const loadingOlder = useRef(false);
@@ -323,6 +443,7 @@ export default function ChatScreen() {
     setPending((p) => new Set(p).add(tempId));
     const savedText = text;
     setText('');
+    sendTyping(id, { id: me.id, name: me.full_name }, false);
     setMentions([]);
     setReplyTo(null);
     const { data, error } = await supabase.from('messages').insert({
@@ -405,10 +526,27 @@ export default function ChatScreen() {
     if (error) Alert.alert('تعذّر الحذف', error.message);
   };
 
-  const canPost = !conv?.only_staff_can_post || isStaff;
+  const canPost = canPostIn(conv, isStaff) && !removed;
   const title = conv ? conversationTitle(conv) : '';
   const isGroup = conv?.type !== 'direct';
   const byId = useMemo(() => Object.fromEntries(messages.map((m) => [m.id, m])), [messages]);
+  // التثبيت: الخاصة الطرفان، المجموعة مشرفوها، المدرسة والشعبة الإدارة
+  const canPin = !removed && (conv?.type === 'direct' || canManage(conv, isStaff) || (isStaff && !!conv));
+  const statusOf = (m: Message): MessageStatus => (liveReceipts ? messageStatus(m.created_at, me.id, receipts) : 'sent');
+  const pin = async (m: Message | null) => {
+    setActionFor(null);
+    const { error } = await supabase.rpc('pin_message', { p_conversation: id, p_message: m?.id ?? null });
+    if (error) return Alert.alert(m ? 'تعذّر التثبيت' : 'تعذّر إلغاء التثبيت', error.message);
+    setConv((cur) => (cur ? { ...cur, pinned_message_id: m?.id ?? null } : cur));
+  };
+
+  const typing = typingLabel(typists.map((t) => members[t.user_id]?.full_name ?? t.name), isGroup);
+  const onlineCount = conv?.type === 'group' ? Object.values(presence).filter((p) => p.online).length : 0;
+  const peerSeen = conv?.type === 'direct' && conv.peer_id && presence[conv.peer_id]
+    ? lastSeenLabel(presence[conv.peer_id].online, presence[conv.peer_id].last_seen_at) : null;
+  const subtitle = typing ?? (isGroup
+    ? `${countOf(conv?.member_count ?? Object.keys(members).length, 'عضو', 'عضوان', 'أعضاء', 'عضو واحد')}${onlineCount ? `، ${arDigits(onlineCount)} متصل` : ''}`
+    : peerSeen ?? 'محادثة خاصة');
 
   return (
     <KeyboardView style={{ flex: 1, backgroundColor: c.bg }} bottomInset={insets.bottom}>
@@ -417,21 +555,35 @@ export default function ChatScreen() {
         <Row>
           <IconButton name="back" label="رجوع" onPress={() => router.back()} size={40} />
           <Pressable style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 }}
-            accessibilityLabel={isGroup ? 'عرض الأعضاء' : 'الملف الشخصي'}
+            accessibilityLabel={isGroup ? 'معلومات المحادثة' : 'الملف الشخصي'}
             onPress={() => {
               if (conv?.type === 'direct') { if (conv.peer_id) router.push(`/profile/${conv.peer_id}`); }
-              else setMembersOpen(true);
+              else router.push({ pathname: '/chat/info/[id]', params: { id } });
             }}>
             {conv?.type === 'direct'
               ? <Avatar name={conv.peer_name ?? '؟'} url={conv.peer_avatar} size={38} />
               : <ConversationMark type={conv?.type ?? 'group'} title={title} size={38} />}
             <View style={{ flex: 1 }}>
               <NameLine name={title} verified={conv?.type === 'direct' && !!conv.peer_verified} size={16} />
-              <T dim size={12}>{isGroup ? countOf(Object.keys(members).length, 'عضو', 'عضوان', 'أعضاء', 'عضو واحد') : 'محادثة خاصة'}</T>
+              <T dim={!typing} size={12} lines={1} weight={typing ? 'bold' : undefined} color={typing ? c.accent : undefined}>{subtitle}</T>
             </View>
           </Pressable>
+          <IconButton name="search" label="بحث في المحادثة" size={40} onPress={() => setSearchOpen(true)} />
         </Row>
       </View>
+
+      {/* الرسالة المثبّتة */}
+      {pinned ? (
+        <Pressable onPress={() => jumpTo(pinned.id)} accessibilityRole="button" accessibilityLabel="الرسالة المثبّتة"
+          style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingVertical: 8, backgroundColor: c.card, borderBottomWidth: 1, borderBottomColor: c.line }}>
+          <Icon name="pin" size={18} color={c.accent} />
+          <View style={{ flex: 1 }}>
+            <T size={12} weight="bold" color={c.accent}>رسالة مثبّتة</T>
+            <T size={13} lines={1}>{pinned.body ?? (pinned.attachment?.type === 'image' ? 'صورة' : pinned.attachment && 'title' in pinned.attachment ? pinned.attachment.title : 'مرفق')}</T>
+          </View>
+          {canPin ? <IconButton name="close" label="إلغاء التثبيت" size={32} onPress={() => pin(null)} /> : null}
+        </Pressable>
+      ) : null}
 
       {loading ? <ActivityIndicator color={c.accent} style={{ marginTop: 40 }} /> : (
         <FlatList
@@ -447,17 +599,36 @@ export default function ChatScreen() {
           contentContainerStyle={{ padding: 12, gap: 4, width: '100%', maxWidth: MAX_WIDTH, alignSelf: 'center' }}
           onEndReached={loadOlder}
           onEndReachedThreshold={0.3}
+          onScroll={(e) => { const far = e.nativeEvent.contentOffset.y > 600; if (far !== showDown) setShowDown(far); }}
+          scrollEventThrottle={100}
           renderItem={({ item, index }) => {
             const older = messages[index + 1];
-            const showName = isGroup && item.sender_id !== me.id && older?.sender_id !== item.sender_id;
+            const showName = isGroup && item.sender_id !== me.id && (older?.sender_id !== item.sender_id || (older && isSystem(older)));
             const dayChanged = !older || new Date(older.created_at).toDateString() !== new Date(item.created_at).toDateString();
+            const day = dayChanged ? (
+              <View style={{ alignSelf: 'center', marginVertical: 10, paddingHorizontal: 12, paddingVertical: 4, borderRadius: 999, backgroundColor: c.card }}>
+                <T dim size={12}>{new Date(item.created_at).toDateString() === new Date().toDateString() ? 'اليوم' : new Date(item.created_at).toLocaleDateString('ar-IQ')}</T>
+              </View>
+            ) : null;
+            const unreadBar = unreadFrom === item.id ? (
+              <View style={{ alignSelf: 'stretch', alignItems: 'center', marginVertical: 8, paddingVertical: 4, backgroundColor: c.soft, borderRadius: 999 }}>
+                <T size={12} weight="bold" color={c.accent}>رسائل غير مقروءة</T>
+              </View>
+            ) : null;
+            if (isSystem(item)) {
+              return (
+                <View>
+                  {day}
+                  <View style={{ alignSelf: 'center', maxWidth: '88%', marginVertical: 4, paddingHorizontal: 12, paddingVertical: 5, borderRadius: 14, backgroundColor: c.card, borderWidth: 1, borderColor: c.line }}>
+                    <T dim size={12} center>{item.body}</T>
+                  </View>
+                </View>
+              );
+            }
             return (
               <View style={{ borderRadius: 16, backgroundColor: highlight === item.id ? c.soft : 'transparent' }}>
-                {dayChanged ? (
-                  <View style={{ alignSelf: 'center', marginVertical: 10, paddingHorizontal: 12, paddingVertical: 4, borderRadius: 999, backgroundColor: c.card }}>
-                    <T dim size={12}>{new Date(item.created_at).toDateString() === new Date().toDateString() ? 'اليوم' : new Date(item.created_at).toLocaleDateString('ar-IQ')}</T>
-                  </View>
-                ) : null}
+                {day}
+                {unreadBar}
                 <Bubble
                   m={item}
                   mine={item.sender_id === me.id}
@@ -476,6 +647,7 @@ export default function ChatScreen() {
                   myId={me.id}
                   pending={pending.has(item.id)}
                   queued={queued.has(item.id)}
+                  status={item.sender_id === me.id && !pending.has(item.id) && !queued.has(item.id) && !item.deleted_at ? statusOf(item) : undefined}
                   onImage={setViewing}
                   onLongPress={() => {
                     if (queued.has(item.id)) {
@@ -532,7 +704,7 @@ export default function ChatScreen() {
           <TextInput
             ref={inputRef}
             value={text}
-            onChangeText={setText}
+            onChangeText={onType}
             placeholder="اكتب رسالة…"
             placeholderTextColor={c.ink3}
             multiline
@@ -548,7 +720,9 @@ export default function ChatScreen() {
         </Row>
       ) : (
         <View style={{ backgroundColor: c.card, padding: 16, paddingBottom: insets.bottom + 16, borderTopWidth: 1, borderTopColor: c.line }}>
-          <T dim center size={13}>هذه قناة إعلانات — النشر للأدمن والمشرفين فقط</T>
+          <T dim center size={13}>{removed ? 'لم تعد عضواً في هذه المحادثة'
+            : conv?.only_staff_can_post ? 'هذه قناة إعلانات — النشر للأدمن والمشرفين فقط'
+            : 'النشر في هذه المجموعة لمشرفيها فقط'}</T>
         </View>
       )}
 
@@ -564,6 +738,10 @@ export default function ChatScreen() {
               ))}
             </Row>
             {canPost ? <SheetItem icon="reply" label="رد" onPress={() => { setReplyTo(actionFor); setActionFor(null); inputRef.current?.focus(); }} /> : null}
+            {actionFor.sender_id === me.id && !queued.has(actionFor.id) ? <SheetItem icon="info" label="معلومات الرسالة" onPress={() => { setInfoFor(actionFor); setActionFor(null); }} /> : null}
+            {canPin ? (pinnedId === actionFor.id
+              ? <SheetItem icon="pin" label="إلغاء التثبيت" onPress={() => pin(null)} />
+              : <SheetItem icon="pin" label="تثبيت" onPress={() => pin(actionFor)} />) : null}
             <SheetItem icon="forward-msg" label="إعادة توجيه" onPress={() => { setForwardOf(actionFor); setActionFor(null); }} />
  {actionFor.body ? <SheetItem icon="sparkles" label="اسأل مساعد سعي عنها" onPress={() => { const b = actionFor.body ?? ''; setActionFor(null); router.push({ pathname: '/ai', params: { prompt: b } }); }} /> : null}
             {actionFor.body ? <SheetItem icon="copy" label="نسخ النص" onPress={() => { Clipboard.setStringAsync(actionFor.body ?? ''); setActionFor(null); }} /> : null}
@@ -586,8 +764,15 @@ export default function ChatScreen() {
           router.push({ pathname: '/ai', params: text.trim() ? { prompt: text.trim() } : {} });
         }} />
       </Sheet>
-      <MembersSheet visible={membersOpen} onClose={() => setMembersOpen(false)} members={Object.values(members)}
-        title={title} type={conv?.type === 'direct' ? 'group' : conv?.type ?? 'group'} />
+      <SearchSheet visible={searchOpen} conversationId={id} members={members} onClose={() => setSearchOpen(false)}
+        onPick={(m) => { setSearchOpen(false); jumpTo(m.id); }} />
+      <InfoSheet message={infoFor} receipts={receipts} members={members} myId={me.id} direct={conv?.type === 'direct'} onClose={() => setInfoFor(null)} />
+      {showDown ? (
+        <Pressable onPress={() => listRef.current?.scrollToOffset({ offset: 0, animated: true })} accessibilityRole="button" accessibilityLabel="آخر الرسائل"
+          style={{ position: 'absolute', left: 16, bottom: insets.bottom + 90, width: 44, height: 44, borderRadius: 22, backgroundColor: c.card, borderWidth: 1, borderColor: c.line, alignItems: 'center', justifyContent: 'center' }}>
+          <Icon name="arrow-down" size={20} color={c.ink} />
+        </Pressable>
+      ) : null}
       <CurriculumPicker visible={curriculumOpen} onClose={() => setCurriculumOpen(false)}
         onPick={(a) => { setCurriculumOpen(false); send(a); }} />
       <ImageViewer url={viewing} onClose={() => setViewing(null)} />
@@ -597,54 +782,14 @@ export default function ChatScreen() {
 }
 
 // ---------------------------------------------------------------- الفقاعة
-const ROLE_ORDER: Member['role'][] = ['admin', 'moderator', 'student'];
-const ROLE_GROUP: Record<Member['role'], string> = { admin: 'الإدارة', moderator: 'المشرفون', student: 'الطلاب' };
-
-/** أعضاء المجموعة/الشعبة مصنّفين حسب الدور */
-function MembersSheet({ visible, onClose, members, title, type }: {
-  visible: boolean; onClose: () => void; members: Member[]; title: string; type: 'school' | 'section' | 'group';
-}) {
-  const { c } = useTheme();
-  const groups = ROLE_ORDER.map((role) => ({
-    role,
-    list: members.filter((m) => m.role === role).sort((a, b) => a.full_name.localeCompare(b.full_name, 'ar')),
-  })).filter((g) => g.list.length);
-  return (
-    <Sheet visible={visible} onClose={onClose}>
-      <View style={{ alignItems: 'center', gap: 8, paddingBottom: 8 }}>
-        <ConversationMark type={type} title={title} size={72} />
-        <T display size={24} center>{title}</T>
-        <T dim size={13}>{countOf(members.length, 'عضو', 'عضوان', 'أعضاء', 'عضو واحد')}</T>
-      </View>
-      <ScrollView style={{ maxHeight: 420 }}>
-        {groups.map((g) => (
-          <View key={g.role} style={{ gap: 2, marginTop: 10 }}>
-            <T weight="bold" size={13} color={c.ink2}>{ROLE_GROUP[g.role]} · {arDigits(g.list.length)}</T>
-            {g.list.map((m) => (
-              <Pressable key={m.id} onPress={() => { onClose(); router.push(`/profile/${m.id}`); }}
-                style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 8, opacity: pressed ? 0.6 : 1 })}>
-                <Avatar name={m.full_name} url={m.avatar_url} size={42} verified={m.is_verified} />
-                <View style={{ flex: 1 }}><NameLine name={m.full_name} verified={m.is_verified} /></View>
-                <View style={{ paddingHorizontal: 10, paddingVertical: 2, borderRadius: 999, backgroundColor: m.role === 'student' ? c.soft : m.role === 'admin' ? c.ink : c.accent }}>
-                  <T size={11} weight="bold" color={m.role === 'student' ? c.accent : m.role === 'admin' ? c.bg : '#FFFFFF'}>{ROLE_LABELS[m.role]}</T>
-                </View>
-              </Pressable>
-            ))}
-          </View>
-        ))}
-      </ScrollView>
-    </Sheet>
-  );
-}
-
 const SWIPE = 64;
 // التطبيق يقلب يسار/يمين في وضع RTL (swapLeftAndRightInRTL)، والسحب بالبكسل الفعلي: نحدد الجهة الفعلية
 const FLIP = I18nManager.isRTL && I18nManager.doLeftAndRightSwapInRTL;
 const PHYS_LEFT = FLIP ? { right: 0 } : { left: 0 };
 const PHYS_RIGHT = FLIP ? { left: 0 } : { right: 0 };
 
-function Bubble({ m, mine, sender, showName, reply, replySender, imageUrl, reactions, myId, pending, queued, onLongPress, onReact, onImage, onReplyPress, onSwipeReply }: {
-  m: Message; mine: boolean; sender?: Member; showName: boolean; reply?: Message; replySender?: string;
+function Bubble({ m, mine, sender, showName, reply, replySender, imageUrl, reactions, myId, pending, queued, status, onLongPress, onReact, onImage, onReplyPress, onSwipeReply }: {
+  m: Message; mine: boolean; sender?: Member; showName: boolean; reply?: Message; replySender?: string; status?: MessageStatus;
   onReplyPress?: () => void; onSwipeReply?: () => void;
   imageUrl?: string; reactions: Reaction[]; myId: string; pending?: boolean; queued?: boolean; onLongPress: () => void; onReact: (e: string) => void;
   onImage: (url: string) => void;
@@ -747,9 +892,12 @@ function Bubble({ m, mine, sender, showName, reply, replySender, imageUrl, react
             {m.body ? <T size={15} color={fg} selectable>{renderMentions(m.body, mine ? '#FFFFFF' : c.accent)}</T> : null}
           </>
         )}
-        <T size={10} color={sub} style={{ alignSelf: 'flex-end', lineHeight: 17 }}>
-          {m.edited_at && !m.deleted_at ? 'معدّلة · ' : ''}{formatTime(new Date(m.created_at))}{mine ? (queued ? ' · بانتظار الإنترنت' : pending ? ' · يُرسل' : '') : ''}
-        </T>
+        <Row gap={4} style={{ alignSelf: 'flex-end' }}>
+          <T size={10} color={sub} style={{ lineHeight: 17 }}>
+            {m.edited_at && !m.deleted_at ? 'معدّلة · ' : ''}{formatTime(new Date(m.created_at))}{mine && queued ? ' · بانتظار الإنترنت' : ''}
+          </T>
+          {mine && (pending || status) ? <Ticks status={pending ? 'pending' : status!} color={sub} readColor={mine ? '#FFFFFF' : c.accent} size={13} /> : null}
+        </Row>
       </Pressable>
       {grouped.length ? (
         <Row gap={4} style={{ marginTop: -6, paddingHorizontal: 8, alignSelf: mine ? 'flex-start' : 'flex-end' }}>
@@ -825,6 +973,86 @@ function CurriculumPicker({ visible, onClose, onPick }: { visible: boolean; onCl
               <T dim size={12}>{ATTACHMENT_LABELS[r.type]}{r.subtitle ? ` · ${r.subtitle}` : ''}</T>
             </View>
           </Pressable>
+        ))}
+      </ScrollView>
+    </Sheet>
+  );
+}
+
+// ---------------------------------------------------------------- البحث في المحادثة
+function SearchSheet({ visible, conversationId, members, onClose, onPick }: {
+  visible: boolean; conversationId: string; members: Record<string, Member>; onClose: () => void; onPick: (m: Message) => void;
+}) {
+  const { c } = useTheme();
+  const [q, setQ] = useState('');
+  const [results, setResults] = useState<Message[] | null>(null);
+  useEffect(() => {
+    if (!visible) { setQ(''); setResults(null); return; }
+    const term = q.trim();
+    if (term.length < 2) { setResults(null); return; }
+    const t = setTimeout(async () => {
+      // % و _ و , حروف خاصة في البحث: تُزال من النص
+      const safe = term.replace(/[%_,()]/g, ' ');
+      const { data } = await supabase.from('messages').select('*').eq('conversation_id', conversationId).is('deleted_at', null)
+        .ilike('body', `%${safe}%`).order('created_at', { ascending: false }).limit(40);
+      setResults(((data ?? []) as Message[]).filter((m) => !isSystem(m)));
+    }, 300);
+    return () => clearTimeout(t);
+  }, [q, visible, conversationId]);
+  return (
+    <Sheet visible={visible} onClose={onClose}>
+      <T display size={22}>بحث في المحادثة</T>
+      <Field placeholder="اكتب كلمة من الرسالة" value={q} onChangeText={setQ} autoFocus />
+      <ScrollView style={{ maxHeight: 380 }} keyboardShouldPersistTaps="handled">
+        {results === null ? <T dim center style={{ paddingVertical: 20 }}>حرفان على الأقل</T> : results.length === 0 ? (
+          <T dim center style={{ paddingVertical: 20 }}>لا نتائج</T>
+        ) : results.map((m) => (
+          <Pressable key={m.id} onPress={() => onPick(m)} style={({ pressed }) => ({ paddingVertical: 10, gap: 2, opacity: pressed ? 0.6 : 1, borderBottomWidth: 1, borderBottomColor: c.line })}>
+            <Row style={{ justifyContent: 'space-between' }}>
+              <T size={13} weight="bold" color={c.accent}>{members[m.sender_id]?.full_name ?? ''}</T>
+              <T dim size={11}>{new Date(m.created_at).toLocaleDateString('ar-IQ')} · {formatTime(new Date(m.created_at))}</T>
+            </Row>
+            <T size={14} lines={2}>{m.body}</T>
+          </Pressable>
+        ))}
+      </ScrollView>
+    </Sheet>
+  );
+}
+
+// ---------------------------------------------------------------- معلومات الرسالة: من قرأها ومن وصلته
+function InfoSheet({ message, receipts, members, myId, direct, onClose }: {
+  message: Message | null; receipts: Receipt[]; members: Record<string, Member>; myId: string; direct: boolean; onClose: () => void;
+}) {
+  const { c } = useTheme();
+  if (!message) return null;
+  const { read, delivered, waiting } = messageReaders(message.created_at, myId, receipts);
+  const groups = [
+    { key: 'read', title: direct ? 'قُرئت' : 'قرأها', list: read, status: 'read' as const },
+    { key: 'delivered', title: direct ? 'وصلت ولم تُقرأ بعد' : 'وصلت إلى', list: delivered, status: 'delivered' as const },
+    { key: 'waiting', title: direct ? 'لم تصل بعد' : 'لم تصل بعد إلى', list: waiting, status: 'sent' as const },
+  ].filter((g) => g.list.length);
+  return (
+    <Sheet visible onClose={onClose}>
+      <T display size={22}>معلومات الرسالة</T>
+      <View style={{ padding: 12, borderRadius: 16, backgroundColor: c.bg }}>
+        <T size={14} lines={3}>{message.body ?? (message.attachment?.type === 'image' ? 'صورة' : 'مرفق')}</T>
+        <T dim size={11} style={{ marginTop: 4 }}>أُرسلت {formatTime(new Date(message.created_at))}</T>
+      </View>
+      <ScrollView style={{ maxHeight: 380 }}>
+        {groups.length === 0 ? <T dim center style={{ paddingVertical: 16 }}>لا أحد غيرك في المحادثة بعد</T> : groups.map((g) => (
+          <View key={g.key} style={{ marginTop: 12, gap: 4 }}>
+            <Row gap={6}>
+              <Ticks status={g.status} color={c.ink3} readColor={c.accent} size={16} />
+              <T weight="bold" size={14}>{g.title}{direct ? '' : ` (${arDigits(g.list.length)})`}</T>
+            </Row>
+            {direct ? null : g.list.map((u) => (
+              <Row key={u} gap={10} style={{ paddingVertical: 6 }}>
+                <Avatar name={members[u]?.full_name ?? '؟'} url={members[u]?.avatar_url} size={34} />
+                <NameLine name={members[u]?.full_name ?? 'عضو'} verified={members[u]?.is_verified} size={14} />
+              </Row>
+            ))}
+          </View>
         ))}
       </ScrollView>
     </Sheet>

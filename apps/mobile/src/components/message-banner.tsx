@@ -30,7 +30,7 @@ export function MessageBanner({ myId }: { myId: string | null }) {
       .channel('message-banner')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, async (payload) => {
         const m = payload.new as Message;
-        if (m.sender_id === myId || path.current === `/chat/${m.conversation_id}`) return;
+        if (m.sender_id === myId || m.kind === 'system' || path.current === `/chat/${m.conversation_id}`) return;
         // نتحقق أن المحادثة غير مكتومة
         const { data: member } = await supabase.from('conversation_members').select('muted')
           .eq('conversation_id', m.conversation_id).eq('user_id', myId).maybeSingle();

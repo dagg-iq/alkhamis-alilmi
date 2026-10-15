@@ -3,11 +3,10 @@ import { router } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { useAuth, useMe } from '@/lib/auth';
-import { conversationTitle, type ConversationRow } from '@/lib/chat';
+import { canPostIn, conversationTitle, fetchConversations, type ConversationRow } from '@/lib/chat';
 import { Alert } from '@/lib/dialog';
 import { forwardMessage } from '@/lib/forward';
 import { readSnapshot } from '@/lib/offline';
-import { supabase } from '@/lib/supabase';
 import { useTheme } from '@/lib/theme';
 import { ConversationMark } from './group-mark';
 import { Icon } from './icon';
@@ -35,13 +34,13 @@ export function ForwardSheet({ message, fromConversation, onClose }: {
     setSearch('');
     // القائمة المحفوظة فوراً، ثم الحديثة من الخادم
     readSnapshot<ConversationRow[]>('chats').then((s) => { if (s) setConvs((cur) => (cur.length ? cur : s)); });
-    supabase.rpc('my_conversations').then(({ data }) => { if (data) setConvs(data as ConversationRow[]); });
+    fetchConversations().then(setConvs, () => {});
   }, [message]);
 
   const list = useMemo(() => {
     const q = search.trim();
     return convs
-      .filter((x) => isStaff || !x.only_staff_can_post)
+      .filter((x) => canPostIn(x, isStaff))
       .filter((x) => !q || conversationTitle(x).includes(q))
       // المحادثة الحالية في آخر القائمة (إعادة التوجيه عادةً لمحادثة أخرى)
       .sort((a, b) => Number(a.id === fromConversation) - Number(b.id === fromConversation));

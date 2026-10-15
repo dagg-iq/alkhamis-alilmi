@@ -112,6 +112,8 @@ export default function Chat() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: '60vh', overflow: 'auto' }}>
                 {(msgs.data ?? []).map((m) => {
                   const p = person(m.sender_id);
+                  // رسالة نظام («أضاف فلان…»): سطر في الوسط بلا حذف
+                  if (m.kind === 'system') return <div key={m.id} className="small dim" style={{ textAlign: 'center' }}>{m.body}</div>;
                   return (
                     <div key={m.id} className="row" style={{ alignItems: 'flex-start', flexWrap: 'nowrap', opacity: m.deleted_at ? 0.5 : 1 }}>
                       <Avatar name={p?.full_name ?? '؟'} url={p?.avatar_url} size={32} />

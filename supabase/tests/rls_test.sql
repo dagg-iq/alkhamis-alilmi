@@ -393,4 +393,202 @@ do $$ begin
   assert (select count(*) from public.notifications where type = 'reminder' and user_id = '00000000-0000-0000-0000-00000000000a') = 0, 'الأدمن وصله تذكير';
 end $$;
 
+
+-- ٣٥) مجموعات الطلاب، وصلت/قُرئت، آخر ظهور
+insert into auth.users (id, email, raw_user_meta_data) values
+  ('00000000-0000-0000-0000-0000000000d1', 'd@x', '{"full_name":"حسن علي"}'),
+  ('00000000-0000-0000-0000-0000000000e1', 'e@x', '{"full_name":"زيد كريم"}');
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000a');
+update public.profiles set status = 'approved', onboarded = true
+  where id in ('00000000-0000-0000-0000-0000000000d1', '00000000-0000-0000-0000-0000000000e1');
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000b');
+select public.create_group_v2('  مجموعة الفيزياء ', array['00000000-0000-0000-0000-0000000000d1']::uuid[], 'نحل التمارين') as sg \gset
+select set_config('t.sg', :'sg', false);
+do $$ begin
+  assert (select title from public.conversations where id = current_setting('t.sg')::uuid) = 'مجموعة الفيزياء', 'الاسم لم يُنظَّف';
+  assert public.group_role(current_setting('t.sg')::uuid) = 'owner', 'المنشئ ليس المالك';
+  assert (select count(*) from public.conversation_members where conversation_id = current_setting('t.sg')::uuid) = 2, 'عدد الأعضاء';
+  assert (select count(*) from public.messages where conversation_id = current_setting('t.sg')::uuid and kind = 'system') = 1, 'لا رسالة «أنشأ»';
+  assert (select unread from public.my_conversations_v2() where id = current_setting('t.sg')::uuid) = 0, 'رسالة النظام حُسبت غير مقروءة';
+  -- الطالب لا يكتب رسالة نظام بنفسه
+  begin
+    insert into public.messages (conversation_id, body, kind) values (current_setting('t.sg')::uuid, 'أزال الأدمن الجميع', 'system');
+    raise exception 'طالب كتب رسالة نظام!';
+  exception when insufficient_privilege then null;
+  end;
+  -- ولا يعدّل رسالة النظام
+  update public.messages set body = 'تعديل' where conversation_id = current_setting('t.sg')::uuid and kind = 'system';
+  assert (select body from public.messages where conversation_id = current_setting('t.sg')::uuid and kind = 'system' limit 1) like '%أنشأ%', 'عُدّلت رسالة النظام';
+  insert into public.messages (conversation_id, body) values (current_setting('t.sg')::uuid, 'أهلاً');
+  -- لم تصل بعد
+  assert (select last_status from public.my_conversations_v2() where id = current_setting('t.sg')::uuid) = 'sent', 'الحالة قبل الوصول';
+  -- الطالب لا يرفع دوره في العضوية
+  update public.conversation_members set role = 'owner' where conversation_id = (select id from public.conversations where type = 'school') and user_id = auth.uid();
+  assert (select role from public.conversation_members where conversation_id = (select id from public.conversations where type = 'school') and user_id = auth.uid()) = 'member',
+    'طالب غيّر دوره';
+end $$;
+reset role;
+
+-- العضو: يرى المجموعة، لا يضيف ولا يزيل، تصل الرسالة ثم يقرؤها
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000d1');
+do $$ begin
+  assert (select count(*) from public.notifications where type = 'group' and payload ->> 'conversation_id' = current_setting('t.sg')) = 1, 'لا إشعار «أضافك»';
+  assert (select unread from public.my_conversations_v2() where id = current_setting('t.sg')::uuid) = 1, 'غير المقروء في المجموعة';
+  begin
+    perform public.group_add_members(current_setting('t.sg')::uuid, array['00000000-0000-0000-0000-0000000000e1']::uuid[]);
+    raise exception 'عضو أضاف بلا صلاحية!';
+  exception when raise_exception then
+    if sqlerrm like 'عضو أضاف%' then raise; end if;
+  end;
+  begin
+    perform public.group_remove_member(current_setting('t.sg')::uuid, '00000000-0000-0000-0000-00000000000b');
+    raise exception 'عضو أزال المالك!';
+  exception when raise_exception then
+    if sqlerrm like 'عضو أزال%' then raise; end if;
+  end;
+  begin
+    perform public.group_invite_code(current_setting('t.sg')::uuid);
+    raise exception 'عضو أخذ رابط الدعوة!';
+  exception when raise_exception then
+    if sqlerrm like 'عضو أخذ%' then raise; end if;
+  end;
+  perform public.mark_delivered();
+end $$;
+reset role;
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000b');
+do $$ begin
+  assert (select last_status from public.my_conversations_v2() where id = current_setting('t.sg')::uuid) = 'delivered', 'لم تُسجَّل «وصلت»';
+end $$;
+reset role;
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000d1');
+select public.mark_read(current_setting('t.sg')::uuid);
+reset role;
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000b');
+do $$ declare code text; begin
+  assert (select last_status from public.my_conversations_v2() where id = current_setting('t.sg')::uuid) = 'read', 'لم تُسجَّل «قُرئت»';
+  -- المالك: النشر للمشرفين فقط، وترقية، ورابط الدعوة
+  perform public.group_update(current_setting('t.sg')::uuid, null, null, true, null);
+  perform public.group_set_admin(current_setting('t.sg')::uuid, '00000000-0000-0000-0000-0000000000d1', true);
+  assert (select role from public.conversation_members where conversation_id = current_setting('t.sg')::uuid and user_id = '00000000-0000-0000-0000-0000000000d1') = 'admin', 'الترقية لمشرف';
+  perform public.group_set_admin(current_setting('t.sg')::uuid, '00000000-0000-0000-0000-0000000000d1', false);
+  assert (select role from public.conversation_members where conversation_id = current_setting('t.sg')::uuid and user_id = '00000000-0000-0000-0000-0000000000d1') = 'member', 'الإرجاع لعضو';
+  code := public.group_invite_code(current_setting('t.sg')::uuid);
+  assert public.group_invite_code(current_setting('t.sg')::uuid) = code, 'الرابط تغيّر بلا طلب';
+  assert public.group_invite_code(current_setting('t.sg')::uuid, true) <> code, 'الرابط لم يتغير عند الإعادة';
+  perform public.pin_message(current_setting('t.sg')::uuid, (select id from public.messages where conversation_id = current_setting('t.sg')::uuid and body = 'أهلاً'));
+  assert (select pinned_message_id from public.conversations where id = current_setting('t.sg')::uuid) is not null, 'لم تُثبَّت';
+end $$;
+reset role;
+
+-- العضو العادي لا ينشر في «للمشرفين فقط»، والجديد ينضم بالرابط
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000d1');
+do $$ begin
+  begin
+    insert into public.messages (conversation_id, body) values (current_setting('t.sg')::uuid, 'ممنوع');
+    raise exception 'عضو نشر في مجموعة للمشرفين فقط!';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    perform public.pin_message(current_setting('t.sg')::uuid, null);
+    raise exception 'عضو ألغى التثبيت!';
+  exception when raise_exception then
+    if sqlerrm like 'عضو ألغى%' then raise; end if;
+  end;
+end $$;
+reset role;
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000e1');
+do $$ declare code text; begin
+  assert (select count(*) from public.conversations where id = current_setting('t.sg')::uuid) = 0, 'غير العضو يرى المجموعة';
+  select invite_code into code from public.conversations where id = current_setting('t.sg')::uuid;  -- لا يراه (RLS)
+  assert code is null, 'غير العضو قرأ الرابط';
+end $$;
+reset role;
+select invite_code as code from public.conversations where id = current_setting('t.sg')::uuid \gset
+select set_config('t.code', :'code', false);
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000e1');
+do $$ begin
+  assert (select member_count from public.group_preview(current_setting('t.code'))) = 2, 'معاينة الرابط';
+  assert public.join_group(upper(current_setting('t.code'))) = current_setting('t.sg')::uuid::uuid, 'الانضمام بالرابط';
+  assert public.join_group(current_setting('t.code')) = current_setting('t.sg')::uuid::uuid, 'الانضمام مرتين';
+  assert (select count(*) from public.conversation_members where conversation_id = current_setting('t.sg')::uuid) = 3, 'عدد بعد الانضمام';
+  begin
+    perform public.join_group('0000000000');
+    raise exception 'انضم برابط خاطئ!';
+  exception when raise_exception then
+    if sqlerrm like 'انضم برابط%' then raise; end if;
+  end;
+  -- الظهور: يظهر لغيره، والمُخفي لا يظهر ولا يرى
+  perform public.touch_presence(true);
+end $$;
+reset role;
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000b');
+do $$ begin
+  perform public.touch_presence(true);
+  assert (select online from public.presence_of(array['00000000-0000-0000-0000-0000000000e1']::uuid[])), 'لا يظهر متصلاً';
+  assert (select count(*) from public.user_presence) = 0, 'قرأ جدول الظهور مباشرة!';
+  perform public.set_presence_hidden(true);
+  assert (select count(*) from public.presence_of(array['00000000-0000-0000-0000-0000000000e1']::uuid[])) = 0, 'المُخفي يرى غيره';
+  assert public.my_presence_hidden(), 'الإخفاء لم يُحفظ';
+end $$;
+reset role;
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000e1');
+do $$ begin
+  assert (select count(*) from public.presence_of(array['00000000-0000-0000-0000-00000000000b']::uuid[])) = 0, 'آخر ظهور المُخفي ظاهر';
+end $$;
+reset role;
+
+-- خروج المالك ← الملكية لأقدم عضو؛ خروج الجميع ← تُحذف المجموعة؛ المالك فقط يحذف
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000d1');
+do $$ begin
+  begin
+    perform public.group_delete(current_setting('t.sg')::uuid);
+    raise exception 'عضو حذف المجموعة!';
+  exception when raise_exception then
+    if sqlerrm like 'عضو حذف%' then raise; end if;
+  end;
+end $$;
+reset role;
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000b');
+select public.group_leave(current_setting('t.sg')::uuid);
+reset role;
+do $$ begin
+  assert (select role from public.conversation_members where conversation_id = current_setting('t.sg')::uuid and user_id = '00000000-0000-0000-0000-0000000000d1') = 'owner', 'الملكية لم تنتقل';
+end $$;
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000d1');
+select public.group_remove_member(current_setting('t.sg')::uuid, '00000000-0000-0000-0000-0000000000e1');
+select public.group_leave(current_setting('t.sg')::uuid);
+reset role;
+do $$ begin
+  assert (select count(*) from public.conversations where id = current_setting('t.sg')::uuid) = 0, 'المجموعة الفارغة بقيت';
+end $$;
+
+-- إيقاف المجموعات من الإعدادات
+insert into public.app_settings (key, value) values ('chat', '{"student_groups": false}')
+  on conflict (key) do update set value = public.app_settings.value || '{"student_groups": false}';
+set role authenticated;
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000b');
+do $$ begin
+  begin
+    perform public.create_group_v2('ممنوعة', array[]::uuid[]);
+    raise exception 'أنشأ مجموعة والإعداد متوقف!';
+  exception when raise_exception then
+    if sqlerrm like 'أنشأ مجموعة%' then raise; end if;
+  end;
+end $$;
+reset role;
+update public.app_settings set value = value - 'student_groups' where key = 'chat';
+
 select 'ALL RLS TESTS PASSED' as result;

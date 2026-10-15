@@ -8,6 +8,7 @@ import { Icon, type IconName } from '@/components/icon';
 import { tap } from '@/components/motion';
 import { T } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
+import { startPresence } from '@/lib/presence';
 import { useTheme } from '@/lib/theme';
 import { useUnreadCount } from '@/lib/unread';
 
@@ -23,7 +24,10 @@ export default function TabsLayout() {
   const { c } = useTheme();
   const insets = useSafeAreaInsets();
   const { profile } = useAuth();
-  const unread = useUnreadCount(profile?.status === 'approved');
+  const approved = profile?.status === 'approved';
+  const unread = useUnreadCount(approved, profile?.id);
+  // «متصل الآن» للآخرين ما دام التطبيق مفتوحاً
+  useEffect(() => (approved ? startPresence() : undefined), [approved]);
 
   return (
     <Tabs

@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, View } from 'react-native';
 import { useMe } from '@/lib/auth';
-import { conversationTitle, type ConversationRow } from '@/lib/chat';
-import { must, supabase } from '@/lib/supabase';
+import { canPostIn, conversationTitle, fetchConversations, type ConversationRow } from '@/lib/chat';
 import { useTheme } from '@/lib/theme';
 import { ConversationMark } from './group-mark';
 import { Sheet } from './sheet';
@@ -21,12 +20,11 @@ export function ConversationPicker({ visible, onClose, onPick, title = 'إرسا
   useEffect(() => {
     if (!visible) return;
     setQ('');
-    (must(supabase.rpc('my_conversations')) as Promise<ConversationRow[]>).then(setList).catch(() => setList([]));
+    fetchConversations().then(setList).catch(() => setList([]));
   }, [visible]);
 
   // المجموعات التي يكتب فيها المشرفون فقط لا تظهر للطالب
-  const canPost = (x: ConversationRow) => !x.only_staff_can_post || me.role !== 'student';
-  const shown = (list ?? []).filter(canPost).filter((x) => !q.trim() || conversationTitle(x).includes(q.trim()));
+  const shown = (list ?? []).filter((x) => canPostIn(x, me.role !== 'student')).filter((x) => !q.trim() || conversationTitle(x).includes(q.trim()));
 
   return (
     <Sheet visible={visible} onClose={onClose}>

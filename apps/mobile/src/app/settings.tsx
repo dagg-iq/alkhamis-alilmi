@@ -12,6 +12,7 @@ import { UpdatePrompt } from '@/components/update-sheet';
 import { checkForUpdate, currentBuild, type UpdateInfo } from '@/lib/updater';
 import { useTheme, type ThemeMode } from '@/lib/theme';
 import { setGoal, useGoal } from '@/lib/goal';
+import { supabase } from '@/lib/supabase';
 import { readWidgetTheme, type WidgetTheme } from '@/widgets/data';
 import { pinWidget, setWidgetTheme, widgetsSupported } from '@/widgets/sync';
 
@@ -38,10 +39,22 @@ export default function Settings() {
   const [wTheme, setWTheme] = useState<WidgetTheme>('system');
   const [update, setUpdate] = useState<UpdateInfo | null>(null);
   const [checking, setChecking] = useState(false);
+  // «متصل الآن» و«آخر ظهور»: الإخفاء متبادل (من أخفى ظهوره لا يرى ظهور غيره)
+  const [showSeen, setShowSeen] = useState(true);
   useEffect(() => {
     readWidgetTheme().then(setWTheme);
     pushRegistered(me.id).then(setPush).catch(() => {});
+    supabase.rpc('my_presence_hidden').then(({ data, error }) => { if (!error) setShowSeen(!data); });
   }, [me.id]);
+
+  const toggleSeen = async (v: boolean) => {
+    setShowSeen(v);
+    const { error } = await supabase.rpc('set_presence_hidden', { p_hidden: !v });
+    if (error) {
+      setShowSeen(!v);
+      Alert.alert('تعذّر الحفظ', error.message);
+    }
+  };
 
   const togglePush = async (v: boolean) => {
     setPush(v);
@@ -79,6 +92,14 @@ export default function Settings() {
             <T dim size={13}>الأخبار، الرسائل، والواجبات الجديدة</T>
           </View>
           <Switch value={push} onValueChange={togglePush} trackColor={{ true: c.accent, false: c.line }} />
+        </Row>
+        <Divider />
+        <Row style={{ justifyContent: 'space-between', paddingVertical: 12 }}>
+          <View style={{ flex: 1 }}>
+            <T weight="bold" size={16}>إظهار «متصل» وآخر ظهور</T>
+            <T dim size={13}>إذا أخفيته لن ترى أنت أيضاً آخر ظهور غيرك</T>
+          </View>
+          <Switch value={showSeen} onValueChange={toggleSeen} trackColor={{ true: c.accent, false: c.line }} accessibilityLabel="إظهار آخر ظهور" />
         </Row>
       </Card>
       {widgetsSupported ? (

@@ -34,7 +34,7 @@ const INDEX = `${PREFIX}index`;
 // (الرسائل تُحفظ: آخر صفحة من كل محادثة تظهر بلا إنترنت — وتُمسح عند الخروج مع الباقي)
 const SKIP_TABLES = new Set(['content_chunks', 'push_tokens', 'audit_log', 'ai_cache', 'ai_usage']);
 // دوال قراءة فقط يمكن حفظ نتيجتها
-const READ_RPC = new Set(['my_conversations']);
+const READ_RPC = new Set(['my_conversations', 'my_conversations_v2']);
 
 function hash(s: string): string {
   let h = 5381;
