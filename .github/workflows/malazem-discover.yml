@@ -4,7 +4,10 @@ on:
   workflow_dispatch:
   push:
     branches: ['claude/**']
-    paths: ['scripts/malazem/pages.json', 'scripts/malazem/discover.mjs', '.github/workflows/malazem-discover.yml']
+    paths: ['scripts/malazem/pages.json', 'scripts/malazem/discover.mjs', 'scripts/malazem/search.mjs', '.github/workflows/malazem-discover.yml']
+
+env:
+  PROJECT_REF: yjxhprmtyuqnbgraocar
 
 jobs:
   discover:
@@ -13,4 +16,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
-      - run: node scripts/malazem/discover.mjs
+      - name: Storage in use (documents)
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          q() { jq -n --arg q "$1" '{query: $q, read_only: true}' | curl -sS -X POST "https://api.supabase.com/v1/projects/$PROJECT_REF/database/query" -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" -H "Content-Type: application/json" --data @- | jq -c '.[]?' || true; echo; }
+          q "select bucket_id, count(*) n, round(sum((metadata->>'size')::bigint)/1048576.0) mb from storage.objects group by 1"
+          q "select s.slug, d.kind, left(d.title,50) t, d.pages, round(d.size_bytes/1048576.0) mb, d.ingest_status, left(d.file_key,20) k from documents d join subjects s on s.id = d.subject_id order by s.sort"
+      - run: node scripts/malazem/search.mjs
