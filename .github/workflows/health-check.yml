@@ -34,9 +34,9 @@ jobs:
         run: |
           for n in 0 1 2 3 4 5 6 7 8; do
             k=$(printenv K$n); [ -z "$k" ] && { echo "key$n: غير مضاف"; continue; }
-            for m in gemini-3.5-flash-lite gemini-3.8-flash; do
+            for m in gemini-3.5-flash-lite gemini-3.1-flash-lite gemini-3.8-flash gemini-3.5-flash; do
               r=$(curl -sS -m 30 -X POST "https://generativelanguage.googleapis.com/v1beta/models/$m:generateContent" -H "x-goog-api-key: $k" -H 'Content-Type: application/json' \
-                -d '{"contents":[{"role":"user","parts":[{"text":"قل: تم"}]}],"generationConfig":{"maxOutputTokens":10}}')
+                -d '{"contents":[{"role":"user","parts":[{"text":"قل: تم"}]}],"generationConfig":{"maxOutputTokens":10}}' || echo '{"error":{"message":"timeout 30s (بطيء/مشغول)"}}')
               if echo "$r" | jq -e '.candidates' >/dev/null 2>&1; then echo "key$n $m: ✓ يعمل"
               else echo "key$n $m: ✗ $(echo "$r" | jq -c '{code:.error.code,status:.error.status,msg:(.error.message|.[0:140]),quota:[.error.details[]?|select(.violations)|.violations[]|{metric:.quotaMetric,id:.quotaId,value:.quotaValue}],retry:([.error.details[]?|select(.retryDelay)|.retryDelay][0])}')"; fi
             done
