@@ -1,7 +1,6 @@
 // بحث داخل موقع الطالب العراقي (eduiiq.com، ووردبريس) عن ملازم الخامس، ويطبع روابط Google Drive لكل نتيجة (قراءة فقط)
 const UA = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36', 'Accept-Language': 'ar,en;q=0.8' };
-const QUERIES = ['ملزمة انكليزي الخامس', 'ملزمة احياء الخامس', 'ملزمة فيزياء الخامس', 'ملزمة رياضيات الخامس', 'ملزمة كيمياء الخامس', 'ملزمة عربي الخامس',
-  'عباس الدراجي', 'ايوب احمد', 'علي الذهبي', 'علي الغرابي', 'مازن الهلالي', 'احمد الجاف'];
+const QUERIES = ['انكليزي الخامس الاعدادي', 'انجليزي الخامس', 'English الخامس', 'ملزمة انكليزي', 'اسلامية الخامس', 'ملزمة اسلامية', 'حاسوب الخامس', 'ملزمة حاسوب'];
 const text = (h) => h.replace(/<[^>]+>/g, ' ').replace(/&#8211;/g, '–').replace(/\s+/g, ' ').trim();
 const get = async (u) => (await fetch(u, { headers: UA, signal: AbortSignal.timeout(25000) })).text();
 const seen = new Set();
