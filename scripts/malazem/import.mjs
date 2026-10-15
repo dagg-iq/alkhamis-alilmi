@@ -64,6 +64,21 @@ async function upload(bytes) {
   }
 }
 
+// أين تُحفظ ملفات التطبيق؟ الدوال تقرأ من S3 إن ضُبطت أسراره، وإلا من Supabase Storage.
+// نرفع إلى Supabase فقط إن كانت الكتب الحالية فيه فعلاً (وإلا لن يجد التطبيق الملزمة).
+{
+  const res = await fetch(`https://api.supabase.com/v1/projects/${PROJECT}/database/query`, {
+    method: 'POST', headers: { ...MGMT, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ read_only: true, query: "select count(*)::int total, count(*) filter (where exists (select 1 from storage.objects o where o.bucket_id = 'files' and o.name = d.file_key))::int in_supabase from documents d" }),
+  });
+  const [r] = await res.json();
+  console.log(`الكتب الحالية: ${r.total}، منها في Supabase Storage: ${r.in_supabase}`);
+  if (r.total && r.in_supabase < r.total) {
+    console.log('✗ ملفات التطبيق ليست في Supabase Storage (التخزين الخارجي S3 مفعّل) — لا رفع من هنا. ارفع الملازم من اللوحة.');
+    process.exit(1);
+  }
+}
+
 for (const s of catalog.subjects) {
   console.log(`\n################ ${s.name}`);
   for (const c of s.candidates) {
