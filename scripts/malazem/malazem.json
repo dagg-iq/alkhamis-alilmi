@@ -1,5 +1,5 @@
 {
-  "apply": true,
+  "apply": false,
   "note": "لكل مادة: أول مرشح يُحمَّل ويصلح يُضاف. الملف الأكبر من ٤٩ ميغا يُضغط (Ghostscript) قبل الرفع. المصدر: موقع الطالب العراقي eduiiq.com (روابط Google Drive عامة).",
   "subjects": [
     {

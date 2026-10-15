@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { PDFDocument } from 'pdf-lib';
+import { AwsClient } from 'aws4fetch';
 
 const PROJECT = process.env.PROJECT_REF;
 const MGMT = { Authorization: `Bearer ${process.env.SUPABASE_ACCESS_TOKEN}` };
@@ -54,34 +55,38 @@ async function rest(method, path, body, prefer = 'return=representation') {
   return t ? JSON.parse(t) : null;
 }
 async function upload(bytes) {
-  const sb = await supabase();
   const key = `materials/${randomUUID()}.pdf`;
   for (let attempt = 0; ; attempt++) {
-    const res = await fetch(`${sb.url}/storage/v1/object/files/${key}`, { method: 'POST', headers: { ...sb.h, 'Content-Type': 'application/pdf' }, body: bytes });
+    const res = S3
+      ? await S3.fetch(s3Url(key), { method: 'PUT', body: bytes, headers: { 'Content-Type': 'application/pdf' }, signal: AbortSignal.timeout(180_000) }).catch((e) => ({ ok: false, status: e.message, text: async () => '' }))
+      : await (async () => { const sb = await supabase(); return fetch(`${sb.url}/storage/v1/object/files/${key}`, { method: 'POST', headers: { ...sb.h, 'Content-Type': 'application/pdf' }, body: bytes }); })();
     if (res.ok) return key;
     if (attempt >= 2) throw new Error(`upload ${res.status}: ${(await res.text()).slice(0, 200)}`);
     await new Promise((r) => setTimeout(r, 3000));
   }
 }
 
-// أين تُحفظ ملفات التطبيق؟ الدوال تقرأ من S3 إن ضُبطت أسراره، وإلا من Supabase Storage.
-// نرفع إلى Supabase فقط إن كانت الكتب الحالية فيه فعلاً (وإلا لن يجد التطبيق الملزمة).
-{
-  const res = await fetch(`https://api.supabase.com/v1/projects/${PROJECT}/database/query`, {
-    method: 'POST', headers: { ...MGMT, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ read_only: true, query: "select count(*)::int total, count(*) filter (where exists (select 1 from storage.objects o where o.bucket_id = 'files' and o.name = d.file_key))::int in_supabase from documents d" }),
-  });
-  const [r] = await res.json();
-  console.log(`الكتب الحالية: ${r.total}، منها في Supabase Storage: ${r.in_supabase}`);
-  const sec = await (await fetch(`https://api.supabase.com/v1/projects/${PROJECT}/secrets`, { headers: MGMT })).json();
-  console.log(`أسرار التخزين في الدوال: ${(Array.isArray(sec) ? sec : []).map((x) => x.name).filter((n) => /R2_|S3_/.test(n)).join('، ') || 'لا شيء (Supabase Storage)'}`);
-  const miss = await (await fetch(`https://api.supabase.com/v1/projects/${PROJECT}/database/query`, {
-    method: 'POST', headers: { ...MGMT, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ read_only: true, query: "select left(title,60) t, file_key, created_at from documents d where not exists (select 1 from storage.objects o where o.bucket_id = 'files' and o.name = d.file_key)" }),
-  })).json();
-  for (const m of miss) console.log(`  ليس في Supabase: ${m.t} | ${m.file_key} | ${m.created_at}`);
-  if (r.total && r.in_supabase < r.total) {
-    console.log('✗ ملفات التطبيق ليست في Supabase Storage (التخزين الخارجي S3 مفعّل) — لا رفع من هنا. ارفع الملازم من اللوحة.');
+// التخزين نفسه الذي تستعمله الدوال: S3 (خادم صاحب المشروع) إن ضُبطت أسراره، وإلا Supabase Storage.
+const S3 = process.env.S3_ENDPOINT && process.env.R2_ACCESS_KEY_ID
+  ? new AwsClient({ accessKeyId: process.env.R2_ACCESS_KEY_ID, secretAccessKey: process.env.R2_SECRET_ACCESS_KEY, service: 's3', region: process.env.S3_REGION || 'auto' })
+  : null;
+const s3Url = (key) => `${process.env.S3_ENDPOINT}/${process.env.R2_BUCKET || 'saey'}/${key.split('/').map(encodeURIComponent).join('/')}`;
+
+// كل الملازم موجودة؟ لا عمل (التشغيل الدوري يمر بسرعة)
+const titleOf = (s, c) => c.title ?? `ملزمة ${s.name} — الأستاذ ${c.teacher}${c.part ? ` — ${c.part}` : ''} (${c.year})`;
+if (catalog.apply) {
+  const all = catalog.subjects.flatMap((s) => s.candidates.map((c) => titleOf(s, c)));
+  const have = await rest('GET', 'documents?select=title&kind=eq.malzama');
+  const done = catalog.subjects.filter((s) => s.candidates.some((c) => have.some((h) => h.title === titleOf(s, c))));
+  if (done.length === catalog.subjects.length) { console.log('✓ كل الملازم مضافة — لا عمل.'); process.exit(0); }
+  console.log(`مضافة سابقاً: ${done.length} من ${catalog.subjects.length}`);
+}
+if (S3 && catalog.apply) {
+  try {
+    await fetch(process.env.S3_ENDPOINT, { signal: AbortSignal.timeout(20_000) });
+    console.log('خادم التخزين يرد ✓');
+  } catch (e) {
+    console.log(`✗ خادم التخزين (${new URL(process.env.S3_ENDPOINT).host}) لا يرد: ${e.cause?.code ?? e.message} — لا رفع الآن، يُعاد تلقائياً لاحقاً.`);
     process.exit(1);
   }
 }
@@ -89,7 +94,7 @@ async function upload(bytes) {
 for (const s of catalog.subjects) {
   console.log(`\n################ ${s.name}`);
   for (const c of s.candidates) {
-    const title = c.title ?? `ملزمة ${s.name} — الأستاذ ${c.teacher}${c.part ? ` — ${c.part}` : ''} (${c.year})`;
+    const title = titleOf(s, c);
     try {
       if (catalog.apply) {
         const existing = await rest('GET', `documents?select=id&title=eq.${encodeURIComponent(title)}`);

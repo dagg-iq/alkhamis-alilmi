@@ -25,7 +25,12 @@ jobs:
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           CATALOG: ${{ github.workspace }}/scripts/malazem/malazem.json
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          S3_ENDPOINT: ${{ secrets.S3_ENDPOINT }}
+          S3_REGION: ${{ secrets.S3_REGION }}
         run: |
           # pdf-lib في مجلد منفصل (لا نلمس حزم المستودع)
-          mkdir -p "$RUNNER_TEMP/m" && cd "$RUNNER_TEMP/m" && npm init -y >/dev/null && npm i --silent pdf-lib@1.17.1
+          mkdir -p "$RUNNER_TEMP/m" && cd "$RUNNER_TEMP/m" && npm init -y >/dev/null && npm i --silent pdf-lib@1.17.1 aws4fetch@1.0.20
           cp "$GITHUB_WORKSPACE/scripts/malazem/import.mjs" . && node import.mjs
