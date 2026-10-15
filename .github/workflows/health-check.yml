@@ -20,6 +20,12 @@ jobs:
           ip=$(getent hosts "$host" | awk '{print $1}')
           for p in 443 80 9000; do timeout 8 bash -c "echo > /dev/tcp/$ip/$p" 2>/dev/null && echo "port $p مفتوح" || echo "port $p مغلق/لا يرد"; done
           curl -sS -m 20 -o /dev/null -w "HTTPS → %{http_code} in %{time_total}s\n" "$S3_ENDPOINT/minio/health/live" || true
+      - name: Storage watchdog log (last 12)
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          jq -n --arg q "select at at time zone 'Asia/Baghdad' as baghdad, up, state, action, detail from storage_watchdog_log order by at desc limit 12" '{query: $q, read_only: true}' \
+            | curl -sS -X POST "https://api.supabase.com/v1/projects/yjxhprmtyuqnbgraocar/database/query" -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" -H "Content-Type: application/json" --data @- | jq -c '.[]?' || true
       - name: Gemini keys
         env:
           K0: ${{ secrets.GEMINI_ADMIN_API_KEY }}

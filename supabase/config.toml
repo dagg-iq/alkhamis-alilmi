@@ -9,3 +9,6 @@ verify_jwt = false
 
 [functions.lecture-worker]
 verify_jwt = false
+
+[functions.storage-watchdog]
+verify_jwt = false
