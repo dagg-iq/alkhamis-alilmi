@@ -1,20 +1,116 @@
 {
   "apply": false,
-  "note": "لكل مادة: أول مرشح يُحمَّل وحجمه ضمن حد التخزين (٤٩ ميغا للملف) يُضاف. المصدر: موقع الطالب العراقي eduiiq.com (روابط Google Drive عامة).",
+  "note": "لكل مادة: أول مرشح يُحمَّل ويصلح يُضاف. الملف الأكبر من ٤٩ ميغا يُضغط (Ghostscript) قبل الرفع. المصدر: موقع الطالب العراقي eduiiq.com (روابط Google Drive عامة).",
   "subjects": [
-    { "subject": "math", "name": "الرياضيات", "candidates": [
-      { "teacher": "مؤمل مهدي", "year": "2026", "drive": "1osxvf3_AT_c7_8cognKcMGRsiT-s40Da", "page": "https://eduiiq.com/lieutenant/m4398046pdf/" },
-      { "teacher": "علي صادق", "year": "2026", "drive": "1Lj35aBBiZvsbRsRZiBe5KprmG4NcpWH8", "page": "https://eduiiq.com/lieutenant/m4389434pdf/" } ] },
-    { "subject": "physics", "name": "الفيزياء", "candidates": [
-      { "teacher": "علي السوداني", "year": "2026", "drive": "1CVaxMTXHuHx6ubBLryhzHzNkBLejKd55", "page": "https://eduiiq.com/lieutenant/m09865pdf/" },
-      { "teacher": "دانيار الجاف", "year": "2026", "drive": "1Fo2DkA-n10kYLSahQTqwrZ5Mor6hpzB5", "page": "https://eduiiq.com/lieutenant/m235547/" },
-      { "teacher": "محمد غازي البياتي", "year": "2026", "drive": "1zcJsoAVfu22k-jpGiF7Vzr-6oyW-2yhu", "page": "https://eduiiq.com/lieutenant/m87464263pdf/" } ] },
-    { "subject": "chemistry", "name": "الكيمياء", "candidates": [
-      { "teacher": "مهند السوداني", "year": "2026", "drive": "1qiUIyKxBc4Ab-H-mMHiOWGt9jTRjnMd0", "page": "https://eduiiq.com/lieutenant/m34864365pdf/" },
-      { "teacher": "هاشم الغرباوي", "year": "2026", "drive": "1deOjygbJg5kaAkMV59B3adToxtLv8sJG", "page": "https://eduiiq.com/lieutenant/m98635/" } ] },
-    { "subject": "biology", "name": "الأحياء", "candidates": [
-      { "teacher": "قاسم منتصر", "year": "2026", "drive": "1UZz7RrR6IU8V4JqkpW1yI0nqdKbpDCDm", "page": "https://eduiiq.com/lieutenant/m3646394549pdf/" } ] },
-    { "subject": "arabic", "name": "اللغة العربية", "candidates": [
-      { "teacher": "عمار السلامي", "year": "2026", "part": "الجزء الأول", "drive": "1ADuZiAvVHm7_runOt-P_t97U3MRrrfu1", "page": "https://eduiiq.com/lieutenant/m57533603657pdf/" } ] }
+    {
+      "subject": "math",
+      "name": "الرياضيات",
+      "candidates": [
+        {
+          "teacher": "مؤمل مهدي",
+          "year": "2026",
+          "drive": "1osxvf3_AT_c7_8cognKcMGRsiT-s40Da",
+          "page": "https://eduiiq.com/lieutenant/m4398046pdf/"
+        },
+        {
+          "teacher": "علي صادق",
+          "year": "2026",
+          "drive": "1Lj35aBBiZvsbRsRZiBe5KprmG4NcpWH8",
+          "page": "https://eduiiq.com/lieutenant/m4389434pdf/"
+        }
+      ]
+    },
+    {
+      "subject": "physics",
+      "name": "الفيزياء",
+      "candidates": [
+        {
+          "teacher": "علي السوداني",
+          "year": "2026",
+          "drive": "1CVaxMTXHuHx6ubBLryhzHzNkBLejKd55",
+          "page": "https://eduiiq.com/lieutenant/m09865pdf/"
+        },
+        {
+          "teacher": "دانيار الجاف",
+          "year": "2026",
+          "drive": "1Fo2DkA-n10kYLSahQTqwrZ5Mor6hpzB5",
+          "page": "https://eduiiq.com/lieutenant/m235547/"
+        },
+        {
+          "teacher": "محمد غازي البياتي",
+          "year": "2026",
+          "drive": "1zcJsoAVfu22k-jpGiF7Vzr-6oyW-2yhu",
+          "page": "https://eduiiq.com/lieutenant/m87464263pdf/"
+        }
+      ]
+    },
+    {
+      "subject": "chemistry",
+      "name": "الكيمياء",
+      "candidates": [
+        {
+          "teacher": "مهند السوداني",
+          "year": "2026",
+          "drive": "1qiUIyKxBc4Ab-H-mMHiOWGt9jTRjnMd0",
+          "page": "https://eduiiq.com/lieutenant/m34864365pdf/"
+        },
+        {
+          "teacher": "هاشم الغرباوي",
+          "year": "2026",
+          "drive": "1deOjygbJg5kaAkMV59B3adToxtLv8sJG",
+          "page": "https://eduiiq.com/lieutenant/m98635/"
+        }
+      ]
+    },
+    {
+      "subject": "biology",
+      "name": "الأحياء",
+      "candidates": [
+        {
+          "teacher": "قاسم منتصر",
+          "year": "2026",
+          "drive": "1UZz7RrR6IU8V4JqkpW1yI0nqdKbpDCDm",
+          "page": "https://eduiiq.com/lieutenant/m3646394549pdf/"
+        }
+      ]
+    },
+    {
+      "subject": "arabic",
+      "name": "اللغة العربية",
+      "candidates": [
+        {
+          "teacher": "عمار السلامي",
+          "year": "2026",
+          "part": "الجزء الأول",
+          "drive": "1ADuZiAvVHm7_runOt-P_t97U3MRrrfu1",
+          "page": "https://eduiiq.com/lieutenant/m57533603657pdf/"
+        }
+      ]
+    },
+    {
+      "subject": "english",
+      "name": "اللغة الإنكليزية",
+      "candidates": [
+        {
+          "teacher": "محمد حسين",
+          "year": "2026",
+          "title": "ملزمة الإنشاء (Writing) للإنكليزي — الأستاذ محمد حسين (2026)",
+          "drive": "1gHulH2Lia-Ug2HxHqqJxW73ISh0YogyC",
+          "page": "https://eduiiq.com/lieutenant/m93567903pdf/"
+        }
+      ]
+    },
+    {
+      "subject": "islamic",
+      "name": "التربية الإسلامية",
+      "candidates": [
+        {
+          "teacher": "خالد الحيالي",
+          "year": "2026",
+          "drive": "1MhvCL1wXvnS5SWOSK9pzkOaGR8a-Hj54",
+          "page": "https://eduiiq.com/lieutenant/m43896587438pdf/"
+        }
+      ]
+    }
   ]
 }

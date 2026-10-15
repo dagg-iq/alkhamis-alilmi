@@ -5,6 +5,7 @@
 //   ٣) تقطيعه أجزاء ٤–٨ صفحات (كما تفعل اللوحة) ورفعها، ثم ingest_chunks و queued_at ← يقرؤها ingest-worker وحده
 import fs from 'node:fs';
 import { randomUUID } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 import { PDFDocument } from 'pdf-lib';
 
 const PROJECT = process.env.PROJECT_REF;
@@ -26,6 +27,14 @@ async function driveDownload(id) {
     if (buf.subarray(0, 5).toString() !== '%PDF-') throw new Error(`ليس PDF بعد التأكيد (${res.status})`);
   }
   return buf;
+}
+
+/** ملف أكبر من حد التخزين: ضغط الصور داخله (Ghostscript، ١٥٠ نقطة/إنش — يكفي للقراءة على الهاتف) */
+function compress(buf) {
+  fs.writeFileSync('in.pdf', buf);
+  execFileSync('gs', ['-q', '-dNOPAUSE', '-dBATCH', '-dSAFER', '-sDEVICE=pdfwrite', '-dCompatibilityLevel=1.5', '-dPDFSETTINGS=/ebook',
+    '-dColorImageResolution=150', '-dGrayImageResolution=150', '-dMonoImageResolution=300', '-sOutputFile=out.pdf', 'in.pdf'], { timeout: 15 * 60_000 });
+  return fs.readFileSync('out.pdf');
 }
 
 let SB = null;
@@ -58,15 +67,20 @@ async function upload(bytes) {
 for (const s of catalog.subjects) {
   console.log(`\n################ ${s.name}`);
   for (const c of s.candidates) {
-    const title = `ملزمة ${s.name} — الأستاذ ${c.teacher}${c.part ? ` — ${c.part}` : ''} (${c.year})`;
+    const title = c.title ?? `ملزمة ${s.name} — الأستاذ ${c.teacher}${c.part ? ` — ${c.part}` : ''} (${c.year})`;
     try {
       if (catalog.apply) {
         const existing = await rest('GET', `documents?select=id&title=eq.${encodeURIComponent(title)}`);
         if (existing.length) { console.log(`  ✓ موجودة سابقاً: ${title}`); break; }
       }
-      const buf = await driveDownload(c.drive);
+      let buf = await driveDownload(c.drive);
+      if (buf.length > MAX_BYTES) {
+        const before = (buf.length / 1048576).toFixed(1);
+        buf = compress(buf);
+        console.log(`  ~ ${c.teacher}: ضُغط من ${before} إلى ${(buf.length / 1048576).toFixed(1)} ميغا`);
+      }
       const mb = (buf.length / 1048576).toFixed(1);
-      if (buf.length > MAX_BYTES) { console.log(`  ✗ ${c.teacher}: ${mb} ميغا — أكبر من حد التخزين، التالي`); continue; }
+      if (buf.length > MAX_BYTES) { console.log(`  ✗ ${c.teacher}: ${mb} ميغا بعد الضغط — أكبر من حد التخزين، التالي`); continue; }
       const src = await PDFDocument.load(buf, { ignoreEncryption: true, updateMetadata: false });
       const total = src.getPageCount();
       const avgPage = buf.length / Math.max(1, total);
