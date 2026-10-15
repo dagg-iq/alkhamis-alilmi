@@ -1,0 +1,43 @@
+# فحص سريع (قراءة فقط): هل يرد خادم التخزين؟ وما حالة كل مفتاح Gemini بالتفصيل (طلب صغير واحد لكل مفتاح ونموذج)
+name: Health check
+on:
+  workflow_dispatch:
+  push:
+    branches: ['claude/**']
+    paths: ['.github/workflows/health-check.yml']
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Storage server
+        env:
+          S3_ENDPOINT: ${{ secrets.S3_ENDPOINT }}
+        run: |
+          host=$(echo "$S3_ENDPOINT" | sed -E 's#https?://([^/]+).*#\1#')
+          echo "host: $host"
+          getent hosts "$host" || echo "DNS لا يحل الاسم"
+          ip=$(getent hosts "$host" | awk '{print $1}')
+          for p in 443 80 9000; do timeout 8 bash -c "echo > /dev/tcp/$ip/$p" 2>/dev/null && echo "port $p مفتوح" || echo "port $p مغلق/لا يرد"; done
+          curl -sS -m 20 -o /dev/null -w "HTTPS → %{http_code} in %{time_total}s\n" "$S3_ENDPOINT/minio/health/live" || true
+      - name: Gemini keys
+        env:
+          K0: ${{ secrets.GEMINI_ADMIN_API_KEY }}
+          K1: ${{ secrets.GEMINI_API_KEY }}
+          K2: ${{ secrets.GEMINI_API_KEY_2 }}
+          K3: ${{ secrets.GEMINI_API_KEY_3 }}
+          K4: ${{ secrets.GEMINI_API_KEY_4 }}
+          K5: ${{ secrets.GEMINI_API_KEY_5 }}
+          K6: ${{ secrets.GEMINI_API_KEY_6 }}
+          K7: ${{ secrets.GEMINI_API_KEY_7 }}
+          K8: ${{ secrets.GEMINI_API_KEY_8 }}
+        run: |
+          for n in 0 1 2 3 4 5 6 7 8; do
+            k=$(printenv K$n); [ -z "$k" ] && { echo "key$n: غير مضاف"; continue; }
+            for m in gemini-3.5-flash-lite gemini-3.8-flash; do
+              r=$(curl -sS -m 30 -X POST "https://generativelanguage.googleapis.com/v1beta/models/$m:generateContent" -H "x-goog-api-key: $k" -H 'Content-Type: application/json' \
+                -d '{"contents":[{"role":"user","parts":[{"text":"قل: تم"}]}],"generationConfig":{"maxOutputTokens":10}}')
+              if echo "$r" | jq -e '.candidates' >/dev/null 2>&1; then echo "key$n $m: ✓ يعمل"
+              else echo "key$n $m: ✗ $(echo "$r" | jq -c '{code:.error.code,status:.error.status,msg:(.error.message|.[0:140]),quota:[.error.details[]?|select(.violations)|.violations[]|{metric:.quotaMetric,id:.quotaId,value:.quotaValue}],retry:([.error.details[]?|select(.retryDelay)|.retryDelay][0])}')"; fi
+            done
+          done
