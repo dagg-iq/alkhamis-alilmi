@@ -73,6 +73,13 @@ async function upload(bytes) {
   });
   const [r] = await res.json();
   console.log(`الكتب الحالية: ${r.total}، منها في Supabase Storage: ${r.in_supabase}`);
+  const sec = await (await fetch(`https://api.supabase.com/v1/projects/${PROJECT}/secrets`, { headers: MGMT })).json();
+  console.log(`أسرار التخزين في الدوال: ${(Array.isArray(sec) ? sec : []).map((x) => x.name).filter((n) => /R2_|S3_/.test(n)).join('، ') || 'لا شيء (Supabase Storage)'}`);
+  const miss = await (await fetch(`https://api.supabase.com/v1/projects/${PROJECT}/database/query`, {
+    method: 'POST', headers: { ...MGMT, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ read_only: true, query: "select left(title,60) t, file_key, created_at from documents d where not exists (select 1 from storage.objects o where o.bucket_id = 'files' and o.name = d.file_key)" }),
+  })).json();
+  for (const m of miss) console.log(`  ليس في Supabase: ${m.t} | ${m.file_key} | ${m.created_at}`);
   if (r.total && r.in_supabase < r.total) {
     console.log('✗ ملفات التطبيق ليست في Supabase Storage (التخزين الخارجي S3 مفعّل) — لا رفع من هنا. ارفع الملازم من اللوحة.');
     process.exit(1);
